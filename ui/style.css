@@ -1,0 +1,180 @@
+/*
+ * Copyright 2026 saiedt
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* GPSMCPMMS config-editor styles (spec 4.5 / 4.6) */
+
+:root {
+  --bg: #f4f6f8;
+  --panel: #ffffff;
+  --line: #d4dae1;
+  --text: #22303c;
+  --muted: #5f7180;
+  --accent: #1d6fb8;
+  --accent-soft: #e3eef8;
+  --warn-bg: #fff3cd;
+  --warn-line: #e0c568;
+  --err: #b3082e;
+  --ok: #1a7d47;
+  --radius: 6px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.45 system-ui, "Segoe UI", Roboto, sans-serif;
+}
+
+#app { max-width: 860px; margin: 0 auto; padding: 16px 12px 48px; }
+.boot { text-align: center; font-size: 32px; padding: 48px; }
+
+/* ---- level 0 rows (spec 4.5) ---- */
+h1.title { font-size: 22px; margin: 4px 0 8px; }
+hr.title-rule { border: 0; border-top: 2px solid var(--line); margin: 0 0 12px; }
+
+.general-row {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin-bottom: 6px;
+}
+.general-row .spacer { flex: 1; }
+
+#messages { min-height: 22px; margin: 4px 0 10px; }
+.msg { padding: 6px 10px; border-radius: var(--radius); margin: 3px 0; }
+.msg.error { background: #fbe4e9; color: var(--err); }
+.msg.ok { background: #e0f2e8; color: var(--ok); }
+.msg.info { background: var(--accent-soft); color: var(--accent); }
+
+.banner {
+  padding: 8px 12px; border-radius: var(--radius); margin: 6px 0;
+  border: 1px solid var(--warn-line); background: var(--warn-bg);
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}
+.banner.readonly { border-color: var(--line); background: #e9edf1; }
+
+/* ---- collapsible groups (spec 4.6) ---- */
+.group { margin: 6px 0; }
+.group-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; cursor: pointer; user-select: none;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--radius); font-weight: 600;
+}
+.group-header:hover { background: var(--accent-soft); }
+.group-header .arrow { width: 14px; color: var(--accent); flex: none; }
+.module > .group-header { background: var(--accent-soft); }
+
+.group-body {
+  border: 1px solid var(--line); border-top: 0;
+  border-radius: 0 0 var(--radius) var(--radius);
+  padding: 8px 8px 8px 22px;   /* indent visualizes the hierarchy */
+  background: var(--panel);
+}
+
+.help {
+  display: inline-block; width: 17px; height: 17px; line-height: 17px;
+  text-align: center; border-radius: 50%; font-size: 11px; font-weight: 700;
+  background: var(--accent); color: #fff; cursor: help; flex: none;
+}
+
+/* ---- field rows (spec 4.6.1) ---- */
+.field-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 2px; flex-wrap: wrap;
+}
+.field-row > label { min-width: 220px; }
+.field-row input[type="text"], .field-row input[type="password"],
+.field-row input[type="number"], .field-row select {
+  padding: 5px 8px; border: 1px solid var(--line); border-radius: var(--radius);
+  min-width: 220px; background: #fff; color: var(--text); font: inherit;
+}
+.field-row input[type="color"] { width: 56px; height: 32px; padding: 1px; }
+.field-row input.invalid, .field-row select.invalid { border-color: var(--err); outline: 1px solid var(--err); }
+.field-row input:disabled, .field-row select:disabled,
+.field-row input[readonly] { background: #eef1f4; color: var(--muted); }
+.field-err { color: var(--err); font-size: 13px; width: 100%; padding-left: 228px; }
+
+button {
+  padding: 6px 14px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel); color: var(--text); font: inherit; cursor: pointer;
+}
+button:hover:not(:disabled) { background: var(--accent-soft); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.primary:hover:not(:disabled) { background: #185d9a; }
+button.small { padding: 3px 9px; font-size: 13px; }
+
+.save-row { margin-top: 10px; text-align: right; }
+
+/* ---- translation-management panel (spec 4.5) ---- */
+.lang-panel {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel); padding: 10px 12px; margin: 4px 0 10px;
+}
+.lang-panel-row {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  margin: 5px 0;
+}
+.lang-panel .lang-code { width: 60px; }
+.lang-panel .ref-box { display: inline-flex; align-items: center; gap: 3px; }
+.lang-panel .sep { color: var(--line); margin: 0 4px; }
+.lang-panel input[type="file"] { font: inherit; }
+
+/* ---- list editors (spec 4.6.2) ---- */
+.list-a .edit-line { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+.list-a .pos-field, .list-b .pos-field {
+  width: 52px; text-align: center; padding: 5px 4px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  -moz-appearance: textfield; appearance: textfield; font: inherit;
+}
+.list-a table {
+  border-collapse: collapse; width: 100%; background: #fff;
+}
+.list-a .table-wrap {
+  max-height: 96px; overflow-y: auto;
+  border: 1px solid var(--line); border-radius: var(--radius);
+}
+.list-a td { padding: 5px 10px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.list-a tr.selected td { background: var(--accent-soft); }
+.list-a .apply-line { margin-top: 6px; }
+
+.list-b .layout { display: flex; gap: 10px; align-items: center; }
+.list-b .record-block {
+  flex: 1; border: 1px dashed var(--line); border-radius: var(--radius);
+  padding: 6px 6px 6px 14px;
+}
+.list-b .nav-block {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; flex: none;
+}
+.list-b .nav-block button { width: 52px; padding: 2px 0; }
+.list-b .action-block { margin-top: 8px; display: flex; gap: 8px; justify-content: center; }
+
+/* ---- modal ---- */
+#modal-root .overlay {
+  position: fixed; inset: 0; background: rgba(20,30,40,.45);
+  display: flex; align-items: center; justify-content: center; z-index: 50;
+}
+#modal-root .modal {
+  background: var(--panel); border-radius: var(--radius); min-width: 320px;
+  max-width: 480px; padding: 18px; box-shadow: 0 8px 30px rgba(0,0,0,.25);
+}
+#modal-root .modal p { margin: 0 0 12px; }
+#modal-root .modal input, #modal-root .modal select {
+  width: 100%; padding: 6px 8px; margin-bottom: 12px; font: inherit;
+  border: 1px solid var(--line); border-radius: var(--radius);
+}
+#modal-root .modal .buttons { display: flex; gap: 8px; justify-content: flex-end; }

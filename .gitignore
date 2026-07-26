@@ -1,0 +1,28 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# Development snapshots, and the verbose source spec (superseded by README.md)
+*.initial
+*.v1
+GPSMCPMMS_spec.txt
+
+# Runtime data written by the app or tests
+*.dump
+*.dump.old
+*.dump.tmp
+leaf_update.log
+ui/lang/*.broken
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Claude Code local settings
+.claude/

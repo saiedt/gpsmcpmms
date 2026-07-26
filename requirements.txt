@@ -1,0 +1,4 @@
+# Runtime dependency of the config-editor (config.py serves it with Flask).
+# The core (cvv_tree.py) has no third-party dependencies.
+# Requires Python 3.10+.
+Flask>=3.0
