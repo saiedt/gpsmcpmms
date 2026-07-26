@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gpsmcpmms"
+version = "0.1.0"
+description = "General-purpose shared configuration manager with a built-in web config-editor: modules declare typed parameters and get validation, persistence, a schema-driven editor and a multilingual UI."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "Saied Tazari" }]
+keywords = [
+    "configuration", "config", "config-editor", "settings",
+    "flask", "i18n", "appliance", "schema", "validation",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Framework :: Flask",
+]
+dependencies = ["Flask>=3.0"]
+
+[project.urls]
+Homepage = "https://github.com/saiedt/gpsmcpmms"
+Repository = "https://github.com/saiedt/gpsmcpmms"
+Issues = "https://github.com/saiedt/gpsmcpmms/issues"
+
+# The core lives as the top-level modules config.py and cvv_tree.py; the web
+# assets under ui/ ship in the source distribution (see MANIFEST.in) and are
+# loaded relative to config.py, so the editor is best run from a checkout.
+[tool.setuptools]
+py-modules = ["config", "cvv_tree"]
