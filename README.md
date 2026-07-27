@@ -360,18 +360,17 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 
 ## Own configuration parameters
 
-`config_mgr` registers a hidden `config` module for its own settings:
+`config_mgr` registers a hidden `config` module for its own state:
 
 | Path | Meaning |
 |------|---------|
 | `config.ui_passwd` | admin password (factory default until changed) |
-| `config.ui_port` | editor port (default 8080; override with `GPSMCPMMS_UI_PORT`) |
-| `config.session_timeout` | session inactivity timeout in minutes (default 30; override with `GPSMCPMMS_SESSION_TIMEOUT`) |
 
-The working directories are resolved from `GPSMCPMMS_CVV_DIR` and
-`GPSMCPMMS_UI_DIR` (defaults under `~/.config/gpsmcpmms/`). The editor port and
-session timeout likewise honour `GPSMCPMMS_UI_PORT` / `GPSMCPMMS_SESSION_TIMEOUT`
-at deploy time, taking precedence over any persisted value.
+Everything else is a **deploy-time** setting, read from the environment rather
+than the cvv tree: `GPSMCPMMS_CVV_DIR` and `GPSMCPMMS_UI_DIR` (working dirs,
+defaults under `~/.config/gpsmcpmms/`), `GPSMCPMMS_UI_PORT` (editor port,
+default 8080) and `GPSMCPMMS_SESSION_TIMEOUT` (session inactivity minutes,
+default 30).
 
 ---
 

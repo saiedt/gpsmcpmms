@@ -32,9 +32,13 @@ class ConfigManager:
     API_HEADER = "X-GPSMCPMMS-Api"
     TOKEN_HEADER = "X-GPSMCPMMS-Token"
     CAPTURE_TIMEOUT = 30    # seconds; see spec 4.9.3
-    # config_mgr's own module: its params (ui_passwd, ui_port,
-    # session_timeout) are handled by config_mgr itself and are therefore
-    # never rendered as an editable module in the config-editor
+    # deploy-time settings, read from the environment (see _env_int), not the
+    # cvv tree: GPSMCPMMS_UI_PORT / GPSMCPMMS_SESSION_TIMEOUT override these
+    DEFAULT_UI_PORT = 8080
+    DEFAULT_SESSION_TIMEOUT = 30    # minutes
+    # config_mgr's own module holds only ui_passwd (an editable, persisted
+    # param); it is handled by config_mgr itself and is therefore never
+    # rendered as an editable module in the config-editor
     OWN_MODULE_ID = "config"
     # translation dictionaries: at most this many languages in parallel; a
     # further one requires the admin to pick an existing language to remove
@@ -151,21 +155,6 @@ class ConfigManager:
                     "default_val": self.FACTORY_DEFAULT_PASSWD,
                     "tooltip": "Administrator-Passwort zum Freischalten "
                              + "geschützter Parameter."
-                },
-                "ui_port": {
-                    "type": "int", "label": "UI-Portnummer",
-                    "protected": True, "bound_to": "80..65535",
-                    "default_val": 8080,
-                    "tooltip": "Portnummer, unter der der "
-                             + "Konfigurationseditor erreichbar ist."
-                },
-                "session_timeout": {
-                    "type": "int", "label": "Sitzungs-Timeout (Minuten)",
-                    "protected": True, "bound_to": "1..1440",
-                    "default_val": 30,
-                    "tooltip": "Nach so vielen Minuten ohne Aktivität "
-                             + "verliert eine Editor-Sitzung ihre "
-                             + "exklusiven Bearbeitungsrechte."
                 }
             }}
         self._harvest_xlation_keys(own_decl)
@@ -176,12 +165,12 @@ class ConfigManager:
             my_config = {}
         self._ui_passwd = (my_config.get("ui_passwd") or
                            self.FACTORY_DEFAULT_PASSWD)
-        # ui_port and session_timeout may be overridden at deploy time via
-        # environment variables (mirroring GPSMCPMMS_CVV_DIR / _UI_DIR); when
-        # unset, the persisted / registered config value applies.
-        self._ui_port = self._env_int("GPSMCPMMS_UI_PORT",
-                                      my_config.get("ui_port") or 8080)
-        self._session_timeout = self._env_int("GPSMCPMMS_SESSION_TIMEOUT", None)
+        # ui_port and session_timeout are deploy-time settings, read from the
+        # environment like GPSMCPMMS_CVV_DIR / _UI_DIR (not editable params).
+        self._ui_port = self._env_int("GPSMCPMMS_UI_PORT", self.DEFAULT_UI_PORT,
+                                      minimum=1, maximum=65535)
+        self._session_timeout = self._env_int(
+                "GPSMCPMMS_SESSION_TIMEOUT", None, minimum=1, maximum=1440)
         
         self._logger.debug("ConfigManager persistence layer and environment "
                            "successfully initialized.")
@@ -640,19 +629,24 @@ class ConfigManager:
         return "﻿".encode("utf-8") + buf.getvalue().encode("utf-8")
 
     @staticmethod
-    def _env_int(name, fallback):
+    def _env_int(name, fallback, minimum=None, maximum=None):
         """
         Return int(os.environ[name]) when that variable is set to a valid
-        integer, otherwise the given fallback. Keeps a mistyped deploy-time
-        variable from crashing the import-time creation of the singleton.
+        integer within [minimum, maximum]; otherwise the given fallback. Keeps
+        a mistyped or out-of-range deploy-time variable from crashing the
+        import-time creation of the singleton.
         """
         raw = os.environ.get(name)
         if raw is None:
             return fallback
         try:
-            return int(raw)
+            value = int(raw)
         except ValueError:
             return fallback
+        if (minimum is not None and value < minimum) or \
+           (maximum is not None and value > maximum):
+            return fallback
+        return value
 
     # ------------------------------------------------------------------
     # Exclusive editing session of the config-editor (spec 4.8)
@@ -663,11 +657,7 @@ class ConfigManager:
         return v if isinstance(v, str) and v else self.FACTORY_DEFAULT_PASSWD
 
     def _session_timeout_seconds(self):
-        if self._session_timeout and self._session_timeout > 0:
-            return self._session_timeout * 60
-        key = f"{self.OWN_MODULE_ID}.session_timeout"
-        v = self.query(key).get(key)
-        return (v if isinstance(v, int) and v > 0 else 30) * 60
+        return (self._session_timeout or self.DEFAULT_SESSION_TIMEOUT) * 60
 
     def _session_status(self, token):
         """
