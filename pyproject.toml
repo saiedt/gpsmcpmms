@@ -28,6 +28,9 @@ classifiers = [
 ]
 dependencies = ["Flask>=3.0"]
 
+[project.optional-dependencies]
+test = ["pytest"]
+
 [project.urls]
 Homepage = "https://github.com/saiedt/gpsmcpmms"
 Repository = "https://github.com/saiedt/gpsmcpmms"
