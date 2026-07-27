@@ -12,8 +12,7 @@ dist/
 *.egg-info/
 
 # Development snapshots, and the verbose source spec (superseded by README.md)
-*.initial
-*.v1
+not-needed/
 GPSMCPMMS_spec.txt
 
 # Runtime data written by the app or tests
