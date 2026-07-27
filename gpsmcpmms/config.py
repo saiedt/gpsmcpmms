@@ -143,8 +143,8 @@ class ConfigManager:
         # initialize cvv and own config params
         self._cvv_root = CvvNode.register(self, self.cvv_dir)
         CvvNode.set_logger(self, self._logger)
-        own_decl = { "type": "config", "label": "Konfigurationsdienst" }
-        own_types = { "config": {
+        own_decl = { "type": self.OWN_MODULE_ID, "label": "Konfigurationsdienst" }
+        own_types = { self.OWN_MODULE_ID: {
                 "ui_passwd": {
                     "type": "password", "label": "UI-Passwort",
                     "protected": True,
@@ -170,7 +170,8 @@ class ConfigManager:
             }}
         self._harvest_xlation_keys(own_decl)
         self._harvest_xlation_keys(own_types)
-        my_config = CvvNode.init_module(self, "config", own_decl, own_types)
+        my_config = CvvNode.init_module(self, self.OWN_MODULE_ID,
+                                        own_decl, own_types)
         if not isinstance(my_config, dict):
             my_config = {}
         self._ui_passwd = (my_config.get("ui_passwd") or
@@ -637,11 +638,13 @@ class ConfigManager:
     # Exclusive editing session of the config-editor (spec 4.8)
     # ------------------------------------------------------------------
     def _current_ui_passwd(self):
-        v = self.query("config.ui_passwd").get("config.ui_passwd")
+        key = f"{self.OWN_MODULE_ID}.ui_passwd"
+        v = self.query(key).get(key)
         return v if isinstance(v, str) and v else self.FACTORY_DEFAULT_PASSWD
 
     def _session_timeout_seconds(self):
-        v = self.query("config.session_timeout").get("config.session_timeout")
+        key = f"{self.OWN_MODULE_ID}.session_timeout"
+        v = self.query(key).get(key)
         return (v if isinstance(v, int) and v > 0 else 30) * 60
 
     def _session_status(self, token):
