@@ -1,12 +1,14 @@
 import pytest
-from gpsmcpmms.config import app
 
 
 @pytest.fixture
 def client(setup_demo_environment):
     """Flask test client running against the initialized config_mgr environment."""
-    app.config["TESTING"] = True
-    with app.test_client() as client:
+    cfg = setup_demo_environment
+    # Build the Flask app and register its routes without serving it.
+    cfg.start_editor(run_server=False)
+    cfg._flask_app.config["TESTING"] = True
+    with cfg._flask_app.test_client() as client:
         yield client
 
 

@@ -1,9 +1,14 @@
+import signal
 import subprocess
 import sys
 import time
 from pathlib import Path
 
+import pytest
 
+
+@pytest.mark.skipif(sys.platform == "win32",
+                    reason="relies on POSIX SIGINT for graceful shutdown")
 def test_run_demo_process():
     """Executes run_demo.py as a subprocess, checks initial startup output, then
     terminates it."""
@@ -22,13 +27,12 @@ def test_run_demo_process():
     time.sleep(2)
 
     # Send SIGINT (Ctrl+C) to trigger graceful shutdown
-    proc.send_signal(subprocess.signal.SIGINT)
+    proc.send_signal(signal.SIGINT)
     stdout, stderr = proc.communicate(timeout=5)
 
-    assert proc.returncode == 0 or proc.returncode == -2  # Exited 0 or
-                                                          # interrupted cleanly
+    # Exited cleanly (0) or was interrupted by the signal (-SIGINT)
+    assert proc.returncode == 0 or proc.returncode == -2
     assert ("App bereit" in stdout or
             "App bereit" in stderr or
             "Demo stopped" in stdout or
-            "Demo stopped" in stderr
-        )
+            "Demo stopped" in stderr)
