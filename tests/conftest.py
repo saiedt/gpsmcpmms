@@ -49,6 +49,20 @@ def setup_demo_environment():
     ]
     led.ledc.init_supported_states(supported_states)
 
+    # A dedicated module with known constraints, used by the validation and
+    # security tests: `n` is a bounded int (1..10), `secret` is protected.
+    config_mgr.register_params(
+        module_id="vtest",
+        module_label="Validation test",
+        param_dict={
+            "n": {"type": "int", "label": "N", "bound_to": "1..10",
+                  "default_val": 5},
+            "secret": {"type": "int", "label": "Secret", "protected": True,
+                       "default_val": 0},
+        },
+        callback=lambda value: None,
+    )
+
     return config_mgr
 
 
