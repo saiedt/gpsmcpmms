@@ -23,7 +23,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import config_mgr
+from gpsmcpmms import config_mgr
 
 h4h_logger = logging.getLogger("h4h")
 if not h4h_logger.handlers:

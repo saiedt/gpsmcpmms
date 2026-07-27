@@ -33,8 +33,10 @@ Homepage = "https://github.com/saiedt/gpsmcpmms"
 Repository = "https://github.com/saiedt/gpsmcpmms"
 Issues = "https://github.com/saiedt/gpsmcpmms/issues"
 
-# The core lives as the top-level modules config.py and cvv_tree.py; the web
-# assets under ui/ ship in the source distribution (see MANIFEST.in) and are
-# loaded relative to config.py, so the editor is best run from a checkout.
+# The code and its web assets live in the `gpsmcpmms` package; the ui/ files
+# are bundled as package data, so a `pip install` is fully self-contained.
 [tool.setuptools]
-py-modules = ["config", "cvv_tree"]
+packages = ["gpsmcpmms"]
+
+[tool.setuptools.package-data]
+gpsmcpmms = ["ui/*", "ui/lang/*"]

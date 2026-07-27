@@ -20,16 +20,14 @@ generic.
 ## Quick start
 
 ```bash
-git clone https://github.com/saiedt/gpsmcpmms
-cd gpsmcpmms
-pip install -r requirements.txt          # Flask; needs Python 3.10+
+pip install .          # from a checkout of this repo (Python 3.10+; pulls in Flask)
 ```
 
 Register a parameter and launch the editor:
 
 ```python
-# demo.py  (run from the repository root)
-from config import config_mgr
+# demo.py
+from gpsmcpmms import config_mgr
 
 config_mgr.register_params(
     module_id="led", module_label="Status display",
@@ -45,8 +43,9 @@ input("editor running — press Enter to stop\n")
 ```
 
 Open `http://localhost:8080/` in a browser and edit **Number of LEDs**. The web
-assets are served from `ui/`, so run this from a checkout. (Protected parameters
-would require the admin password; there are none in this demo.)
+assets ship inside the package, so this works from anywhere once installed.
+(Protected parameters would require the admin password; there are none in this
+demo.)
 
 ---
 

@@ -21,7 +21,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import config_mgr
+from gpsmcpmms import config_mgr
 
 
 def test_autoanswer(value):

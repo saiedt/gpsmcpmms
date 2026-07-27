@@ -24,7 +24,7 @@ import secrets
 import shutil
 import threading
 import time
-from cvv_tree import CvvError, CvvNode
+from .cvv_tree import CvvError, CvvNode
 
 
 class ConfigManager:

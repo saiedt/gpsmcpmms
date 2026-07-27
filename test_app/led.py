@@ -23,7 +23,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import config_mgr
+from gpsmcpmms import config_mgr
 
 try:
     # only available on the target appliance (NeoPixel ring on GPIO10)
