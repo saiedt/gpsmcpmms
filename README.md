@@ -222,10 +222,11 @@ Only **values** are persisted (schema is rebuilt every run), **per module**:
 
 ## Internal representation (the cvv tree)
 
-The current-values view and its schema metadata live in one tree, implemented in
-`cvv_tree.py` and exposed to `config_mgr` through classmethods of `CvvNode`
-(`register`, `set_logger`, `init_module`, `update_module`, `query`,
-`config_ready`, `protected_params_ready`, `get_cvv_json_dump`).
+The current-values view (CVV) and its schema metadata live in one tree,
+implemented in `gpsmcpmms/cvv_tree.py` and exposed to `config_mgr` through
+classmethods of `CvvNode` (`register`, `set_logger`, `init_module`,
+`update_module`, `query`, `config_ready`, `protected_params_ready`,
+`get_cvv_json_dump`).
 
 - One `CvvNode` root; every path element is a `CvvPathElem`; each owns a
   `CvvValue` holding its constraints, relevance rules, configurability and value.
@@ -279,9 +280,12 @@ payload (not a JSON object, unknown module) yields `400`.
 
 ## The config-editor (web UI)
 
-`config.py` serves a Flask app; the assets `index.html`, `style.css`, `app.js`
-are read from `ui_dir`. The UI renders one **collapsible group per module**
-(sorted by id), each ending with a **Save** button that commits the module.
+Beside serving as the interface between client modules and the system,
+`gpsmcpmms/config.py` houses the Flask application backend that exposes the REST
+API summarized further below. The assets `index.html`, `style.css`, `app.js` are
+read from `gpsmcpmms/ui/` (or `ui_dir`). The UI renders one **collapsible group
+per module** (sorted by id), each ending with a **Save** button that commits the
+module.
 
 - **Dict groups** render one row per property (respecting `hidden` and
   `relevance`), recursing into sub-groups.

@@ -25,14 +25,14 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from gpsmcpmms import config_mgr
 
-h4h_logger = logging.getLogger("h4h")
-if not h4h_logger.handlers:
+app_logger = logging.getLogger("app")
+if not app_logger.handlers:
     _handler = logging.StreamHandler()
     _handler.setFormatter(logging.Formatter(
         fmt="%(asctime)s [%(levelname)s] (%(name)s): %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S"))
-    h4h_logger.addHandler(_handler)
-    h4h_logger.setLevel(logging.INFO)
+    app_logger.addHandler(_handler)
+    app_logger.setLevel(logging.INFO)
 
 _file_handler = None
 
@@ -48,11 +48,11 @@ def _apply_log_file(path):
             fmt="%(asctime)s [%(levelname)s] (%(name)s): %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S"))
         if _file_handler is not None:
-            h4h_logger.removeHandler(_file_handler)
-        h4h_logger.addHandler(new_handler)
+            app_logger.removeHandler(_file_handler)
+        app_logger.addHandler(new_handler)
         _file_handler = new_handler
     except OSError as exc:
-        h4h_logger.warning(f"Log-Datei '{path}' nicht nutzbar: {exc}")
+        app_logger.warning(f"Log-Datei '{path}' nicht nutzbar: {exc}")
 
 
 def config_changed(value):
@@ -60,9 +60,9 @@ def config_changed(value):
         return
     level = value.get("log_level")
     if isinstance(level, str) and hasattr(logging, level):
-        h4h_logger.setLevel(getattr(logging, level))
+        app_logger.setLevel(getattr(logging, level))
     _apply_log_file(value.get("log_file"))
-    h4h_logger.debug("Logger-Konfiguration aktualisiert.")
+    app_logger.debug("Logger-Konfiguration aktualisiert.")
 
 
 config_mgr.register_params(
@@ -72,7 +72,7 @@ config_mgr.register_params(
     param_dict={
         "log_file": {
             "protected": True, "label": "Die Log-Datei", "type": "path",
-            "default_val": os.path.expanduser("~/log/h4h.log")
+            "default_val": os.path.expanduser("~/log/app.log")
         },
         "log_level": {
             "label": "Detailstufe der Protokollierung",
