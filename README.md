@@ -365,11 +365,13 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 | Path | Meaning |
 |------|---------|
 | `config.ui_passwd` | admin password (factory default until changed) |
-| `config.ui_port` | editor port (default 8080) |
-| `config.session_timeout` | session inactivity timeout in minutes (default 30) |
+| `config.ui_port` | editor port (default 8080; override with `GPSMCPMMS_UI_PORT`) |
+| `config.session_timeout` | session inactivity timeout in minutes (default 30; override with `GPSMCPMMS_SESSION_TIMEOUT`) |
 
 The working directories are resolved from `GPSMCPMMS_CVV_DIR` and
-`GPSMCPMMS_UI_DIR` (defaults under `~/.config/gpsmcpmms/`).
+`GPSMCPMMS_UI_DIR` (defaults under `~/.config/gpsmcpmms/`). The editor port and
+session timeout likewise honour `GPSMCPMMS_UI_PORT` / `GPSMCPMMS_SESSION_TIMEOUT`
+at deploy time, taking precedence over any persisted value.
 
 ---
 

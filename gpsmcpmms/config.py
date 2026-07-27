@@ -176,7 +176,12 @@ class ConfigManager:
             my_config = {}
         self._ui_passwd = (my_config.get("ui_passwd") or
                            self.FACTORY_DEFAULT_PASSWD)
-        self._ui_port = my_config.get("ui_port") or 8080
+        # ui_port and session_timeout may be overridden at deploy time via
+        # environment variables (mirroring GPSMCPMMS_CVV_DIR / _UI_DIR); when
+        # unset, the persisted / registered config value applies.
+        self._ui_port = self._env_int("GPSMCPMMS_UI_PORT",
+                                      my_config.get("ui_port") or 8080)
+        self._session_timeout = self._env_int("GPSMCPMMS_SESSION_TIMEOUT", None)
         
         self._logger.debug("ConfigManager persistence layer and environment "
                            "successfully initialized.")
@@ -634,6 +639,21 @@ class ConfigManager:
                                  "übersprungen: unbekannter Schlüssel"])
         return "﻿".encode("utf-8") + buf.getvalue().encode("utf-8")
 
+    @staticmethod
+    def _env_int(name, fallback):
+        """
+        Return int(os.environ[name]) when that variable is set to a valid
+        integer, otherwise the given fallback. Keeps a mistyped deploy-time
+        variable from crashing the import-time creation of the singleton.
+        """
+        raw = os.environ.get(name)
+        if raw is None:
+            return fallback
+        try:
+            return int(raw)
+        except ValueError:
+            return fallback
+
     # ------------------------------------------------------------------
     # Exclusive editing session of the config-editor (spec 4.8)
     # ------------------------------------------------------------------
@@ -643,6 +663,8 @@ class ConfigManager:
         return v if isinstance(v, str) and v else self.FACTORY_DEFAULT_PASSWD
 
     def _session_timeout_seconds(self):
+        if self._session_timeout and self._session_timeout > 0:
+            return self._session_timeout * 60
         key = f"{self.OWN_MODULE_ID}.session_timeout"
         v = self.query(key).get(key)
         return (v if isinstance(v, int) and v > 0 else 30) * 60
