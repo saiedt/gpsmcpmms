@@ -1,6 +1,18 @@
 import os
 import sys
+import shutil
+import tempfile
 from pathlib import Path
+
+# Sandbox every bit of persistence into a throwaway directory BEFORE the
+# config_mgr singleton is imported (it is created at import time and reads
+# these variables once). This keeps the suite hermetic and reproducible, and
+# stops it from ever touching the real ~/.config/gpsmcpmms. setdefault() lets
+# an explicit outer environment still point the tests elsewhere.
+_SANDBOX = tempfile.mkdtemp(prefix="gpsmcpmms-test-")
+os.environ.setdefault("GPSMCPMMS_CVV_DIR", os.path.join(_SANDBOX, "cvv"))
+os.environ.setdefault("GPSMCPMMS_UI_DIR", os.path.join(_SANDBOX, "ui"))
+
 import pytest
 
 # Setup pathing for repo root and test_app
@@ -38,3 +50,8 @@ def setup_demo_environment():
     led.ledc.init_supported_states(supported_states)
 
     return config_mgr
+
+
+def pytest_sessionfinish(session, exitstatus):
+    # Remove the throwaway persistence directory created at import time.
+    shutil.rmtree(_SANDBOX, ignore_errors=True)
