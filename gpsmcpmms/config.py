@@ -265,7 +265,7 @@ class ConfigManager:
         """
         if not (isinstance(value, str) and
                 isinstance(alt_target_paths, (list, tuple))):
-            return
+            return False
         with self._lock:
             for path, waiter in list(self._capture_waiters.items()):
                 if any(self._path_matches(pattern, path)
@@ -274,6 +274,8 @@ class ConfigManager:
                     waiter["value"] = value
                     waiter["event"].set()
                     del self._capture_waiters[path]
+                    return True
+        return False
 
     @staticmethod
     def _path_matches(pattern, path):
