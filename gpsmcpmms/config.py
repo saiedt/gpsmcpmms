@@ -206,7 +206,7 @@ class ConfigManager:
         self._logger.debug("GPSMCPMMS engine successfully attached to "
                            "production application logger.")
 
-    def config_ready(self, path):
+    def config_ready(self, path=None):
         return CvvNode.config_ready(self, path)
 
     def protected_params_ready(self):
@@ -261,7 +261,10 @@ class ConfigManager:
         is long-polling on one of the given candidate absolute paths; a '*'
         inside a path matches exactly one path element (e.g. a list
         ordinal). Without a matching waiting request, the event is safely
-        discarded as a no-op. No return value.
+        discarded as a no-op. Returns True if the value was handed over to a
+        waiting client, otherwise False, so that the calling module can tell an
+        editor-driven capture apart from an event nobody was waiting for. At
+        most one waiting request is served per invocation.
         """
         if not (isinstance(value, str) and
                 isinstance(alt_target_paths, (list, tuple))):

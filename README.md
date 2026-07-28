@@ -116,7 +116,7 @@ Other API methods:
 | `query(path)` | `{absolute_path: value}` for the nodes the path matches (module-rooted; wildcards allowed). |
 | `config_ready(path=None)` | `True` if no *relevant* leaf under the match is still unset. `None`/`""`/`"*"` = whole tree. Skips empty min-0 lists and fields whose relevance condition is false. |
 | `protected_params_ready()` | Like `config_ready`, restricted to `protected` parameters. |
-| `handle_value_event(value, alt_target_paths)` | Deliver a backend-captured value to a waiting editor (see 4.9.3). |
+| `handle_value_event(value, alt_target_paths)` | Deliver a backend-captured value to a waiting editor; `True` if one took it (see 4.9.3). |
 | `switch_to_app_logger(logger)` | Inject the application logger (once per run). |
 
 ---
@@ -350,7 +350,9 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 - **Backend-captured values** — a `backend_provided` field shows an
   `acquire_button`; pressing it long-polls `/api/value/capture`. A module delivers
   the value with `config_mgr.handle_value_event(value, alt_target_paths)` (use
-  `*` in a path to target a list member); unmatched events are no-ops.
+  `*` in a path to target a list member); unmatched events are no-ops. The call
+  returns `True` when a waiting editor took the value — a module can use that to
+  suppress whatever the captured event would otherwise trigger.
 - **List uniqueness** — simple-value lists forbid duplicates; `list_keys` declares
   uniqueness for record lists, and the editor hides already-used enum options.
 - **Testable parameters** — `test_func` + `test_func_msg` add a Test button and a
