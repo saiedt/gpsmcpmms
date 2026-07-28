@@ -178,3 +178,7 @@ button.small { padding: 3px 9px; font-size: 13px; }
   border: 1px solid var(--line); border-radius: var(--radius);
 }
 #modal-root .modal .buttons { display: flex; gap: 8px; justify-content: flex-end; }
+/* button-less variant: the editor is frozen while a backend value is captured */
+#modal-root .modal.busy { text-align: center; }
+#modal-root .modal.busy p { margin: 0; animation: busy-pulse 1.2s ease-in-out infinite; }
+@keyframes busy-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }

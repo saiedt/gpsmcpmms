@@ -295,7 +295,8 @@ module.
 - Fields validate on leave; `s2g_scale` is applied for display; dynamic enums are
   fetched on expand; already-used enum options are filtered out where a
   `list_keys` uniqueness applies; `backend_provided` fields show an acquire
-  button; `test_func` fields show a Test button with a confirmation modal.
+  button (which freezes the editor until the value arrives or the wait fails);
+  `test_func` fields show a Test button with a confirmation modal.
 
 ---
 
@@ -352,7 +353,9 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   the value with `config_mgr.handle_value_event(value, alt_target_paths)` (use
   `*` in a path to target a list member); unmatched events are no-ops. The call
   returns `True` when a waiting editor took the value — a module can use that to
-  suppress whatever the captured event would otherwise trigger.
+  suppress whatever the captured event would otherwise trigger. While a capture
+  is pending the editor freezes behind a modal overlay, so at most one capture is
+  ever outstanding.
 - **List uniqueness** — simple-value lists forbid duplicates; `list_keys` declares
   uniqueness for record lists, and the editor hides already-used enum options.
 - **Testable parameters** — `test_func` + `test_func_msg` add a Test button and a

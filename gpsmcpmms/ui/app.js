@@ -116,6 +116,16 @@ function modal(text, options = {}) {
     });
 }
 
+/* Freezes the whole editor behind a button-less overlay while a backend
+   operation is pending, and returns the function that thaws it again. Callers
+   must thaw in a `finally`, so a failure can never leave the editor stuck. */
+function freeze(text) {
+    const overlay = el("div", {class: "overlay"},
+        el("div", {class: "modal busy"}, el("p", {}, text)));
+    document.getElementById("modal-root").append(overlay);
+    return () => overlay.remove();
+}
+
 let msgTimer = null;
 function msg(text, cls = "info") {
     const box = document.getElementById("messages");
@@ -315,18 +325,30 @@ function acquireButton(node, input, commit) {
     const btn = el("button", {class: "small"}, xl(node.ui.acquire_button));
     btn.addEventListener("click", async () => {
         btn.disabled = true;
-        msg(xl("Wert wird gelesen..."), "info");
-        const r = await api(
-            `/api/value/capture?path=${encodeURIComponent(node.path)}`);
-        btn.disabled = false;
-        if (r.data && r.data.value !== null && r.data.value !== undefined) {
-            input.value = r.data.value;
-            commit(r.data.value);
+        // The editor freezes until the capture succeeds or fails: only one
+        // capture may ever be outstanding, otherwise a single backend event
+        // would land in whichever field happened to ask first while the other
+        // keeps waiting (see handle_value_event, spec 4.9.3).
+        const thaw = freeze(xl("Wert wird gelesen..."));
+        let r = null;
+        try {
+            r = await api(
+                `/api/value/capture?path=${encodeURIComponent(node.path)}`);
+        } catch (e) {
+            r = null;       // device unreachable; reported below
+        } finally {
+            thaw();
+            btn.disabled = false;
+        }
+        const data = r && r.data;
+        if (data && data.value !== null && data.value !== undefined) {
+            input.value = data.value;
+            commit(data.value);
             msg(xl("Wert übernommen"), "ok");
-        } else if (r.data && r.data.timeout) {
+        } else if (data && data.timeout) {
             msg(xl("Zeitüberschreitung"), "error");
         } else {
-            msg((r.data && r.data.error) || xl("Verbindung zum Gerät verloren"),
+            msg((data && data.error) || xl("Verbindung zum Gerät verloren"),
                 "error");
         }
     });
