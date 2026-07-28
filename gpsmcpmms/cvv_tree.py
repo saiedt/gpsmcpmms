@@ -261,6 +261,16 @@ class CvvValue:
 
     def check_and_set_value(self, val):
         if self._source == self.NO_SOURCE:
+            if self._kind == self.LIST_KIND:
+                # spec 2.1 key 4: a high-level fixed_val locks the length of a
+                # list, not what its members contain. Accept a list of
+                # unchanged length and let every member vet its own value --
+                # a member's own fixed_val or init_only still refuses a change
+                # (they end up with NO_SOURCE themselves and land in the
+                # equality check below).
+                return (isinstance(val, list) and
+                        len(val) == len(self._value or []) and
+                        self._check_and_set_value(val))
             return self._value == val
 
         if self._kind == self.DICT_KIND:
