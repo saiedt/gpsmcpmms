@@ -552,7 +552,11 @@ function usedEnumValuesIn(list, exceptIdx, prop) {
 function renderListB(node, container, relKeys, ctx) {
     const list = getIn(container, relKeys) || [];
     const tpl = node.item_template, cons = node.constraints;
-    const fixed = S.readOnly || node.configurability === 0;
+    // A fixed list locks its length and composition -- no adding, no removing
+    // -- but its members' inner leaves stay editable unless they lock
+    // themselves (spec 2.1, key 4). Applying an edited record must therefore
+    // stay possible; only the structural actions are barred.
+    const structureFixed = S.readOnly || node.configurability === 0;
     let st = S.listsB[node.path];
     if (!st || st.pos > list.length + 1) {
         st = S.listsB[node.path] = {pos: 1, draft: null, changed: false};
@@ -605,7 +609,7 @@ function renderListB(node, container, relKeys, ctx) {
             goTo(st.pos < list.length + 1 ? st.pos + 1 : 1)}, "▼"));
 
     const apply = el("button", {class: "primary",
-        disabled: fixed || !st.changed ? "" : null}, xl("Anwenden"));
+        disabled: S.readOnly || !st.changed ? "" : null}, xl("Anwenden"));
     apply.addEventListener("click", () => {
         if (st.pos <= list.length) {
             list[st.pos - 1] = deepCopy(st.draft);
@@ -620,7 +624,8 @@ function renderListB(node, container, relKeys, ctx) {
         ctx.rerender();
     });
     const remove = el("button", {
-        disabled: fixed || st.pos > list.length ? "" : null}, xl("Entfernen"));
+        disabled: structureFixed || st.pos > list.length ? "" : null},
+        xl("Entfernen"));
     remove.addEventListener("click", () => {
         list.splice(st.pos - 1, 1);
         setIn(container, relKeys, list);
@@ -635,7 +640,8 @@ function renderListB(node, container, relKeys, ctx) {
     // an entry; disabled when the list is fixed or already full
     const isNew = st.pos > list.length;
     const neu = el("button", {
-        disabled: fixed || list.length >= cons.max_size || isNew ? "" : null,
+        disabled: structureFixed || list.length >= cons.max_size || isNew
+                      ? "" : null,
         onclick: () => goTo(list.length + 1)}, xl("Neu"));
 
     return el("div", {class: "group-body list-b"},
