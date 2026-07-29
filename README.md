@@ -23,6 +23,14 @@ generic.
 pip install .          # from a checkout of this repo (Python 3.10+; pulls in Flask)
 ```
 
+> **Deploying over git? Bump the version first.** `pip install git+https://…`
+> compares the *version* in the cloned metadata against what is installed — not
+> the commit. With an unchanged number it clones, reads the metadata and then
+> quietly does nothing, leaving the old code in place and no error to notice.
+> The version lives in `gpsmcpmms/__init__.py`; `pyproject.toml` reads it from
+> there, so there is one place to change. To reinstall the same version on
+> purpose, use `--force-reinstall --no-deps`.
+
 Register a parameter and launch the editor:
 
 ```python

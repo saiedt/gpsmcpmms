@@ -31,4 +31,6 @@ from .cvv_tree import CvvError
 from .config import ConfigManager, config_mgr
 
 __all__ = ["config_mgr", "ConfigManager", "CvvError"]
-__version__ = "0.1.0"
+# The one place the version lives; pyproject.toml reads it from here. Bump it
+# whenever a change is meant to reach a device.
+__version__ = "0.2.0"

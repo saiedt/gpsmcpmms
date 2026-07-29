@@ -4,7 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gpsmcpmms"
-version = "0.1.0"
+# single source of truth: gpsmcpmms/__init__.py (see [tool.setuptools.dynamic]).
+# Bump it for anything meant to be deployed -- `pip install git+...` compares
+# versions, not commits, and silently installs nothing when the number is
+# unchanged.
+dynamic = ["version"]
 description = "General-purpose shared configuration manager with a built-in web config-editor: modules declare typed parameters and get validation, persistence, a schema-driven editor and a multilingual UI."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -40,6 +44,9 @@ Issues = "https://github.com/saiedt/gpsmcpmms/issues"
 # are bundled as package data, so a `pip install` is fully self-contained.
 [tool.setuptools]
 packages = ["gpsmcpmms"]
+
+[tool.setuptools.dynamic]
+version = { attr = "gpsmcpmms.__version__" }
 
 [tool.setuptools.package-data]
 gpsmcpmms = ["ui/*", "ui/lang/*"]
