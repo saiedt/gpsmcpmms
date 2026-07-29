@@ -117,6 +117,8 @@ Other API methods:
 | `config_ready(path=None)` | `True` if no *relevant* leaf under the match is still unset. `None`/`""`/`"*"` = whole tree. Skips empty min-0 lists and fields whose relevance condition is false. |
 | `protected_params_ready()` | Like `config_ready`, restricted to `protected` parameters. |
 | `handle_value_event(value, alt_target_paths)` | Deliver a backend-captured value to a waiting editor; `True` if one took it (see 4.9.3). |
+| `note_xlation_keys(*keys)` | Register display strings a module only uses at runtime, so they reach the translation templates. |
+| `translate(key, lang)` | The `lang` rendering of such a string, falling back to the German original. Accepts `de` or `de-DE`. |
 | `switch_to_app_logger(logger)` | Inject the application logger (once per run). |
 
 ---

@@ -255,6 +255,37 @@ class ConfigManager:
         self._invalidate_session()
         callback(config_value)
 
+    def note_xlation_keys(self, *keys):
+        """
+        Registers display strings that do not originate from a Declaration --
+        typically texts a module speaks or shows at runtime. Without this they
+        would never reach a translation template, and the cleanup would treat
+        them as orphans. Call once per run, next to register_params().
+        """
+        for key in keys:
+            if isinstance(key, str) and key.strip():
+                self._note_xlation_key(key.strip())
+
+    def translate(self, key, lang):
+        """
+        The `lang` rendering of a German display string, falling back to the
+        German original when the language is unknown or the entry is still
+        untranslated. The key is noted as active on the way, so a string only
+        ever spoken at runtime still shows up in the translation templates.
+        """
+        if not (isinstance(key, str) and key.strip()):
+            return key
+        key = key.strip()
+        self._note_xlation_key(key)
+        if not (isinstance(lang, str) and lang.strip()):
+            return key
+        lang = lang.strip()
+        translated = self._translation_of(lang, key)
+        if not translated and "-" in lang:
+            # dictionaries are keyed by language, callers may hold a locale
+            translated = self._translation_of(lang.split("-")[0], key)
+        return translated or key
+
     def handle_value_event(self, value, alt_target_paths):
         """
         Asynchronous event-sink for external system modules (spec 4.9.3):
