@@ -67,6 +67,7 @@ class ConfigManager:
         "Passwort", "Neues Passwort",
         "Wert wird gelesen...", "Wert übernommen", "Zeitüberschreitung",
         "Eintrag wirklich entfernen?", "Liste ist voll",
+        "Diese Optionen wurden nie gesetzt; als \"nein\" übernehmen?",
         "Zu wenige Einträge in", "Erneut laden",
         "Erfolgreich", "Fehlgeschlagen",
         "Übersetzungen verwalten", "Zielsprache", "Neuer Sprachcode",

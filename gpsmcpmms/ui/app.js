@@ -240,7 +240,9 @@ function buildInput(node, cur, commit, ctx) {
 
     if (cons.type === "boolean") {
         return el("input", {type: "checkbox", disabled: fixed ? "" : null,
-            onchange: (e) => commit(e.target.checked)},
+            // touching the box always answers it, so the third state goes away
+            onchange: (e) => { e.target.indeterminate = false;
+                               commit(e.target.checked); }},
             );
     }
     if (cons.one_of !== undefined) {
@@ -378,7 +380,13 @@ function fieldRow(node, container, relKeys, ctx) {
         ctx.rerender();
     };
     const input = buildInput(node, cur, commit, ctx);
-    if (input.type === "checkbox") input.checked = !!cur;
+    if (input.type === "checkbox") {
+        input.checked = !!cur;
+        // A boolean that was never answered is neither yes nor no. Without the
+        // third state it would look exactly like "no", and the parameter would
+        // silently keep config_ready() false with nothing on screen to show it.
+        input.indeterminate = (cur === null || cur === undefined);
+    }
     const row = el("div", {class: "field-row"},
         el("label", {}, xl(node.ui.label || node.path.split(".").pop())),
         node.ui.tooltip ? el("span",
@@ -639,6 +647,39 @@ function checkModuleLists(node, value, focusErr) {
     return true;
 }
 
+/* Booleans that were never answered: an unticked box is indistinguishable from
+   an unanswered one, so they are collected and confirmed once before saving
+   rather than quietly leaving the module incomplete. Hidden and currently
+   irrelevant fields are skipped, exactly as the renderer skips them. */
+function collectUnsetBooleans(node, container, relKeys, found) {
+    const value = getIn(container, relKeys);
+    if (!node.children) {
+        const cons = node.constraints || {};
+        if (cons.type === "boolean" && (value === null || value === undefined))
+            found.push({keys: relKeys,
+                        label: xl(node.ui.label || relKeys[relKeys.length - 1])});
+        return;
+    }
+    for (const [key, child] of Object.entries(node.children)) {
+        if (child.ui && child.ui.hidden) continue;
+        const rule = node.relevance && node.relevance[key];
+        if (rule && !relevanceHolds(rule, value)) continue;
+        collectUnsetBooleans(child, container, relKeys.concat([key]), found);
+    }
+}
+
+async function confirmUnsetBooleans(mid) {
+    const found = [];
+    collectUnsetBooleans(S.cvv[mid], S.edit, [mid], found);
+    if (!found.length) return true;
+    const answered = await modal(
+        xl("Diese Optionen wurden nie gesetzt; als \"nein\" übernehmen?") +
+        " " + found.map(f => f.label).join(", "));
+    if (!answered) return false;
+    for (const f of found) setIn(S.edit, f.keys, false);
+    return true;
+}
+
 async function saveModule(mid) {
     let failure = null;
     if (!checkModuleLists(S.cvv[mid], S.edit[mid],
@@ -646,6 +687,7 @@ async function saveModule(mid) {
         msg(failure, "error");
         return;
     }
+    if (!await confirmUnsetBooleans(mid)) return;
     const r = await api("/api/config/update",
         {json: {module: mid, value: S.edit[mid]}});
     if (r.status === 401) {

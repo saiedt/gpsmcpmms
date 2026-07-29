@@ -154,6 +154,14 @@ A Declaration is a dict with any of these keys (`type` is mandatory):
 | `color` | a Python `tuple` `(r, g, b)`, each `0..255` (one atomic value) |
 | `enum` | one of declared options; requires `values` |
 
+> **Give a `boolean` a `default_val`.** Any unset leaf keeps `config_ready()`
+> false, and a boolean is the one case the user cannot see: unset renders
+> exactly like `False`. The editor therefore draws an unanswered checkbox in its
+> *indeterminate* state and, on save, asks once whether the unanswered options
+> should count as "no" — but a declared default spares that question entirely.
+> When the decision genuinely has to be made by hand, a two-option `enum` states
+> both alternatives instead of leaving the user to infer the negative.
+
 **Type-specific sub-properties**
 
 | Property | For | Meaning |
@@ -294,8 +302,9 @@ module.
   button + Remove/Undo/Apply) for lists of records.
 - Fields validate on leave; `s2g_scale` is applied for display; dynamic enums are
   fetched on expand; already-used enum options are filtered out where a
-  `list_keys` uniqueness applies; `backend_provided` fields show an acquire
-  button (which freezes the editor until the value arrives or the wait fails);
+  `list_keys` uniqueness applies; unanswered booleans render *indeterminate* and
+  are confirmed once on save; `backend_provided` fields show an acquire button
+  (which freezes the editor until the value arrives or the wait fails);
   `test_func` fields show a Test button with a confirmation modal.
 
 ---
