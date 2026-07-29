@@ -399,13 +399,15 @@ function fieldRow(node, container, relKeys, ctx) {
     return row;
 }
 
-function collapsible(pathKey, labelText, tooltip, renderBody, extraClass) {
+function collapsible(pathKey, labelText, tooltip, renderBody, extraClass,
+                     headerExtra) {
     const isOpen = !!S.open[pathKey];
     const group = el("div", {class: `group ${extraClass || ""}`});
     const header = el("div", {class: "group-header"},
         el("span", {class: "arrow"}, isOpen ? "▼" : "▶"),
         el("span", {}, labelText),
-        tooltip ? el("span", {class: "help", title: tooltip}, "?") : null);
+        tooltip ? el("span", {class: "help", title: tooltip}, "?") : null,
+        headerExtra || null);
     header.addEventListener("click", () => {
         S.open[pathKey] = !S.open[pathKey];
         renderAll();
@@ -427,12 +429,24 @@ function renderDictBody(node, container, relKeys, ctx) {
     return body;
 }
 
+/* A test_func may sit on a whole group rather than on a single field -- a SIP
+   access whose credentials are only meaningful together, or a set of LED
+   settings to be shown as one. Its button then belongs in the group header,
+   and must not fold the group away when clicked. */
+function groupTestButton(node, container, relKeys) {
+    if (!node.ui.test_func || S.readOnly) return null;
+    const btn = testButton(node, () => getIn(container, relKeys));
+    btn.addEventListener("click", (e) => e.stopPropagation());
+    return btn;
+}
+
 function renderNode(node, container, relKeys, ctx) {
     if (node.children) {
         return collapsible(node.path,
             xl(node.ui.label || relKeys[relKeys.length - 1]),
             node.ui.tooltip ? xl(node.ui.tooltip) : null,
-            () => renderDictBody(node, container, relKeys, ctx));
+            () => renderDictBody(node, container, relKeys, ctx),
+            null, groupTestButton(node, container, relKeys));
     }
     if (node.item_template) {
         const simple = !node.item_template.children;
@@ -440,7 +454,8 @@ function renderNode(node, container, relKeys, ctx) {
             xl(node.ui.label || relKeys[relKeys.length - 1]),
             node.ui.tooltip ? xl(node.ui.tooltip) : null,
             () => simple ? renderListA(node, container, relKeys, ctx)
-                         : renderListB(node, container, relKeys, ctx));
+                         : renderListB(node, container, relKeys, ctx),
+            null, groupTestButton(node, container, relKeys));
     }
     return fieldRow(node, container, relKeys, ctx);
 }
