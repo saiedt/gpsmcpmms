@@ -267,7 +267,8 @@ class ConfigManager:
             }, type_registry)
         # any runtime schema change invalidates the exclusive editing
         # token, forcing the config-editor to re-align (spec 4.8)
-        self._invalidate_session()
+        self._invalidate_session(f"module '{module_id}' registered its "
+                                 "parameters")
         callback(config_value)
 
     def note_xlation_keys(self, *keys):
@@ -878,14 +879,22 @@ class ConfigManager:
         with self._lock:
             self._session_expires = time.time() + timeout
 
-    def _invalidate_session(self):
+    def _invalidate_session(self, reason):
+        """
+        Drops the exclusive editing session. `reason` reaches the log, so that
+        an admin whose session vanished mid-edit can see what took it. Nothing
+        is logged when there was no session: at startup every module
+        registration lands here, and an ending that never began is noise.
+        """
         with self._lock:
+            existed = self._session_token is not None
             owner = self._session_owner
             self._session_token = None
             self._session_admin = False
             self._session_owner = None
-        self._logger.info(f"Editing session of {owner or 'unknown'} ended; "
-                          "the editor is writable again.")
+        if existed:
+            self._logger.info(f"Editing session of {owner or 'unknown'} ended "
+                              f"({reason}); the editor is writable again.")
 
     # ------------------------------------------------------------------
     # Handling of protected params (spec 4.4)
@@ -1294,7 +1303,7 @@ class ConfigManager:
                 abort(403)
             if self._session_status(request_token()) != "valid":
                 return jsonify({"ended": False}), 401
-            self._invalidate_session()
+            self._invalidate_session("closed by the editor")
             return jsonify({"ended": True})
 
         self._flask_app = app
