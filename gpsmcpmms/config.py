@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import csv
+import hashlib
 import hmac
 import io
 import json
@@ -22,6 +23,8 @@ import os
 import re
 import secrets
 import shutil
+import socket
+import subprocess
 import threading
 import time
 from .cvv_tree import CvvError, CvvNode
@@ -46,6 +49,11 @@ class ConfigManager:
     # how many existing languages may be included as reference columns in a
     # downloaded translation template (context for the translator/AI)
     MAX_TEMPLATE_REFS = 3
+    # how long one reachability probe of a 'pingable' parameter may take
+    PING_TIMEOUT = 2
+    # the editor's web assets, and the record of what was staged into ui_dir
+    WEB_ASSETS = ("index.html", "style.css", "app.js")
+    ASSET_STAMP = ".staged.json"
     # column separator of the translation CSVs: a pipe is chosen because it is
     # very unlikely to occur inside a German key or a translation, so cells
     # never need quoting and no delimiter collision can arise
@@ -70,6 +78,10 @@ class ConfigManager:
         "Diese Optionen wurden nie gesetzt; als \"nein\" übernehmen?",
         "Zu wenige Einträge in", "Erneut laden",
         "Erfolgreich", "Fehlgeschlagen",
+        "Prüfen", "Prüfung fehlgeschlagen",
+        "Erreichbar", "keine Antwort auf Ping", "Name nicht auflösbar",
+        "Datei vorhanden", "Ordner vorhanden", "Pfad nicht vorhanden",
+        "Noch nicht vorhanden, kann angelegt werden",
         "Übersetzungen verwalten", "Zielsprache", "Neuer Sprachcode",
         "Referenzsprachen (max. 3)", "Vorlage herunterladen",
         "Übersetzungsdatei hochladen", "Hochladen",
@@ -350,6 +362,120 @@ class ConfigManager:
         if callable(callback):
             callback(value)
         return rejected
+
+    def _probe_host(self, host):
+        """
+        Checks whether `host` -- the value of a 'pingable' param -- resolves
+        and answers a ping. Two very different mistakes hide behind a plain
+        "not reachable": a name that does not resolve is a typo, while a name
+        that resolves but stays silent is a device switched off, firewalled or
+        on another subnet. They are therefore reported apart. Only the backend
+        can answer this usefully: what matters is whether *the device* reaches
+        the host, not whether the browser showing the editor does.
+        """
+        try:
+            info = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
+        except OSError:
+            return {"outcome": "unresolvable"}
+        # A dual-stack name resolves to both an A and an AAAA record, and the
+        # one the resolver puts first is not necessarily the one the device can
+        # route. Trying the alternative keeps a working host from being
+        # reported as silent; two are enough, there is no third protocol.
+        addresses = list(dict.fromkeys(i[4][0] for i in info))[:2]
+        # ICMP itself would need a raw socket and hence root, which the app
+        # must not require; the system's ping binary carries that privilege
+        flags = (["-n", "1", "-w", str(self.PING_TIMEOUT * 1000)]
+                     if os.name == "nt" else
+                 ["-c", "1", "-W", str(self.PING_TIMEOUT)])
+        for address in addresses:
+            try:
+                if subprocess.run(
+                        ["ping"] + flags + [address],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        timeout=self.PING_TIMEOUT + 3).returncode == 0:
+                    return {"outcome": "reachable", "address": address}
+            except (OSError, subprocess.SubprocessError):
+                break       # no usable ping binary; do not retry per address
+        return {"outcome": "silent", "address": addresses[0]}
+
+    def _probe_path(self, path):
+        """
+        Checks the value of a 'path' param against the device's own file
+        system -- which, again, only the backend can see. Absence is not
+        necessarily an error: a log file is written later, a folder may be
+        created on first use. So a missing path whose parent folder exists is
+        reported as creatable, and only a missing parent -- nearly always a
+        typo -- as missing. A leading '~' is expanded, because it is the
+        service account's home that the module will resolve it against.
+        """
+        path = os.path.expanduser(path)
+        if os.path.isdir(path):
+            return {"outcome": "directory"}
+        if os.path.exists(path):
+            return {"outcome": "file"}
+        parent = os.path.dirname(os.path.abspath(path))
+        return {"outcome": "creatable" if os.path.isdir(parent) else "missing"}
+
+    def _stage_web_assets(self):
+        """
+        Copies the editor's web assets into ui_dir from the packaged defaults,
+        so that a freshly provisioned appliance serves the editor out of the
+        box. An asset that the deployment has edited is left alone, but one
+        still identical to what an earlier version of this package staged is
+        refreshed: otherwise upgrading the package would keep serving the old
+        frontend, and a fix in it would silently never reach the device. The
+        first run after that rule was introduced finds no record of what was
+        staged; a differing asset is then set aside as '<name>.local' rather
+        than lost.
+        """
+        packaged_dir = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "ui")
+        stamp_file = os.path.join(self.ui_dir, self.ASSET_STAMP)
+        try:
+            with open(stamp_file, encoding="utf-8") as handle:
+                staged = json.load(handle)
+        except (OSError, ValueError):
+            staged = {}
+        if not isinstance(staged, dict):
+            staged = {}
+
+        def digest(path):
+            with open(path, "rb") as handle:
+                return hashlib.sha256(handle.read()).hexdigest()
+
+        for asset in self.WEB_ASSETS:
+            source = os.path.join(packaged_dir, asset)
+            target = os.path.join(self.ui_dir, asset)
+            if not os.path.exists(source):
+                continue
+            try:
+                packaged = digest(source)
+                if os.path.exists(target):
+                    local = digest(target)
+                    if local == packaged:
+                        staged[asset] = packaged        # already up to date
+                        continue
+                    if asset in staged:
+                        if local != staged[asset]:
+                            self._logger.info(
+                                    f"Keeping the locally modified '{asset}'; "
+                                    "the packaged version has changed.")
+                            continue
+                    else:
+                        shutil.copyfile(target, target + ".local")
+                        self._logger.warning(
+                                f"Replacing the unrecorded '{asset}' with the "
+                                f"packaged one; the previous file is kept as "
+                                f"'{asset}.local'.")
+                shutil.copyfile(source, target)
+                staged[asset] = packaged
+            except OSError as exc:
+                self._logger.error(f"Staging '{asset}' failed: {exc}")
+        try:
+            with open(stamp_file, "w", encoding="utf-8") as handle:
+                json.dump(staged, handle)
+        except OSError as exc:
+            self._logger.error(f"Recording the staged assets failed: {exc}")
 
     def _resolve_backend_func(self, module_id, func_name):
         """
@@ -803,19 +929,7 @@ class ConfigManager:
                 return
             self._editor_started = True
 
-        # seed missing web assets from the packaged defaults, so that a
-        # freshly provisioned appliance serves the editor out of the box;
-        # assets already present in ui_dir are never overwritten
-        packaged_dir = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "ui")
-        for asset in ("index.html", "style.css", "app.js"):
-            target = os.path.join(self.ui_dir, asset)
-            source = os.path.join(packaged_dir, asset)
-            if not os.path.exists(target) and os.path.exists(source):
-                try:
-                    shutil.copyfile(source, target)
-                except OSError as exc:
-                    self._logger.error(f"Seeding '{asset}' failed: {exc}")
+        self._stage_web_assets()
 
         app = Flask("gpsmcpmms_editor", static_folder=None)
 
@@ -1025,6 +1139,34 @@ class ConfigManager:
             if not isinstance(result, (bool, int, float, str, type(None))):
                 result = str(result)
             return jsonify({"result": result})
+
+        @app.route("/api/config/probe", methods=["POST"])
+        def config_probe():
+            if request.headers.get(self.API_HEADER) != "1":
+                abort(403)
+            payload = request.get_json(silent=True)
+            if not isinstance(payload, dict):
+                abort(400)
+            if self._session_status(request_token()) != "valid":
+                return jsonify({"error": "invalid_token"}), 401
+            self._touch_session()
+            path = payload.get("path")
+            value = payload.get("value")
+            if not (isinstance(path, str) and path.strip()
+                    and isinstance(value, str) and value.strip()):
+                abort(400)
+            path = path.strip()
+            if not self._may_access(path):
+                return jsonify({"error": "admin_required"}), 403
+            constraints = CvvNode.get_node_constraints(self, path)
+            kind = constraints.get("type") if constraints else None
+            # only what the declaration calls a host or a file may be probed:
+            # this checks 'pingable' and 'path' params, it is neither a
+            # general-purpose network prober nor a file browser
+            if kind not in ("path", "pingable"):
+                return jsonify({"error": "no_such_param"}), 404
+            probe = self._probe_host if kind == "pingable" else self._probe_path
+            return jsonify(probe(value.strip()))
 
         @app.route("/api/lang/info")
         def lang_info():

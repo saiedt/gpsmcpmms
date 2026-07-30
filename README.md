@@ -144,7 +144,7 @@ A Declaration is a dict with any of these keys (`type` is mandatory):
 | `default_val` | Initial value; may be overwritten by the user. |
 | `fixed_val` | Constant, protected from change. On a dict/list it locks only the structure/length — inner leaves stay editable unless they lock themselves. |
 | `init_only` | Once set (by user or an inherited `fixed_val`), never changes. Only allowed if neither `fixed_val` nor `default_val` is present. |
-| `likely_val` | A suggested value shown when there is no `fixed_val`/`default_val`. |
+| `likely_val` | A proposal. Like `default_val`, but the backend does not adopt it: the parameter stays unset, so `config_ready()` stays false until someone confirms it. The editor fills the field in, and saving the module is that confirmation. |
 | `relevance` | `"<sibling><op><value>"`. When false, this parameter is hidden and need not have a value. |
 | `hidden` | Hide from the editor. |
 | `protected` | Hidden until the admin unlocks with the password. |
@@ -159,8 +159,8 @@ A Declaration is a dict with any of these keys (`type` is mandatory):
 | `string` | text; accepts `bound_to` (a regex) |
 | `password` | text, masked in the editor |
 | `url` | a URL string |
-| `path` | a file/folder path (existence checked by the editor) |
-| `pingable` | a host/IP whose reachability is checked by the editor |
+| `path` | a file/folder path, checked against the device's file system (see below) |
+| `pingable` | a host/IP whose reachability the editor checks (see below) |
 | `color` | a Python `tuple` `(r, g, b)`, each `0..255` (one atomic value) |
 | `enum` | one of declared options; requires `values` |
 
@@ -301,7 +301,11 @@ payload (not a JSON object, unknown module) yields `400`.
 Beside serving as the interface between client modules and the system,
 `gpsmcpmms/config.py` houses the Flask application backend that exposes the REST
 API summarized further below. The assets `index.html`, `style.css`, `app.js` are
-read from `gpsmcpmms/ui/` (or `ui_dir`). The UI renders one **collapsible group
+served from `ui_dir`, into which `start_editor()` stages the packaged copies from
+`gpsmcpmms/ui/`. It records what it staged in `ui_dir/.staged.json`, so an
+upgraded package refreshes an asset that is still untouched — otherwise a
+frontend fix would never reach a device — while an asset the deployment has
+edited itself is left in place. The UI renders one **collapsible group
 per module** (sorted by id), each ending with a **Save** button that commits the
 module.
 
@@ -358,6 +362,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 | `GET /api/config/enum-options?path=` | Resolve a dynamic enum's options. |
 | `GET /api/value/capture?path=` | Long-poll (≤ 30 s) for a backend-captured value. |
 | `POST /api/config/test` | Run the `test_func` for `{path, value}`. |
+| `POST /api/config/probe` | Verify `{path, value}` on the device; only for `path`/`pingable` params. |
 | `POST /api/end_session` | Release the editing token. |
 
 ---
@@ -379,6 +384,20 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   uniqueness for record lists, and the editor hides already-used enum options.
 - **Testable parameters** — `test_func` + `test_func_msg` add a Test button and a
   confirmation modal, executed via `/api/config/test`.
+- **Verifiable values** — a `pingable` or `path` field is checked as soon as it is
+  entered, and again whenever its *Prüfen* button is pressed. The check runs on the
+  device, not in the browser: the file system is the device's, and what matters
+  about a host is whether *the device* reaches it — the browser may be on the other
+  interface. Each verdict is three-way rather than yes/no, because "not there" has
+  very different meanings: unresolvable vs. resolving-but-silent for a host,
+  missing vs. not-yet-created for a path. The check is advisory — the value is
+  saved either way, since a host may legitimately be offline and a folder may only
+  be created on first use.
+- **Proposed values** — a `likely_val` is offered by the editor rather than by the
+  backend: the field arrives pre-filled and the module counts as unsaved, so the
+  admin either accepts the proposal by saving or types over it. Clearing the field
+  keeps it clear; the proposal is offered once per form, not re-imposed on every
+  redraw.
 
 ---
 

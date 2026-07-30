@@ -27,6 +27,7 @@ const S = {
     languages: ["de"],
     edit: {},                // moduleId -> working value (deep copy)
     dirty: {},               // moduleId -> bool
+    adopted: {},             // moduleId -> Set of likely_val fields filled in
     open: {},                // dump path -> group expanded?
     enums: {},               // dump path -> {values}|{error}|{pending}
     listsA: {},              // dump path -> {sel}
@@ -286,9 +287,7 @@ function buildInput(node, cur, commit, ctx) {
         const input = el("input", {type: "number",
             step: isInt && !ui.scale_op ? "1" : "any",
             value: cur === null || cur === undefined ? "" : scaleOut(ui, cur),
-            placeholder: ui.likely_val !== undefined ?
-                             String(scaleOut(ui, ui.likely_val)) :
-                             (ui.placeholder || ""),
+            placeholder: ui.placeholder || "",
             disabled: fixed ? "" : null, readonly: backend ? "" : null});
         input.addEventListener("change", () => {
             if (input.value.trim() === "") return ok(input, null);
@@ -309,8 +308,7 @@ function buildInput(node, cur, commit, ctx) {
     const input = el("input", {
         type: cons.type === "password" ? "password" : "text",
         value: cur === null || cur === undefined ? "" : cur,
-        placeholder: ui.likely_val !== undefined ? String(ui.likely_val)
-                                                 : (ui.placeholder || ""),
+        placeholder: ui.placeholder || "",
         disabled: fixed ? "" : null, readonly: backend ? "" : null});
     input.addEventListener("keydown",
         (e) => { if (e.key === "Enter" || e.keyCode === 13) input.blur(); });
@@ -371,13 +369,73 @@ function testButton(node, currentValue) {
     return btn;
 }
 
+/* A 'pingable' host and a 'path' are the two values the editor can verify by
+   itself, so that a wrong entry shows up while it is being made and not only
+   when the device later fails to use it. Both checks belong to the backend: the
+   file system is the device's, and what matters about a host is whether the
+   *device* reaches it -- the browser may well sit on the other interface. The
+   verdicts stay three-way rather than yes/no, because "not there" has very
+   different meanings (a typo, or a box that is merely switched off). */
+const PROBE_TYPES = new Set(["path", "pingable"]);
+const PROBE_VERDICT = {
+    reachable:  (d) => [`${xl("Erreichbar")}: ${d.address}`, "ok"],
+    silent:     (d) => [`${d.address}: ${xl("keine Antwort auf Ping")}`, "info"],
+    unresolvable: () => [xl("Name nicht auflösbar"), "error"],
+    file:       () => [xl("Datei vorhanden"), "ok"],
+    directory:  () => [xl("Ordner vorhanden"), "ok"],
+    creatable:  () => [xl("Noch nicht vorhanden, kann angelegt werden"), "info"],
+    missing:    () => [xl("Pfad nicht vorhanden"), "error"],
+};
+
+async function probeValue(node, value) {
+    if (typeof value !== "string" || value.trim() === "") return;
+    const r = await api("/api/config/probe",
+                        {json: {path: node.path, value: value}});
+    const d = r.data || {};
+    const verdict = PROBE_VERDICT[d.outcome];
+    if (r.status !== 200 || !verdict)
+        return msg(`${xl("Prüfung fehlgeschlagen")}: ` +
+                   `${d.error || xl("Verbindung zum Gerät verloren")}`,
+                   "error");
+    msg(...verdict(d));
+}
+
+function probeButton(node, currentValue) {
+    const btn = el("button", {class: "small"}, xl("Prüfen"));
+    btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try { await probeValue(node, currentValue()); }
+        finally { btn.disabled = false; }
+    });
+    return btn;
+}
+
 /* ---------- rows, groups, dict bodies (spec 4.6 / 4.6.1) ---------- */
 function fieldRow(node, container, relKeys, ctx) {
-    const cur = getIn(container, relKeys);
+    let cur = getIn(container, relKeys);
+    const cons = node.constraints || {};
+    // A likely_val is a proposal, not a decision: the backend never adopts it
+    // -- an unset parameter keeps config_ready() false, which is the whole
+    // difference to a default_val -- but the editor fills it in, so that the
+    // admin only has to confirm it by saving, or type something else over it.
+    // Adopting once per draft keeps emptying the field possible; re-filling it
+    // on every render would not.
+    const proposal = node.ui.likely_val;
+    const adoptKey = relKeys.join(".");
+    if (proposal !== undefined && (cur === null || cur === undefined) &&
+            node.configurability === 1 && !S.readOnly &&
+            !ctx.adopted.has(adoptKey)) {
+        ctx.adopted.add(adoptKey);
+        cur = proposal;
+        setIn(container, relKeys, cur);
+        ctx.markDirtyQuiet();
+    }
     const commit = (v) => {
         setIn(container, relKeys, v);
         ctx.markDirty();
         ctx.rerender();
+        // the answer arrives long after the re-render, so the message survives
+        if (PROBE_TYPES.has(cons.type)) probeValue(node, v);
     };
     const input = buildInput(node, cur, commit, ctx);
     if (input.type === "checkbox") {
@@ -394,6 +452,8 @@ function fieldRow(node, container, relKeys, ctx) {
         input);
     if (node.configurability === 2 && node.ui.acquire_button && !S.readOnly)
         row.append(acquireButton(node, input, commit));
+    if (PROBE_TYPES.has(cons.type) && !S.readOnly)
+        row.append(probeButton(node, () => getIn(container, relKeys)));
     if (node.ui.test_func && !S.readOnly)
         row.append(testButton(node, () => getIn(container, relKeys)));
     return row;
@@ -565,6 +625,7 @@ function renderListB(node, container, relKeys, ctx) {
         st.draft = st.pos <= list.length ? deepCopy(list[st.pos - 1])
                                          : composeValue(tpl);
         st.changed = false;
+        st.adopted = new Set();   // every fresh draft may take the proposals
     }
     const goTo = (pos) => {                       // B.3 / B.4: discard edits
         st.pos = (pos >= 1 && pos <= list.length + 1) ? pos : list.length + 1;
@@ -576,10 +637,12 @@ function renderListB(node, container, relKeys, ctx) {
     const standaloneKeys = (cons.keys || [])
         .filter(g => g.length === 1).map(g => g[0]);
     const recCtx = Object.assign({}, ctx, {
+        adopted: st.adopted,
         markDirty: () => {
             st.changed = true;
             ctx.rerender();
         },
+        markDirtyQuiet: () => { st.changed = true; },
     });
 
     const recordBody = el("div", {class: "record-block"});
@@ -737,6 +800,10 @@ function renderModule(mid) {
     const ctx = {
         module: mid,
         markDirty: () => { S.dirty[mid] = true; },
+        // adopting a likely_val happens *during* a render and must therefore
+        // not ask for another one (see fieldRow)
+        markDirtyQuiet: () => { S.dirty[mid] = true; },
+        adopted: S.adopted[mid] || (S.adopted[mid] = new Set()),
         rerender: () => renderAll(),
     };
     return collapsible(mid, xl(node.ui.label || mid),
@@ -996,6 +1063,10 @@ async function reloadData(passwd) {
     S.dirty = {};
     S.listsB = {};
     S.listsA = {};
+    // S.adopted deliberately survives: saving re-loads the tree, and a
+    // proposal the admin has cleared on purpose must not come back -- which
+    // would also leave Speichern lit, inviting them to adopt it by accident.
+    // A real fresh start comes with a page load, which resets S as a whole.
     for (const [mid, node] of Object.entries(S.cvv))
         S.edit[mid] = composeValue(node);
 }
