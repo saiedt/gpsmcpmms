@@ -150,6 +150,9 @@ class ConfigManager:
         self._session_token = None
         self._session_expires = 0.0
         self._session_admin = False
+        # who holds it, purely so the log can say whom to go and ask; a
+        # read-only editor is otherwise an unexplained state on the screen
+        self._session_owner = None
         self._editor_started = False
         self._flask_app = None
 
@@ -830,21 +833,44 @@ class ConfigManager:
         with self._lock:
             if (self._session_token is None or
                     time.time() > self._session_expires):
+                if self._session_token is not None:
+                    self._logger.info(
+                            f"Editing session of "
+                            f"{self._session_owner or 'unknown'} expired after "
+                            "its idle timeout; the editor is writable again.")
                 self._session_token = None
                 self._session_admin = False
+                self._session_owner = None
                 return "none"
             return ("valid"
                         if isinstance(token, str) and hmac.compare_digest(
                                 token, self._session_token) else
                     "other")
 
-    def _issue_session_token(self):
+    def _issue_session_token(self, owner=None):
         timeout = self._session_timeout_seconds()
         with self._lock:
             self._session_token = secrets.token_urlsafe(32)
             self._session_admin = False
+            self._session_owner = owner
             self._session_expires = time.time() + timeout
             return self._session_token
+
+    def _report_session_conflict(self, applicant):
+        """
+        Says in the log why an editor came up read-only. Without this the
+        banner on the screen is the only evidence, and it cannot say who is
+        holding the session or for how much longer -- which is exactly what
+        somebody locked out of their own device needs to know.
+        """
+        with self._lock:
+            owner = self._session_owner or "unknown"
+            left = max(0, int(self._session_expires - time.time()))
+        self._logger.warning(
+                f"Read-only editor for {applicant or 'unknown'}: the session "
+                f"of {owner} holds the write lock for another "
+                f"{left // 60} min {left % 60} s. It is released by 'end "
+                f"session', by that idle timeout, or by restarting the app.")
 
     def _touch_session(self):
         # each valid request restarts the inactivity timer (spec 4.8)
@@ -854,8 +880,12 @@ class ConfigManager:
 
     def _invalidate_session(self):
         with self._lock:
+            owner = self._session_owner
             self._session_token = None
             self._session_admin = False
+            self._session_owner = None
+        self._logger.info(f"Editing session of {owner or 'unknown'} ended; "
+                          "the editor is writable again.")
 
     # ------------------------------------------------------------------
     # Handling of protected params (spec 4.4)
@@ -968,14 +998,18 @@ class ConfigManager:
         @app.route("/api/cvv_data")
         def cvv_data():
             token = request_token()
+            applicant = request.remote_addr
             status = self._session_status(token)
             if status == "none":
                 # first client without an active session gets the token
-                token = self._issue_session_token()
+                token = self._issue_session_token(applicant)
                 status = "valid"
+                self._logger.info(f"Editing session opened for {applicant}.")
             editable = status == "valid"
             if editable:
                 self._touch_session()
+            else:
+                self._report_session_conflict(applicant)
 
             wrong_passwd = False
             passwd = request.args.get("passwd")
