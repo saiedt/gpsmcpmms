@@ -306,8 +306,10 @@ served from `ui_dir`, into which `start_editor()` stages the packaged copies fro
 upgraded package refreshes an asset that is still untouched — otherwise a
 frontend fix would never reach a device — while an asset the deployment has
 edited itself is left in place. The UI renders one **collapsible group
-per module** (sorted by id), each ending with a **Save** button that commits the
-module.
+per module** (sorted by id — prefix your ids to choose the order the groups
+appear in), each ending with a **Save** button that commits the module. A group
+with nothing to show is left out entirely, which is what happens to a module
+whose parameters are all `protected` when no admin is logged in.
 
 - **Dict groups** render one row per property (respecting `hidden` and
   `relevance`), recursing into sub-groups.

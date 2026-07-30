@@ -477,13 +477,34 @@ function collapsible(pathKey, labelText, tooltip, renderBody, extraClass,
     return group;
 }
 
+/* Which children of a dict actually make it onto the screen: the hidden ones
+   and those an unmet relevance rule switches off never do. A protected subtree
+   is not even in the dump outside admin mode, so the same walk answers "is
+   there anything here at all" -- see hasVisibleContent. */
+function visibleChildren(node, container, relKeys) {
+    const dictValue = getIn(container, relKeys);
+    return Object.entries(node.children || {}).filter(([key, child]) => {
+        if (child.ui && child.ui.hidden) return false;
+        const rule = node.relevance && node.relevance[key];
+        return !(rule && !relevanceHolds(rule, dictValue));
+    });
+}
+
+/* An empty group is a heading that promises something and delivers nothing.
+   That happens for real outside admin mode, where a module whose parameters
+   are all protected arrives with no children at all. */
+function hasVisibleContent(node, container, relKeys) {
+    if (!node.children) return true;      // a leaf or a list editor is content
+    return visibleChildren(node, container, relKeys).some(
+        ([key, child]) => hasVisibleContent(child, container,
+                                            relKeys.concat([key])));
+}
+
 function renderDictBody(node, container, relKeys, ctx) {
     const body = el("div", {class: "group-body"});
-    const dictValue = getIn(container, relKeys);
-    for (const [key, child] of Object.entries(node.children || {})) {
-        if (child.ui && child.ui.hidden) continue;
-        const rule = node.relevance && node.relevance[key];
-        if (rule && !relevanceHolds(rule, dictValue)) continue;
+    for (const [key, child] of visibleChildren(node, container, relKeys)) {
+        if (!hasVisibleContent(child, container, relKeys.concat([key])))
+            continue;
         body.append(renderNode(child, container, relKeys.concat([key]), ctx));
     }
     return body;
@@ -646,11 +667,8 @@ function renderListB(node, container, relKeys, ctx) {
     });
 
     const recordBody = el("div", {class: "record-block"});
-    const dictValue = st.draft;
-    for (const [key, child] of Object.entries(tpl.children || {})) {
-        if (child.ui && child.ui.hidden) continue;
-        const rule = tpl.relevance && tpl.relevance[key];
-        if (rule && !relevanceHolds(rule, dictValue)) continue;
+    for (const [key, child] of visibleChildren(tpl, st.draft, [])) {
+        if (!hasVisibleContent(child, st.draft, [key])) continue;
         const childCtx = standaloneKeys.includes(key)
             ? Object.assign({}, recCtx,
                 {usedEnumValues: usedEnumValuesIn(list, st.pos - 1, key)})
@@ -1030,8 +1048,12 @@ function renderAll() {
             S.admin ? el("button", {class: "small", onclick: exitAdminMode},
                          xl("Admin-Modus verlassen")) : null));
 
-    for (const mid of Object.keys(S.cvv).sort())
+    // sorted by module id, which is how a device controls the order of the
+    // groups on screen -- prefix the ids and you have chosen the sequence
+    for (const mid of Object.keys(S.cvv).sort()) {
+        if (!hasVisibleContent(S.cvv[mid], S.edit, [mid])) continue;
         app.append(renderModule(mid));
+    }
 }
 
 /* ---------- data loading ---------- */
