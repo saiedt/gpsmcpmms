@@ -14,7 +14,7 @@ def client(setup_demo_environment):
     # Build the Flask app and register its routes without serving it.
     cfg.start_editor(run_server=False)
     cfg._flask_app.config["TESTING"] = True
-    cfg._invalidate_session()
+    cfg._invalidate_session("test fixture starting from a clean session")
     with cfg._flask_app.test_client() as c:
         yield c
 
