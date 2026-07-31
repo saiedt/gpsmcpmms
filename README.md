@@ -284,6 +284,14 @@ and (by kind) `value`, `children` or `item_template`.
   client is served read-only. The token lives only in the browser's memory,
   expires after an inactivity timeout (`config.session_timeout`, default 30 min),
   is invalidated by any `register_params()`, and is released by **End Session**.
+- **Taking it back.** Because the token is memory-only, closing the window — or
+  merely reloading the page — abandons a session that the device still considers
+  live, locking the admin out of their own editor until it times out. The
+  read-only banner therefore offers **Sitzung übernehmen**, which reclaims the
+  lock on proof of the admin password and invalidates the previous token. The
+  password is not carried into the new session: seeing protected parameters
+  still takes the separate unlock. Every transition of the lock — granted,
+  refused, taken, ended, expired — is logged with the client's address.
 - **Anti-CSRF.** Mutating requests require a custom header and a same-origin
   `Origin`; no cookies are used.
 - **Factory-password notice.** While `ui_passwd` still equals the factory default,
@@ -372,6 +380,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 | `GET /api/value/capture?path=` | Long-poll (≤ 30 s) for a backend-captured value. |
 | `POST /api/config/test` | Run the `test_func` for `{path, value}`. |
 | `POST /api/config/probe` | Verify `{path, value}` on the device; only for `path`/`pingable` params. |
+| `POST /api/session/takeover` | Take the editing session from its holder, on proof of `ui_passwd`. |
 | `POST /api/end_session` | Release the editing token. |
 
 ---

@@ -848,6 +848,28 @@ async function unlockProtected() {
     renderAll();
 }
 
+/* An editor whose window was closed without ending its session keeps the write
+   lock for the rest of the idle timeout, and reloading cannot recover it -- a
+   reload throws away this tab's token, which is what made it read-only in the
+   first place. The admin password takes the lock back (spec 4.8). It is not
+   carried into the new session: protected parameters still need the separate,
+   deliberate unlock. */
+async function takeOverSession() {
+    const passwd = await modal(xl("Passwort"),
+                               {input: {type: "password"}});
+    if (passwd === null) return;
+    const r = await api("/api/session/takeover", {json: {passwd}});
+    if (r.status !== 200 || !r.data || !r.data.token) {
+        msg(r.status === 403 ? xl("Falsches Passwort")
+                             : xl("Verbindung zum Gerät verloren"), "error");
+        return;
+    }
+    S.token = r.data.token;
+    await reloadData();
+    renderAll();
+    msg(xl("Sitzung übernommen"), "ok");   // after the re-render, or it is lost
+}
+
 async function exitAdminMode() {
     if (S.factory) {
         const neu = await modal(xl("Neues Passwort"),
@@ -1041,7 +1063,9 @@ function renderAll() {
         app.append(el("div", {class: "banner readonly"},
             xl("Nur-Lese-Modus: Eine andere Sitzung ist aktiv"),
             el("button", {class: "small", onclick: () => location.reload()},
-               xl("Erneut laden"))));
+               xl("Erneut laden")),
+            el("button", {class: "small", onclick: takeOverSession},
+               xl("Sitzung übernehmen"))));
     if (S.factory)
         app.append(el("div", {class: "banner"},
             xl("Das Gerät verwendet noch das werksseitige Standardpasswort"),

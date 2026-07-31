@@ -68,6 +68,7 @@ class ConfigManager:
         "Admin-Modus verlassen", "Sprache",
         "Falsches Passwort",
         "Nur-Lese-Modus: Eine andere Sitzung ist aktiv",
+        "Sitzung übernehmen", "Sitzung übernommen",
         "Das Gerät verwendet noch das werksseitige Standardpasswort",
         "Ungültige Eingabe", "Übernehmen fehlgeschlagen",
         "Verbindung zum Gerät verloren",
@@ -1305,6 +1306,40 @@ class ConfigManager:
             resp.headers["X-GPSMCPMMS-Translated"] = str(result)
             resp.headers["X-GPSMCPMMS-Total"] = str(total)
             return resp
+
+        @app.route("/api/session/takeover", methods=["POST"])
+        def session_takeover():
+            """
+            Wrests the exclusive editing session from whoever holds it, on
+            proof of the admin password (spec 4.8).
+
+            Without this an editor closed without ending its session locks the
+            device for the rest of the idle timeout, and the admin standing in
+            front of it has no way in -- reloading only discards their own
+            token. The password is the same one that reveals protected
+            parameters; it is not carried over into the new session, so seeing
+            protected values still takes the deliberate second step.
+            """
+            if request.headers.get(self.API_HEADER) != "1":
+                abort(403)
+            payload = request.get_json(silent=True)
+            if not isinstance(payload, dict):
+                abort(400)
+            applicant = request.remote_addr
+            if not hmac.compare_digest(str(payload.get("passwd") or ""),
+                                       self._current_ui_passwd()):
+                self._logger.warning(
+                        f"Refused a session takeover from {applicant}: wrong "
+                        "password.")
+                return jsonify({"error": "wrong_passwd"}), 403
+            with self._lock:
+                previous = self._session_owner
+            self._invalidate_session(f"taken over by {applicant}")
+            token = self._issue_session_token(applicant)
+            self._logger.warning(
+                    f"{applicant} took the editing session over from "
+                    f"{previous or 'unknown'}.")
+            return jsonify({"token": token})
 
         @app.route("/api/end_session", methods=["POST"])
         def end_session():
