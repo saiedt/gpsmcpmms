@@ -307,7 +307,9 @@ upgraded package refreshes an asset that is still untouched — otherwise a
 frontend fix would never reach a device — while an asset the deployment has
 edited itself is left in place. The UI renders one **collapsible group
 per module** (sorted by id — prefix your ids to choose the order the groups
-appear in), each ending with a **Save** button that commits the module. A group
+appear in), each ending with a **Save** button that commits the module. Within a
+module, parameters appear in the order they are declared, at every nesting
+level, so `param_dict` and each named type decide their own layout. A group
 with nothing to show is left out entirely, which is what happens to a module
 whose parameters are all `protected` when no admin is logged in.
 

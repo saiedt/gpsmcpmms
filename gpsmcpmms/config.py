@@ -971,6 +971,15 @@ class ConfigManager:
         self._stage_web_assets()
 
         app = Flask("gpsmcpmms_editor", static_folder=None)
+        # Flask sorts the keys of every JSON response by default, which
+        # alphabetised the children of each dump node on their way to the
+        # editor -- so the screen showed parameters in an order nobody had
+        # chosen. Declaration order survives everything else (Python dicts
+        # keep insertion order, and so do JSON objects and JS objects with
+        # non-numeric keys), so switching this off hands the ordering back to
+        # whoever writes the param_dict, where it belongs. Module groups are
+        # unaffected: the editor sorts those by id on purpose.
+        app.json.sort_keys = False
 
         def request_token():
             token = request.headers.get(self.TOKEN_HEADER)
