@@ -108,6 +108,30 @@ hr.title-rule { border: 0; border-top: 2px solid var(--line); margin: 0 0 12px; 
 .field-row input[readonly] { background: #eef1f4; color: var(--muted); }
 .field-err { color: var(--err); font-size: 13px; width: 100%; padding-left: 228px; }
 
+/* ---- hints (spec 4.9.5) ----
+   A hint sits above its field rather than behind a question mark, because it
+   says something the reader needs before deciding, not something they might
+   look up afterwards. The bracket down the left is what ties it to the row
+   below: without it, a sentence floating above a form belongs to nothing. */
+.field-block { border-left: 3px solid var(--accent-soft); padding-left: 8px; }
+.hint {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 4px 2px 0; color: var(--muted); font-size: 13px;
+}
+.hint.invalid { color: var(--err); }
+/* the moment the statement was established: quieter than the statement, but
+   never absent -- an undated assertion keeps asserting itself */
+.hint-meta { font-size: 12px; opacity: .75; white-space: nowrap; }
+.hint-refresh {
+  padding: 0 6px; font-size: 13px; line-height: 18px;
+  border-radius: var(--radius); flex: none;
+}
+.file-upload { display: inline-flex; align-items: center; }
+/* why a field is refused, beside the field rather than in the message bar:
+   a list member repeating another one has to be readable while it is being
+   corrected, not after the next redraw wipes the bar */
+.field-note { color: var(--err); font-size: 13px; }
+
 button {
   padding: 6px 14px; border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--panel); color: var(--text); font: inherit; cursor: pointer;
@@ -173,6 +197,14 @@ button.small { padding: 3px 9px; font-size: 13px; }
   max-width: 480px; padding: 18px; box-shadow: 0 8px 30px rgba(0,0,0,.25);
 }
 #modal-root .modal p { margin: 0 0 12px; }
+/* Der Ausgang eines Tests, in derselben Sprache wie die Meldungen über dem
+   Formular: derselbe Kasten, dieselben zwei Farben. Der Satz allein trüge die
+   Aussage auch — aber ob jemand überhaupt hinsieht, entscheidet die Farbe. */
+#modal-root .modal p.outcome {
+  padding: 6px 10px; border-radius: var(--radius);
+}
+#modal-root .modal p.outcome.ok { background: #e0f2e8; color: var(--ok); }
+#modal-root .modal p.outcome.error { background: #fbe4e9; color: var(--err); }
 #modal-root .modal input, #modal-root .modal select {
   width: 100%; padding: 6px 8px; margin-bottom: 12px; font: inherit;
   border: 1px solid var(--line); border-radius: var(--radius);
@@ -182,3 +214,9 @@ button.small { padding: 3px 9px; font-size: 13px; }
 #modal-root .modal.busy { text-align: center; }
 #modal-root .modal.busy p { margin: 0; animation: busy-pulse 1.2s ease-in-out infinite; }
 @keyframes busy-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+
+/* Der technische Grund unter einem gescheiterten Test: kleiner und blasser,
+   denn er ist für die Fehlersuche da und nicht für die Person am Gerät. */
+#modal-root .modal p.detail {
+  font-size: 0.85em; color: var(--muted); word-break: break-word;
+}

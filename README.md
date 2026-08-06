@@ -149,6 +149,7 @@ A Declaration is a dict with any of these keys (`type` is mandatory):
 | `hidden` | Hide from the editor. |
 | `protected` | Hidden until the admin unlocks with the password. |
 | `backend_provided` | Value is captured by backend logic (e.g. an NFC reader), read-only in the editor. Requires `acquire_button`; may combine with `init_only`. |
+| `hint` | A statement about how things stand, shown **above** the field. Either literal German text, or the name of a `func_dict` entry making it dynamic — see [Hints](#hints). Not a tooltip: a tooltip explains and never expires, a hint reports and can stop being true. |
 
 **Primitive types**
 
@@ -157,6 +158,7 @@ A Declaration is a dict with any of these keys (`type` is mandatory):
 | `boolean` | `True` / `False` |
 | `int`, `float` | numbers; accept `bound_to` and `s2g_scale` |
 | `string` | text; accepts `bound_to` (a regex) |
+| `file` | the bare **name** of a file in a directory the host names with `file_dir`; see [Files](#files) |
 | `password` | text, masked in the editor |
 | `url` | a URL string |
 | `path` | a file/folder path, checked against the device's file system (see below) |
@@ -348,6 +350,33 @@ missing keys fall back to German, so a language may stay partially translated.
 Up to **seven** languages may coexist; `de` is mandatory. Corrupt dictionary files
 are quarantined and regenerated at startup.
 
+**Which languages may be added** is governed by two handles, in this order:
+
+1. **A validator the host registers** — `set_language_validator(fn)`, where
+   `fn(code)` returns whether that language is acceptable. Use this when the host
+   knows something the library cannot. An appliance that reads its texts aloud has
+   no use for a language its speech service has no voice for: without the check,
+   somebody translates several hundred strings and discovers only afterwards that
+   none of them can be spoken. That knowledge belongs to the host — the library has
+   no business knowing which speech service exists.
+   A validator that raises counts as consent, and `de` is accepted regardless.
+   Refusing to let a device be configured because a check was itself unavailable is
+   the worse failure.
+2. **Otherwise an allow-list**, `{code: endonym}`, seeded once from
+   `ConfigManager.LANGUAGE_OPTIONS` into **`ui_dir/languages.json`** and never
+   overwritten again.
+
+> **Edit the file, not the constant.** Under a virtualenv the constant lives in
+> `.venv/lib/python3.x/site-packages/gpsmcpmms/config.py` — awkward to reach, and
+> the edit disappears at the next `pip install --upgrade`. `ui_dir/languages.json`
+> is yours, survives upgrades, and is read at every start. An unreadable file falls
+> back to the shipped list rather than to none.
+
+Both handles govern **adding** a language, not loading one: dictionaries already on
+disk are read whatever the current policy says. Discarding a deployment's
+translations at startup because a rule changed later would destroy work nobody can
+get back.
+
 Translations are added/updated through a **CSV round-trip** (no timeouts, easy for
 a human or an AI):
 
@@ -399,7 +428,30 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   is pending the editor freezes behind a modal overlay, so at most one capture is
   ever outstanding.
 - **List uniqueness** — simple-value lists forbid duplicates; `list_keys` declares
-  uniqueness for record lists, and the editor hides already-used enum options.
+  uniqueness for record lists, and the editor hides already-used enum options. A
+  member repeating another on a declared group is dropped and reported, and the
+  editor marks the colliding field and disables *Anwenden*: hiding taken options
+  works for an enum and for nothing else, so a typed or captured value — an RFID
+  arrives from the reader — had nothing standing in its way.
+- **Distinctness across paths** — `distinct_values` on a named *dict* type names
+  groups of paths beneath it whose values must never coincide. Paths may contain
+  `*`, so a group can span a list:
+
+  ```python
+  "card_uids": {
+      "distinct_values": [["abort_card_uid", "reboot_card_uid",
+                         "h4h_sr_cards.*.rfid"]],
+      …
+  }
+  ```
+
+  Declared **once, on the container** — not as a condition repeated on each
+  participant, which would state one rule three times and let the copies drift.
+  It also couldn't work: a condition reaches siblings at the same level, and a
+  list member cannot see past its own list. An unset value collides with nothing;
+  a colliding write is refused and reported, leaving the previous value. For a
+  `backend_provided` participant the check runs at **capture** — the only moment
+  a value ever arrives, and so the only moment anyone can be told.
 - **Testable parameters** — `test_func` + `test_func_msg` add a Test button and a
   confirmation modal, executed via `/api/config/test`.
 - **Verifiable values** — a `pingable` or `path` field is checked as soon as it is
@@ -416,6 +468,50 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   admin either accepts the proposal by saving or types over it. Clearing the field
   keeps it clear; the proposal is offered once per form, not re-imposed on every
   redraw.
+
+<a id="files"></a>
+
+- **Files** — a `file` parameter holds the bare *name* of a file that lives in the
+  directory the host names with `file_dir`. Declare `values` as well and it becomes
+  an **enum you can extend by uploading**: the provider says which files may be
+  chosen, `POST /api/config/file` adds another, and the parameter is set through
+  the ordinary update path, so the module callback fires exactly as after any other
+  change. The library never lists the directory itself — a host may keep unrelated
+  files there, and only it can say which ones qualify.
+
+  ```python
+  "ring_tone": {"label": "Klingelton", "type": "file",
+                "file_dir": "/etc/freeswitch/audio",
+                "bound_to": r".+\.wav",          # fullmatch, not a suffix search
+                "values": "get_ring_tone_list"}
+  ```
+
+  The name a browser sends is a claim, not a fact: anything containing a separator
+  or `..` is **refused rather than cleaned**, because stripping the path off and
+  carrying on would be equally safe but would hide that something sent it. Uploads
+  are size-capped, and a file that fails validation afterwards is removed again
+  unless it was already there.
+
+<a id="hints"></a>
+
+- **Hints** — a `hint` is a statement about the present, rendered above its field
+  rather than behind a question mark, because it says something the reader needs
+  *before* deciding. Literal text behaves like any other display string. Name a
+  `func_dict` entry instead and it becomes dynamic: the editor fetches it from
+  `/api/config/hint`, and the provider — `fn(lang) -> str` — produces the sentence
+  itself.
+
+  Dynamic is not a luxury. What invalidates a hint is often *not* a configuration
+  change: a translator uploads a file, a remote server renames a category, and a
+  statement declared once goes on asserting something nobody re-checked. Hence
+  also the two things the editor draws beside the text: **the moment it was
+  established**, and a button to establish it again. The timestamp is what keeps
+  the sentence honest between refreshes — undated, it claims the present forever;
+  dated, it stays true however long the page is left open.
+
+  A generated sentence cannot itself be a translation key, so a provider formats
+  its own templates and should announce them with `note_xlation_keys()` — otherwise
+  they reach no translation template until someone has already seen the hint.
 
 ---
 

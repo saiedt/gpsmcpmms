@@ -25,14 +25,19 @@ const S = {
     xl: {},                  // active translation dictionary
     lang: localStorage.getItem("gpsmcpmms_lang") || "de",
     languages: ["de"],
+    langNames: {},           // code -> name, from ui_dir/languages.json
+    maxLanguages: 7,         // how many dictionaries may coexist
+    langPanel: null,         // null | "new" | "edit"
+    langForm: {},            // what the open panel has been told so far
     edit: {},                // moduleId -> working value (deep copy)
     dirty: {},               // moduleId -> bool
     adopted: {},             // moduleId -> Set of likely_val fields filled in
     open: {},                // dump path -> group expanded?
     enums: {},               // dump path -> {values}|{error}|{pending}
+    hints: {},               // dump path -> {text, at}|{error}|{pending}
+    pendingFiles: {},        // dump path -> [{name, file}] chosen, not yet sent
     listsA: {},              // dump path -> {sel}
     listsB: {},              // dump path -> {pos, draft, changed}
-    langPanelOpen: false,    // translation-management panel toggled open?
 };
 
 function xl(key) { return S.xl[key] || key; }
@@ -107,8 +112,16 @@ function modal(text, options = {}) {
             buttons.push(el("button", {onclick: () => close(null)},
                             xl("Abbrechen")));
         }
+        // An array becomes one paragraph per entry. A newline would not do:
+        // the text lands in a single <p>, where the browser folds it away.
+        // An entry that is already an element is taken as it comes, which is
+        // how a caller gives one paragraph a colour of its own.
         const box = el("div", {class: "modal"},
-            el("p", {}, text), input, select,
+            ...(Array.isArray(text)
+                    ? text.filter(Boolean).map(
+                          t => t instanceof Node ? t : el("p", {}, t))
+                    : [el("p", {}, text)]),
+            input, select,
             el("div", {class: "buttons"}, ...buttons));
         root.append(el("div", {class: "overlay"}, box));
         if (input) { input.focus(); input.addEventListener("keydown",
@@ -218,6 +231,118 @@ async function fetchEnumOptions(path, rerender) {
     rerender();
 }
 
+/* ---------- hints (spec 4.9.5) ----------
+   A tooltip explains and is timeless. A hint asserts something about the
+   present, so it is fetched rather than declared, and shown with the moment it
+   was established -- an assertion nobody dated goes on claiming it long after
+   it stopped being so. */
+async function fetchHint(path, rerender) {
+    S.hints[path] = {pending: true};
+    const r = await api(`/api/config/hint?path=${encodeURIComponent(path)}` +
+                        `&lang=${encodeURIComponent(S.lang || "de")}`);
+    S.hints[path] = (r.data && typeof r.data.text === "string")
+                  ? {text: r.data.text, at: r.data.at}
+                  : {error: (r.data && r.data.error) ||
+                            xl("Verbindung zum Gerät verloren")};
+    rerender();
+}
+
+function hintFor(node, ctx) {
+    const hint = node.ui && node.ui.hint;
+    if (!hint) return null;
+    if (hint !== true)                       // declared text: nothing to ask
+        return el("div", {class: "hint"}, xl(hint));
+
+    const state = S.hints[node.path];
+    if (!state) {
+        fetchHint(node.path, ctx.rerender);
+        return el("div", {class: "hint"}, "…");
+    }
+    if (state.pending) return el("div", {class: "hint"}, "…");
+    if (state.error)
+        return el("div", {class: "hint invalid"}, state.error);
+    return el("div", {class: "hint"},
+        el("span", {class: "hint-text"}, state.text),
+        el("span", {class: "hint-meta"}, `${xl("Stand")} ${state.at}`),
+        el("button", {class: "hint-refresh", type: "button",
+                      title: xl("Aktualisieren"),
+                      onclick: () => fetchHint(node.path, ctx.rerender)},
+           "↻"));
+}
+
+/* ---------- uploading into a 'file' parameter ---------- */
+/* Choosing a file does not transfer it. It joins the options and gets
+   selected, and nothing leaves the browser until the module is saved -- so a
+   file parameter behaves like every other field, where nothing is committed
+   until Save and "Rückgängig" really does undo. Sending it at once also wrote
+   to the device on the strength of a click that the user might never confirm. */
+function pendingFilesFor(path) {
+    return S.pendingFiles[path] || (S.pendingFiles[path] = []);
+}
+
+function uploadButton(node, ctx, commit) {
+    const pattern = (node.constraints || {}).patterned_string;
+    const picker = el("input", {type: "file", multiple: "",
+                                style: "display:none",
+        onchange: (e) => {
+            const files = Array.from(e.target.files || []);
+            e.target.value = "";              // so the same file can be re-sent
+            if (!files.length) return;
+            const queue = pendingFilesFor(node.path), refused = [];
+            let selected = null;
+            for (const file of files) {
+                const name = file.name;
+                // checked here as well as on the device: the answer must come
+                // while the file picker is still fresh in mind, not at save
+                if (name !== name.replace(/^.*[\\/]/, "") || name.includes("..")
+                        || (pattern && !new RegExp(`^(?:${pattern})$`).test(name))) {
+                    refused.push(name);
+                    continue;
+                }
+                const at = queue.findIndex(p => p.name === name);
+                if (at >= 0) queue.splice(at, 1);
+                queue.push({name, file});
+                selected = name;
+            }
+            if (refused.length)
+                msg(`${xl("Dateityp nicht zulässig")}: ${refused.join(", ")}`,
+                    "error");
+            if (selected !== null) commit(selected);
+            else ctx.rerender();
+        }});
+    return el("span", {class: "file-upload"}, picker,
+        el("button", {class: "btn", type: "button",
+                      onclick: () => picker.click()},
+           xl("Datei auswählen")));
+}
+
+/* Sends what the file fields of a module are holding, just before its values
+   go. Returns false when something was refused, and then the save is abandoned
+   rather than saving a value naming a file that never arrived. */
+async function flushPendingFiles(mid) {
+    const paths = Object.keys(S.pendingFiles)
+        .filter(p => p === mid || p.startsWith(mid + "."));
+    for (const path of paths) {
+        for (const {name, file} of S.pendingFiles[path]) {
+            const fd = new FormData();
+            fd.append("path", path);
+            fd.append("file", file);
+            if (S.token) fd.append("token", S.token);
+            const resp = await fetch("/api/config/file",
+                {method: "POST", headers: authHeaders(), body: fd});
+            if (!resp.ok) {
+                let err = resp.status;
+                try { err = (await resp.json()).error || err; } catch (e) {/**/}
+                msg(`${xl("Ungültige Datei")}: ${name}: ${err}`, "error");
+                return false;
+            }
+        }
+        delete S.pendingFiles[path];
+        delete S.enums[path];      // the options must be asked for again
+    }
+    return true;
+}
+
 /* ---------- single input fields ---------- */
 function hexOfColor(v) {
     if (!Array.isArray(v)) return "#000000";
@@ -227,7 +352,7 @@ function colorOfHex(h) {
     return [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
 }
 
-function buildInput(node, cur, commit, ctx) {
+function buildInput(node, cur, commit, commitQuiet, ctx) {
     // returns an element whose 'change' leads to commit(newModelValue)
     const cons = node.constraints || {}, ui = node.ui || {};
     const fixed = S.readOnly || node.configurability === 0;
@@ -262,6 +387,29 @@ function buildInput(node, cur, commit, ctx) {
             options = Object.entries(state.values).map(([value, o]) =>
                 ({value, label: (o && o.label) || value,
                   tooltip: o && o.tooltip}));
+        }
+        // a file waiting to be sent is already choosable, though the device
+        // has never heard of it -- that is the whole point of choosing before
+        // saving
+        if (cons.type === "file")
+            for (const {name} of (S.pendingFiles[node.path] || []))
+                if (!options.some(o => o.value === name))
+                    options.push({value: name, label: name});
+        // Die Optionen eines dynamischen Enums stehen erst zur Laufzeit fest,
+        // weshalb der Kern den gespeicherten Wert nie gegen sie prüfen konnte
+        // ("defer the exact check" in cvv_tree). Bietet der Anbieter ihn nicht
+        // mehr an -- eine deutsche Stimme etwa, nachdem die Ansagesprache auf
+        // Türkisch gewechselt ist --, dann ist er keine Wahl mehr, sondern ein
+        // Rest. Leer *aussehen* tat das Feld ohnehin schon, weil kein <option>
+        // dazu passte; hier wird es wahr, damit Speichern ihn wirklich los
+        // wird und der Zustand des Geräts dem entspricht, was zu sehen ist.
+        // Nur beim dynamischen Enum: ein statisches prüft der Kern bereits
+        // beim Laden und verwirft, was nicht mehr zur Deklaration passt.
+        if (Array.isArray(cons.one_of) === false && !fixed && !backend &&
+                cur !== null && cur !== undefined && cur !== "" &&
+                !options.some(o => o.value === cur)) {
+            commitQuiet(null);
+            cur = null;
         }
         if (ctx.usedEnumValues)           // uniqueness filter (spec 4.9.2)
             options = options.filter(o => o.value === cur ||
@@ -348,7 +496,10 @@ function acquireButton(node, input, commit) {
         } else if (data && data.timeout) {
             msg(xl("Zeitüberschreitung"), "error");
         } else {
-            msg((data && data.error) || xl("Verbindung zum Gerät verloren"),
+            // the device answers refusals with the German key, so that the
+            // session's own language decides how they read
+            msg(data && data.error ? xl(data.error)
+                                   : xl("Verbindung zum Gerät verloren"),
                 "error");
         }
     });
@@ -360,11 +511,29 @@ function testButton(node, currentValue) {
     btn.addEventListener("click", async () => {
         const r = await api("/api/config/test",
             {json: {path: node.path, value: currentValue()}});
-        const outcome = (r.status === 200)
-            ? `${xl("Erfolgreich")}: ${r.data.result}`
-            : `${xl("Fehlgeschlagen")}: ${(r.data && r.data.error) || r.status}`;
-        await modal((node.ui.test_func_msg ? xl(node.ui.test_func_msg) + " — "
-                                           : "") + outcome, {alert: true});
+        // Drei Ausgänge, nicht zwei: eine Testroutine, die "false" zurückgibt,
+        // kommt mit Status 200 zurück, und "Erfolgreich: false" widersprach
+        // sich selbst. Und auch ein "true" heißt nur, dass die Routine ohne
+        // Fehler durchlief -- ob der richtige Klingelton erklang, entscheidet
+        // allein, wer zuhört.
+        const clean = (r.status === 200) && !!r.data.result;
+        const outcome = (r.status !== 200)
+            ? xl("Der Test konnte nicht gestartet werden.")
+            : (r.data.result
+                ? xl("Die Testroutine wurde ohne Fehler ausgeführt.")
+                : xl("Die Testroutine konnte den Test nicht durchführen."));
+        // Der technische Grund steht darunter und nicht hinter einem
+        // Doppelpunkt: der Satz endet auf einen Punkt, und "... werden.: 500"
+        // liest sich wie ein Tippfehler. Übersetzt wird er nicht -- was der
+        // Server zurückgibt, steht in keiner Sprache dieses Hauses.
+        const detail = (r.status !== 200)
+            ? el("p", {class: "detail"}, (r.data && r.data.error) || r.status)
+            : null;
+        await modal([node.ui.test_func_msg ? xl(node.ui.test_func_msg) : "",
+                     el("p", {class: "outcome " + (clean ? "ok" : "error")},
+                        outcome),
+                     detail],
+                    {alert: true});
     });
     return btn;
 }
@@ -437,7 +606,13 @@ function fieldRow(node, container, relKeys, ctx) {
         // the answer arrives long after the re-render, so the message survives
         if (PROBE_TYPES.has(cons.type)) probeValue(node, v);
     };
-    const input = buildInput(node, cur, commit, ctx);
+    // Zurücknehmen während des Renderns: kein erneutes Rendern, sonst dreht
+    // sich das im Kreis -- dieselbe Vorsicht wie beim likely_val oben.
+    const commitQuiet = (v) => {
+        setIn(container, relKeys, v);
+        ctx.markDirtyQuiet();
+    };
+    const input = buildInput(node, cur, commit, commitQuiet, ctx);
     if (input.type === "checkbox") {
         input.checked = !!cur;
         // A boolean that was never answered is neither yes nor no. Without the
@@ -445,18 +620,42 @@ function fieldRow(node, container, relKeys, ctx) {
         // silently keep config_ready() false with nothing on screen to show it.
         input.indeterminate = (cur === null || cur === undefined);
     }
+    // A property that identifies a list member (list_keys, spec 4.9.2) may not
+    // repeat. For an enum the taken options are simply never offered, but a
+    // value that is typed -- or captured from hardware, as an rfid is -- has
+    // nothing standing in its way. The backend drops such a member, and by
+    // then the entry has silently vanished; flagged here, the collision is
+    // visible while it is still being made.
+    // ...and the same question one or more levels up, for a rule owned by a
+    // container rather than by the list this field sits in. A record being
+    // edited carries its position, so it is not mistaken for a stranger.
+    const absKeys = (ctx.memberKeys || []).concat(relKeys);
+    const filled = cur !== null && cur !== undefined && cur !== "";
+    const repeats = !!(filled && (
+        (ctx.usedEnumValues && ctx.usedEnumValues.has(cur)) ||
+        takenElsewhere(ctx, absKeys).has(cur)));
+    if (repeats && input.classList) input.classList.add("invalid");
+
     const row = el("div", {class: "field-row"},
         el("label", {}, xl(node.ui.label || node.path.split(".").pop())),
         node.ui.tooltip ? el("span",
             {class: "help", title: xl(node.ui.tooltip)}, "?") : null,
-        input);
+        input,
+        repeats ? el("span", {class: "field-note"},
+                     xl("Wert bereits vergeben")) : null);
     if (node.configurability === 2 && node.ui.acquire_button && !S.readOnly)
         row.append(acquireButton(node, input, commit));
     if (PROBE_TYPES.has(cons.type) && !S.readOnly)
         row.append(probeButton(node, () => getIn(container, relKeys)));
+    if (cons.type === "file" && !S.readOnly)
+        row.append(uploadButton(node, ctx, commit));
     if (node.ui.test_func && !S.readOnly)
         row.append(testButton(node, () => getIn(container, relKeys)));
-    return row;
+
+    // A hint belongs above its field, close enough that nobody has to work out
+    // which one it is about; the wrapper is what ties the two together.
+    const hint = hintFor(node, ctx);
+    return hint ? el("div", {class: "field-block"}, hint, row) : row;
 }
 
 function collapsible(pathKey, labelText, tooltip, renderBody, extraClass,
@@ -523,6 +722,19 @@ function groupTestButton(node, container, relKeys) {
 
 function renderNode(node, container, relKeys, ctx) {
     if (node.children) {
+        // A group carrying distinct_values notes itself on the way down, so
+        // that a leaf far below -- possibly inside a list -- can ask it
+        // whether a value is already spoken for. The leaf checks its own
+        // scope first and only then consults its ancestors, which is the
+        // only way a rule owned by a container ever reaches its members.
+        if (node.constraints && node.constraints.distinct_values) {
+            ctx = Object.assign({}, ctx, {
+                distinctScopes: (ctx.distinctScopes || []).concat([{
+                    groups: node.constraints.distinct_values,
+                    container, relKeys,
+                }]),
+            });
+        }
         return collapsible(node.path,
             xl(node.ui.label || relKeys[relKeys.length - 1]),
             node.ui.tooltip ? xl(node.ui.tooltip) : null,
@@ -619,6 +831,58 @@ function renderListA(node, container, relKeys, ctx) {
     return body;
 }
 
+/* ---------- distinct_values across a group of paths (spec 4.9.7) ----------
+   The rule belongs to a container, so no single field can answer it alone.
+   A leaf therefore asks each enclosing scope in turn: resolve the group's
+   patterns against that scope's working value, and see whether anybody else
+   already holds what is about to be entered. Without this the editor sends a
+   value the device is bound to refuse -- or worse, one it silently drops. */
+/* Every place a pattern reaches, with the route taken to get there: knowing
+   the route is what lets a leaf recognise which of the hits is itself. */
+function resolveWithPaths(value, parts, prefix) {
+    prefix = prefix || [];
+    if (!parts.length) return [{path: prefix, value}];
+    const [head, ...rest] = parts;
+    if (head === "*") {
+        return Array.isArray(value)
+            ? value.flatMap((v, i) => resolveWithPaths(v, rest,
+                                                       prefix.concat([i])))
+            : [];
+    }
+    if (!value || typeof value !== "object") return [];
+    return resolveWithPaths(value[head], rest, prefix.concat([head]));
+}
+
+/* What the other participants already hold. `absKeys` is where this leaf sits
+   relative to the module -- for a record being edited that includes its
+   position in the list, which is how it avoids colliding with the copy of
+   itself still sitting there. */
+function takenElsewhere(ctx, absKeys) {
+    const taken = new Set();
+    for (const scope of ctx.distinctScopes || []) {
+        const own = absKeys.slice(scope.relKeys.length).join(".");
+        if (!own) continue;
+        const base = getIn(scope.container, scope.relKeys);
+        for (const group of scope.groups) {
+            if (!group.some(p => pathMatchesPattern(p, own))) continue;
+            for (const pattern of group)
+                for (const hit of resolveWithPaths(base, pattern.split("."))) {
+                    if (hit.path.join(".") === own) continue;      // myself
+                    if (hit.value !== null && hit.value !== undefined &&
+                            hit.value !== "")
+                        taken.add(hit.value);
+                }
+        }
+    }
+    return taken;
+}
+
+function pathMatchesPattern(pattern, path) {
+    const p = pattern.split("."), q = path.split(".");
+    return p.length === q.length &&
+           p.every((e, i) => e === "*" || e === q[i]);
+}
+
 /* ---------- list editor, Case B: record members (spec 4.6.2 B) ---------- */
 function usedEnumValuesIn(list, exceptIdx, prop) {
     const used = new Set();
@@ -658,6 +922,10 @@ function renderListB(node, container, relKeys, ctx) {
     const standaloneKeys = (cons.keys || [])
         .filter(g => g.length === 1).map(g => g[0]);
     const recCtx = Object.assign({}, ctx, {
+        // where this record sits, so a field inside it can be located within
+        // a rule owned further up -- and can tell itself apart from the copy
+        // of itself already in the list
+        memberKeys: (ctx.memberKeys || []).concat(relKeys, [st.pos - 1]),
         adopted: st.adopted,
         markDirty: () => {
             st.changed = true;
@@ -689,8 +957,21 @@ function renderListB(node, container, relKeys, ctx) {
         el("button", {onclick: () =>
             goTo(st.pos < list.length + 1 ? st.pos + 1 : 1)}, "▼"));
 
+    // The same rule one level up: as long as the draft repeats a member that
+    // already exists, applying it would only hand the backend something it is
+    // going to drop again.
+    const repeatsKey = Object.keys(st.draft || {}).some((key) => {
+        const value = st.draft[key];
+        if (value === null || value === undefined || value === "") return false;
+        return (standaloneKeys.includes(key) &&
+                usedEnumValuesIn(list, st.pos - 1, key).has(value)) ||
+               takenElsewhere(recCtx, recCtx.memberKeys.concat([key]))
+                   .has(value);
+    });
+
     const apply = el("button", {class: "primary",
-        disabled: S.readOnly || !st.changed ? "" : null}, xl("Anwenden"));
+        disabled: S.readOnly || !st.changed || repeatsKey ? "" : null},
+        xl("Anwenden"));
     apply.addEventListener("click", () => {
         if (st.pos <= list.length) {
             list[st.pos - 1] = deepCopy(st.draft);
@@ -775,7 +1056,7 @@ async function confirmUnsetBooleans(mid) {
     collectUnsetBooleans(S.cvv[mid], S.edit, [mid], found);
     if (!found.length) return true;
     const answered = await modal(
-        xl("Diese Optionen wurden nie gesetzt; als \"nein\" übernehmen?") +
+        xl("Diese Optionen wurden nie gesetzt; als „nein“/„deaktiviert“ übernehmen?") +
         " " + found.map(f => f.label).join(", "));
     if (!answered) return false;
     for (const f of found) setIn(S.edit, f.keys, false);
@@ -790,6 +1071,9 @@ async function saveModule(mid) {
         return;
     }
     if (!await confirmUnsetBooleans(mid)) return;
+    // the files first: a value naming a file the device does not have is
+    // worse than not saving at all, so a refused upload abandons the save
+    if (!await flushPendingFiles(mid)) return;
     const r = await api("/api/config/update",
         {json: {module: mid, value: S.edit[mid]}});
     if (r.status === 401) {
@@ -930,7 +1214,7 @@ async function downloadTemplate(target, refs) {
         return msg(`${xl("Übernehmen fehlgeschlagen")}: ${err}`, "error");
     }
     triggerDownload(await resp.blob(), `${target}.csv`);
-    msg(`${xl("Vorlage herunterladen")}: ${target}.csv`, "ok");
+    msg(`${xl("CSV herunterladen")}: ${target}.csv`, "ok");
 }
 
 function targetFromFileName(file) {
@@ -938,26 +1222,31 @@ function targetFromFileName(file) {
     return /^[a-z]{2,3}$/.test(stem) ? stem.toLowerCase() : null;
 }
 
-async function uploadTranslation(file, remove) {
-    let target = targetFromFileName(file);
+async function uploadTranslation(file, remove, code, name) {
+    // The panel knows which language this is -- the target was chosen or
+    // typed before the template was even downloaded. Guessing it from the
+    // file name is only the fallback for a file that arrived another way.
+    let target = (code || "").trim().toLowerCase() || targetFromFileName(file);
     if (!target) {
-        target = await modal(xl("Neuer Sprachcode"), {input: {}});
+        target = await modal(xl("Sprachcode"), {input: {}});
         if (target === null) return;
         target = target.trim().toLowerCase();
-        if (!/^[a-z]{2,3}$/.test(target))
-            return msg(xl("Ungültige Eingabe"), "error");
     }
+    if (!/^[a-z]{2,3}$/.test(target))
+        return msg(xl("Ungültige Eingabe"), "error");
     const fd = new FormData();
     fd.append("file", file);
     fd.append("lang", target);
     if (S.token) fd.append("token", S.token);
     if (remove) fd.append("remove", remove);
+    // a language nobody can name would show up in every dropdown as a code
+    if (name) fd.append("name", name);
 
     const resp = await fetch("/api/lang/upload",
         {method: "POST", headers: authHeaders(), body: fd});
     if (resp.status === 409) {                 // an 8th language needs room
         const body = await resp.json();
-        const pick = await modal(xl("Zu entfernende Sprache wählen"),
+        const pick = await modal(xl("Zu ersetzende Sprache wählen"),
                                  {select: body.removable});
         if (pick === null) return;
         return uploadTranslation(file, pick);
@@ -978,51 +1267,124 @@ async function uploadTranslation(file, remove) {
         `${translated} / ${total} ${xl("übersetzt")}`, "ok");
 }
 
-function renderLangPanel() {
-    const others = S.languages.filter(l => l !== "de");
-    const targetSel = el("select", {},
-        el("option", {value: "__new__"}, xl("Neuer Sprachcode")),
-        ...others.map(l => el("option", {value: l}, l)));
-    const newCode = el("input", {type: "text", placeholder: "fr",
-                                 class: "lang-code"});
-    const refBoxes = others.map(l => {
+/* ---------- managing translations ----------
+   Two panels rather than one, because "manage" never said which of the two
+   things you were about to do and the controls looked the same either way.
+   They differ in exactly one row: the row that answers "which language am I
+   working on".
+
+   Note what the target selector is *not*: it is not the language selector in
+   the row above. That one decides what language you read the editor in, and
+   conflating the two would mean improving the Turkish translation only while
+   reading the whole editor in Turkish -- which is precisely backwards for the
+   normal case, somebody polishing a language they do not speak. */
+function renderLangPanel(mode) {
+    const active = S.languages.filter(l => l !== "de");
+    const st = S.langForm || (S.langForm = {});
+
+    // row 1 -- the only row that differs between the two panels
+    let row1, targetOf;
+    if (mode === "edit") {
+        const sel = el("select", {onchange: () => { st.target = sel.value;
+                                                    renderAll(); }},
+            ...active.map(l => el("option", {value: l}, langName(l))));
+        if (active.includes(st.target)) sel.value = st.target;
+        else st.target = active[0];
+        targetOf = () => sel.value;
+        row1 = el("div", {class: "lang-panel-row"},
+            el("span", {}, xl("Bearbeitung von") + ":"), sel);
+    } else {
+        const unused = Object.keys(S.langNames || {})
+            .filter(c => !S.languages.includes(c))
+            .sort((a, b) => langName(a).localeCompare(langName(b)));
+        const code = el("input", {type: "text", class: "lang-code",
+                                  placeholder: xl("Sprachcode"),
+                                  value: st.newCode || ""});
+        const name = el("input", {type: "text", class: "lang-name",
+                                  placeholder: xl("Sprachname"),
+                                  value: st.newName || ""});
+        const pick = el("select", {onchange: (e) => {
+            const c = e.target.value;
+            if (!c) return;
+            // the two fields are what actually counts; the dropdown only
+            // fills them in, and stays a convenience rather than a gate
+            st.newCode = code.value = c;
+            st.newName = name.value = langName(c);
+        }}, el("option", {value: ""}, "—"),
+           ...unused.map(c => el("option", {value: c}, langName(c))));
+        const typed = (field, key) => field.addEventListener("input", () => {
+            st[key] = field.value;
+            pick.value = "";            // hand-typed wins over the list
+        });
+        typed(code, "newCode");
+        typed(name, "newName");
+        targetOf = () => (code.value || "").trim().toLowerCase();
+
+        row1 = el("div", {class: "lang-panel-row"},
+            el("span", {}, xl("Neue Sprache") + ":"), pick, code, name);
+    }
+
+    // row 1b -- only when every slot is taken. Asked here, before any work,
+    // rather than after an upload arrives with the translation already done.
+    let row1b = null, replaceOf = () => null;
+    if (mode === "new" && S.languages.length >= (S.maxLanguages || 7)) {
+        const sel = el("select", {},
+            ...active.map(l => el("option", {value: l}, langName(l))));
+        replaceOf = () => sel.value;
+        row1b = el("div", {class: "lang-panel-row"},
+            el("span", {}, xl("Zu ersetzen") + ":"), sel);
+    }
+
+    // row 2 -- context languages: everything active except German, and except
+    // the one being worked on
+    const boxes = active.map(l => {
         const cb = el("input", {type: "checkbox", value: l});
-        return {l, cb, label: el("label", {class: "ref-box"}, cb, " " + l)};
+        return {l, cb,
+                label: el("label", {class: "ref-box"}, cb, " " + langName(l))};
     });
-    const curTarget = () => targetSel.value === "__new__"
-        ? newCode.value.trim().toLowerCase() : targetSel.value;
-    const refresh = () => {
-        newCode.style.display = targetSel.value === "__new__" ? "" : "none";
-        const checked = refBoxes.filter(b => b.cb.checked).length;
-        refBoxes.forEach(b => {
-            b.cb.disabled = (b.l === curTarget()) ||
-                            (!b.cb.checked && checked >= 3);
+    const limit = () => {
+        const chosen = boxes.filter(b => b.cb.checked).length;
+        boxes.forEach(b => {
+            const isTarget = b.l === targetOf();
+            b.cb.disabled = isTarget || (!b.cb.checked && chosen >= 3);
+            b.label.style.display = isTarget ? "none" : "";
         });
     };
-    targetSel.addEventListener("change", refresh);
-    newCode.addEventListener("input", refresh);
-    refBoxes.forEach(b => b.cb.addEventListener("change", refresh));
+    boxes.forEach(b => b.cb.addEventListener("change", limit));
+    const row2 = boxes.length ? el("div", {class: "lang-panel-row wrap"},
+        el("span", {}, xl("Deutsche Schlüssel übersetzen, mit bis zu 3 "
+                          + "Sprachen als weiterem Kontext (bitte wählen):")),
+        ...boxes.map(b => b.label)) : null;
 
-    const dl = el("button", {class: "small primary", onclick: () =>
-        downloadTemplate(curTarget(),
-            refBoxes.filter(b => b.cb.checked && b.l !== curTarget())
-                    .map(b => b.l))}, xl("Vorlage herunterladen"));
-    const fileInput = el("input", {type: "file", accept: ".csv"});
-    const ul = el("button", {class: "small", onclick: () => {
-        if (fileInput.files.length) uploadTranslation(fileInput.files[0]);
-    }}, xl("Hochladen"));
+    // row 3 -- the sequence, spelled out. Three steps that always ran in this
+    // order but never said so.
+    const picker = el("input", {type: "file", accept: ".csv",
+                                style: "display:none"});
+    const choose = el("button", {class: "small", type: "button",
+        onclick: () => picker.click()}, xl("Fertige CSV auswählen"));
+    picker.addEventListener("change", () => {
+        // the label becomes the file name: otherwise nothing on screen says
+        // what the third button is about to send
+        choose.textContent = picker.files.length ? picker.files[0].name
+                                                 : xl("Fertige CSV auswählen");
+    });
+    const row3 = el("div", {class: "lang-panel-row"},
+        el("span", {}, xl("Übersetzungsdatei: zuerst")),
+        el("button", {class: "small primary", type: "button", onclick: () =>
+            downloadTemplate(targetOf(),
+                boxes.filter(b => b.cb.checked && b.l !== targetOf())
+                     .map(b => b.l))}, xl("CSV herunterladen")),
+        el("span", {}, xl("dann")), picker, choose,
+        el("span", {}, xl("zuletzt")),
+        el("button", {class: "small", type: "button", onclick: () => {
+            if (!picker.files.length) return;
+            uploadTranslation(picker.files[0], replaceOf(),
+                              mode === "new" ? targetOf() : null,
+                              mode === "new" ? (st.newName || "").trim() : null);
+        }}, xl("Ausgewählte CSV hochladen")));
 
-    const panel = el("div", {class: "lang-panel"},
-        el("div", {class: "lang-panel-row"},
-            el("span", {}, xl("Zielsprache") + ":"), targetSel, newCode),
-        others.length ? el("div", {class: "lang-panel-row"},
-            el("span", {}, xl("Referenzsprachen (max. 3)") + ":"),
-            ...refBoxes.map(b => b.label)) : null,
-        el("div", {class: "lang-panel-row"}, dl,
-            el("span", {class: "sep"}, "|"),
-            el("span", {}, xl("Übersetzungsdatei hochladen") + ":"),
-            fileInput, ul));
-    refresh();
+    const panel = el("div", {class: "lang-panel"}, row1, row1b, row2, row3);
+    limit();
     return panel;
 }
 
@@ -1040,14 +1402,30 @@ function renderAll() {
                           xl("Geschützte Parameter anzeigen")));
     const langSel = el("select", {onchange: (e) =>
                                       switchLanguage(e.target.value)},
-        ...S.languages.map(l => el("option", {value: l}, l)));
+        ...S.languages.map(l => el("option", {value: l}, langName(l))));
     langSel.value = S.languages.includes(S.lang) ? S.lang : "de";
     general.append(el("span", {}, xl("Sprache") + ":"), langSel);
     if (S.admin) {
-        general.append(el("button", {class: "small", onclick: () => {
-            S.langPanelOpen = !S.langPanelOpen;
+        const toggle = (mode) => {
+            S.langPanel = S.langPanel === mode ? null : mode;
+            S.langForm = {};              // a fresh panel starts empty
             renderAll();
-        }}, xl("Übersetzungen verwalten")));
+        };
+        // adding comes first: it is the rarer and the more consequential of
+        // the two, and putting it second invites reaching for it by mistake
+        general.append(
+            el("button", {class: "small" + (S.langPanel === "new"
+                                                ? " primary" : ""),
+                          onclick: () => toggle("new")},
+               xl("Neue Übersetzung hinzufügen")),
+            el("button", {class: "small" + (S.langPanel === "edit"
+                                                ? " primary" : ""),
+                          disabled: S.languages.length < 2 ? "" : null,
+                          title: S.languages.length < 2
+                                     ? xl("Noch keine Übersetzung vorhanden")
+                                     : null,
+                          onclick: () => toggle("edit")},
+               xl("Vorhandene Übersetzung bearbeiten")));
     }
     general.append(el("span", {class: "spacer"}));
     if (!S.readOnly)
@@ -1056,7 +1434,7 @@ function renderAll() {
             location.reload();
         }}, xl("Sitzung beenden")));
     app.append(general);
-    if (S.admin && S.langPanelOpen) app.append(renderLangPanel());
+    if (S.admin && S.langPanel) app.append(renderLangPanel(S.langPanel));
     app.append(el("div", {id: "messages"}));
 
     if (S.readOnly)
@@ -1089,6 +1467,16 @@ async function loadLang() {
 async function loadLangList() {
     const r = await api("/api/lang/info");
     if (r.data && r.data.languages) S.languages = r.data.languages;
+    if (r.data && r.data.options) S.langNames = r.data.options;
+    if (r.data && r.data.max_languages) S.maxLanguages = r.data.max_languages;
+}
+
+/* What a language is called. A code is a last resort and a sign that somebody
+   added a language without saying what it is: "ps" in a dropdown tells a
+   deployer nothing, and a translator choosing their working language even
+   less. */
+function langName(code) {
+    return (S.langNames && S.langNames[code]) || code;
 }
 
 async function reloadData(passwd) {

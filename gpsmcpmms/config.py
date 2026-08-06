@@ -49,6 +49,50 @@ class ConfigManager:
     # how many existing languages may be included as reference columns in a
     # downloaded translation template (context for the translator/AI)
     MAX_TEMPLATE_REFS = 3
+
+    # Which languages a deployment may keep dictionaries for at all -- the
+    # first of the two handles over that choice.
+    #
+    # This is a seed, not the storage. On first start it is written to
+    # <ui_dir>/languages.json, and from then on that file decides. Editing the
+    # file is what a deployment should do: editing this constant means editing
+    # a package inside a virtual environment, where the change is also lost on
+    # the next upgrade. The second handle is set_language_validator(), with
+    # which a host application overrides the policy entirely -- the H4H
+    # appliance uses it to refuse languages its speech service has no voice
+    # for, which is knowledge this library has no business holding.
+    # The list below is not invented: it is what Google Cloud Text-to-Speech
+    # answered on 2026-08-02 when asked which languages it has voices for.
+    # Persian is absent on purpose -- the service refuses fa-IR outright
+    # ("Voice '' does not exist"), however often documentation claims
+    # otherwise, and a language nothing can speak has no place in the default
+    # of a library whose hosts read text aloud.
+    LANGUAGE_OPTIONS = {
+        "af": "Afrikaans", "am": "አማርኛ", "ar": "العربية", "bg": "Български",
+        "bn": "বাংলা", "ca": "Català", "cmn": "普通话", "cs": "Čeština",
+        "da": "Dansk", "de": "Deutsch", "el": "Ελληνικά", "en": "English",
+        "es": "Español", "et": "Eesti", "eu": "Euskara", "fi": "Suomi",
+        "fil": "Filipino", "fr": "Français", "gl": "Galego", "gu": "ગુજરાતી",
+        "he": "עברית", "hi": "हिन्दी", "hr": "Hrvatski", "hu": "Magyar",
+        "id": "Bahasa Indonesia", "is": "Íslenska", "it": "Italiano",
+        "ja": "日本語", "kn": "ಕನ್ನಡ", "ko": "한국어", "lt": "Lietuvių",
+        "lv": "Latviešu", "ml": "മലയാളം", "mr": "मराठी",
+        "ms": "Bahasa Melayu", "nb": "Norsk bokmål", "nl": "Nederlands",
+        "pa": "ਪੰਜਾਬੀ", "pl": "Polski", "pt": "Português", "ro": "Română",
+        "ru": "Русский", "sk": "Slovenčina", "sl": "Slovenščina",
+        "sr": "Српски", "sv": "Svenska", "sw": "Kiswahili", "ta": "தமிழ்",
+        "te": "తెలుగు", "th": "ไทย", "tr": "Türkçe", "uk": "Українська",
+        "ur": "اردو", "vi": "Tiếng Việt", "yue": "粵語",
+    }
+    # what a single upload for a 'file' parameter may weigh. Ring tones and
+    # announcements are measured in kilobytes; the limit is here because an
+    # editor that accepts unbounded uploads can fill an appliance's SD card
+    # from the browser.
+    MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+    # deliberately beside the staged web assets rather than in ui_dir/lang/:
+    # everything ending in .json down there is loaded as a dictionary, and a
+    # file named languages.json would become a language called "languages"
+    LANGUAGE_FILE = "languages.json"
     # how long one reachability probe of a 'pingable' parameter may take
     PING_TIMEOUT = 2
     # the editor's web assets, and the record of what was staged into ui_dir
@@ -76,24 +120,48 @@ class ConfigManager:
         "Passwort", "Neues Passwort",
         "Wert wird gelesen...", "Wert übernommen", "Zeitüberschreitung",
         "Eintrag wirklich entfernen?", "Liste ist voll",
-        "Diese Optionen wurden nie gesetzt; als \"nein\" übernehmen?",
+        "Diese Optionen wurden nie gesetzt; als „nein“/„deaktiviert“ übernehmen?",
         "Zu wenige Einträge in", "Erneut laden",
-        "Erfolgreich", "Fehlgeschlagen",
+        # Der Ausgang eines Tests, in drei Stufen: nicht angelaufen, gelaufen,
+        # gelaufen aber nicht durchführbar. "Erfolgreich" stand hier einmal und
+        # versprach zu viel -- was der Test wert war, hört und sieht nur, wer
+        # davorsteht.
+        "Der Test konnte nicht gestartet werden.",
+        "Die Testroutine wurde ohne Fehler ausgeführt.",
+        "Die Testroutine konnte den Test nicht durchführen.",
         "Prüfen", "Prüfung fehlgeschlagen",
         "Erreichbar", "keine Antwort auf Ping", "Name nicht auflösbar",
         "Datei vorhanden", "Ordner vorhanden", "Pfad nicht vorhanden",
         "Noch nicht vorhanden, kann angelegt werden",
-        "Übersetzungen verwalten", "Zielsprache", "Neuer Sprachcode",
-        "Referenzsprachen (max. 3)", "Vorlage herunterladen",
-        "Übersetzungsdatei hochladen", "Hochladen",
-        "Zu entfernende Sprache wählen", "übersetzt",
-        "Übersetzung verarbeitet", "Ungültige Datei",
+        # Translation management. Two verbs rather than one noun: "manage"
+        # never said whether you were about to add or to improve, and the
+        # panel looked identical either way.
+        "Neue Übersetzung hinzufügen", "Vorhandene Übersetzung bearbeiten",
+        "Neue Sprache", "Sprachcode", "Sprachname", "Zu ersetzen",
+        "Bearbeitung von",
+        "Deutsche Schlüssel übersetzen, mit bis zu 3 Sprachen als weiterem "
+            "Kontext (bitte wählen):",
+        "Übersetzungsdatei: zuerst", "dann", "zuletzt",
+        "CSV herunterladen", "Fertige CSV auswählen",
+        "Ausgewählte CSV hochladen",
+        "Noch keine Übersetzung vorhanden",
+        # still reachable: the panel asks in row 1b before any work is done,
+        # but a CSV arriving another way can still run into a full set
+        "Zu ersetzende Sprache wählen",
+        "übersetzt", "Übersetzung verarbeitet", "Ungültige Datei",
+        "Wert bereits vergeben",
+        "Datei auswählen", "Dateityp nicht zulässig",
+        "Dateiname nicht zulässig", "Datei zu groß",
+        # a hint states something about the present; without the moment it was
+        # established it would keep asserting it long after it stopped being so
+        "Stand", "Aktualisieren",
     )
 
     # Declaration keys whose string values are German display strings and
     # hence translation keys
     XLATION_DECL_KEYS = (
-        "acquire_button", "label", "placeholder", "test_func_msg", "tooltip"
+        "acquire_button", "hint", "label", "placeholder", "test_func_msg",
+        "tooltip"
     )
 
     # ------------------------------------------------------------------
@@ -257,8 +325,8 @@ class ConfigManager:
             self._note_xlation_key(module_label.strip())
         if isinstance(module_tooltip, str) and module_tooltip.strip():
             self._note_xlation_key(module_tooltip.strip())
-        self._harvest_xlation_keys(param_dict)
-        self._harvest_xlation_keys(type_dict)
+        self._harvest_xlation_keys(param_dict, self._func_registry[module_id])
+        self._harvest_xlation_keys(type_dict, self._func_registry[module_id])
         type_registry = type_dict if isinstance(type_dict, dict) else {}
         type_registry[module_id] = param_dict
         config_value = CvvNode.init_module(self, module_id, {
@@ -282,6 +350,145 @@ class ConfigManager:
         for key in keys:
             if isinstance(key, str) and key.strip():
                 self._note_xlation_key(key.strip())
+
+    def _load_language_options(self):
+        """The allow-list, seeded from LANGUAGE_OPTIONS on first start.
+
+        Written once and then left alone: a deployment edits the file, not the
+        constant, and its edit survives the next upgrade of the package.
+        """
+        path = os.path.join(self.ui_dir, self.LANGUAGE_FILE)
+        if not os.path.exists(path):
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(self.LANGUAGE_OPTIONS, f, ensure_ascii=False,
+                              indent=1, sort_keys=True)
+            except OSError as exc:
+                self._logger.error(f"Seeding '{path}' failed: {exc}")
+                return dict(self.LANGUAGE_OPTIONS)
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                options = json.load(f)
+            if not (isinstance(options, dict) and options and all(
+                        isinstance(k, str) and isinstance(v, str)
+                        for k, v in options.items())):
+                raise ValueError("not a non-empty object of strings")
+        except (OSError, ValueError) as exc:
+            # a broken allow-list must not take the device down: fall back to
+            # what the release shipped and say so
+            self._logger.error(f"'{path}' unusable ({exc}); falling back to "
+                               "the language list shipped with the release.")
+            return dict(self.LANGUAGE_OPTIONS)
+        return options
+
+    def _save_language_options(self):
+        path = os.path.join(self.ui_dir, self.LANGUAGE_FILE)
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(self._language_options, f, ensure_ascii=False,
+                          indent=1, sort_keys=True)
+        except OSError as exc:
+            self._logger.error(f"Writing '{path}' failed: {exc}")
+
+    def set_language_name(self, lang, name):
+        """Records what a language is called, and keeps it.
+
+        The shipped list covers the languages the release knows about. Anyone
+        adding one beyond those has to say what it is called, because the
+        editor shows names and never codes: a row reading "ps" tells a
+        deployer nothing, and a translator even less. That name belongs with
+        the others, so the seeded file becomes a written one from here on.
+        """
+        if not (isinstance(lang, str) and lang.strip() and
+                isinstance(name, str) and name.strip()):
+            return False
+        lang, name = lang.strip(), name.strip()
+        if self._language_options.get(lang) == name:
+            return True
+        self._language_options[lang] = name
+        self._save_language_options()
+        return True
+
+    def language_name(self, lang):
+        """What to call a language on screen; the code itself only as a last
+        resort, and that is a gap somebody should fill."""
+        return self._language_options.get(lang, lang)
+
+    def set_language_validator(self, validator):
+        """The second handle: let the host application decide which languages
+        a deployment may keep dictionaries for.
+
+        `validator` takes a language code and returns whether it is
+        acceptable; None restores the allow-list from <ui_dir>/languages.json.
+        The host knows things this library cannot -- the H4H appliance, for
+        instance, refuses any language its speech service has no voice for,
+        because a language it can display but never speak is only half a
+        language on a device that reads aloud.
+
+        A validator that raises is treated as a yes. Refusing to configure a
+        device because a check itself is broken would be the worse failure,
+        and "de" is accepted regardless: it is the reference every other
+        dictionary is written against.
+        """
+        self._language_validator = validator if callable(validator) else None
+
+    def language_options(self):
+        """The languages this deployment may keep dictionaries for, as
+        {code: endonym}. Not the ones it *has* -- that is
+        supported_languages()."""
+        return dict(self._language_options)
+
+    def _language_allowed(self, lang):
+        if lang == "de":
+            return True
+        if self._language_validator is not None:
+            try:
+                return bool(self._language_validator(lang))
+            except Exception as exc:
+                self._logger.error(
+                        f"The host's language validator raised on '{lang}': "
+                        f"{exc}. Treating the language as acceptable.")
+                return True
+        return lang in self._language_options
+
+    def supported_languages(self):
+        """
+        The languages a translation dictionary exists for, "de" always among
+        them.
+
+        A host application that addresses its users in one of these -- the
+        H4H appliance reads its announcements aloud -- has to offer exactly
+        this set and no more. Offer a language the dictionaries do not cover
+        and translate() falls back to the German key without saying so: the
+        text would be spoken in German by a foreign voice, and nothing in the
+        log would explain it.
+        """
+        with self._lock:
+            return sorted(self._lang_cache)
+
+    def translation_status(self, lang, keys=None):
+        """
+        How many display strings have a real translation in `lang`, and how
+        many there are altogether -- as (done, total).
+
+        `keys` narrows the question to a subset, which is what makes the
+        answer useful to a host: "are the service names translated" is a
+        different question from "is anything left to translate", and only the
+        host knows which strings are its service names.
+
+        A entry still equal to its German key counts as untranslated, because
+        that is what an untouched template row looks like.
+        """
+        with self._lock:
+            active = set(self._active_xlation_keys)
+            if keys is not None:
+                active &= {k.strip() for k in keys
+                           if isinstance(k, str) and k.strip()}
+            translated = self._lang_cache.get(lang, {})
+            done = sum(1 for k in active
+                       if isinstance(translated.get(k), str) and
+                       translated[k] != k)
+        return done, len(active)
 
     def translate(self, key, lang):
         """
@@ -323,6 +530,21 @@ class ConfigManager:
                 if any(self._path_matches(pattern, path)
                        for pattern in alt_target_paths
                        if isinstance(pattern, str)):
+                    # A value already serving elsewhere in a 'distinct_values'
+                    # group is refused here, at the moment of capture. Waiting
+                    # for Save would mean holding a card against the reader,
+                    # seeing it accepted, and only later being told it is
+                    # already the Neustartkarte -- and for these parameters
+                    # capture is the only way in, so this is the only moment
+                    # anybody can be told.
+                    if CvvNode.value_breaks_distinct_values(self, path, value):
+                        waiter["error"] = "duplicate_value"
+                        waiter["event"].set()
+                        del self._capture_waiters[path]
+                        self._logger.info(
+                                f"Captured value for '{path}' refused: it is "
+                                "already in use within the same group.")
+                        return True
                     waiter["value"] = value
                     waiter["event"].set()
                     del self._capture_waiters[path]
@@ -498,6 +720,8 @@ class ConfigManager:
         self._lang_cache = {}
         self._lang_dir = os.path.join(self.ui_dir, "lang")
         os.makedirs(self._lang_dir, exist_ok=True)
+        self._language_validator = None
+        self._language_options = self._load_language_options()
 
         # seed the translation dictionaries shipped with the release (e.g.
         # en.json, fa.json) into ui_dir/lang/ if the operator has none there
@@ -553,12 +777,17 @@ class ConfigManager:
                     lang_dict[key] = key
                     lang_dict["lang_cache_modified"] = True
 
-    def _harvest_xlation_keys(self, decl_data):
+    def _harvest_xlation_keys(self, decl_data, funcs=None):
         """
         Collects all German display strings -- labels, tooltips,
-        placeholders, acquire-button labels and test messages, including
-        those of enum options -- from registered declaration data as keys
-        into the translation dictionaries.
+        placeholders, acquire-button labels, hints and test messages,
+        including those of enum options -- from registered declaration data
+        as keys into the translation dictionaries.
+
+        `funcs` is the registering module's func_dict, needed to tell the two
+        kinds of hint apart: a hint that names a provider is a function name,
+        not German, and translating it would put "get_lang_report" in front of
+        every translator.
         """
         if not isinstance(decl_data, dict):
             return
@@ -567,9 +796,11 @@ class ConfigManager:
                 continue    # declared values are data, not display strings
             if (k in self.XLATION_DECL_KEYS and
                     isinstance(v, str) and v.strip()):
+                if k == "hint" and funcs and v.strip() in funcs:
+                    continue
                 self._note_xlation_key(v.strip())
             elif isinstance(v, dict):
-                self._harvest_xlation_keys(v)
+                self._harvest_xlation_keys(v, funcs)
 
     def _note_xlation_key(self, xlation_key):
         with self._lock:
@@ -627,6 +858,8 @@ class ConfigManager:
                     for k, v in lang_dict.items()
                     if k != "lang_cache_modified")):
             return "invalid_dict"
+        if not self._language_allowed(lang):
+            return "language_not_allowed"
 
         with self._lock:
             if replace is not None and (
@@ -735,6 +968,8 @@ class ConfigManager:
         if target not in header:
             return None, "target_column_missing", None
         tgt_idx = header.index(target)
+        if not self._language_allowed(target):
+            return None, "language_not_allowed", None
 
         with self._lock:
             is_new = target not in self._lang_cache
@@ -1153,17 +1388,134 @@ class ConfigManager:
                 return jsonify({"error": "no_such_param"}), 404
 
             event = threading.Event()
-            waiter = {"event": event, "value": None}
+            waiter = {"event": event, "value": None, "error": None}
             with self._lock:
                 # a newer capture request replaces an older one on the same
                 # path; the replaced request simply runs into its timeout
                 self._capture_waiters[path] = waiter
             if event.wait(self.CAPTURE_TIMEOUT):
+                if waiter["error"]:
+                    # the German key itself: the editor runs it through its
+                    # own translation, which is where the session's language
+                    # is known
+                    return jsonify({"error": "Wert bereits vergeben"}), 409
                 return jsonify({"value": waiter["value"]})
             with self._lock:
                 if self._capture_waiters.get(path) is waiter:
                     del self._capture_waiters[path]
             return jsonify({"value": None, "timeout": True})
+
+        @app.route("/api/config/hint")
+        def config_hint():
+            """The current text of a provider-backed hint, with the moment it
+            was established (spec 4.9.5).
+
+            The moment is the point of the whole endpoint. A hint asserts
+            something about the present -- "all seven languages are settled" --
+            and an assertion nobody dated goes on claiming it long after it
+            stopped being so. Stamped, it stays true.
+            """
+            if self._session_status(request_token()) != "valid":
+                return jsonify({"error": "invalid_token"}), 401
+            self._touch_session()
+            path = (request.args.get("path") or "").strip()
+            lang = (request.args.get("lang") or "").strip() or "de"
+            if not path:
+                abort(400)
+            if not self._may_access(path):
+                return jsonify({"error": "admin_required"}), 403
+            provider = CvvNode.get_hint(self, path)
+            if not isinstance(provider, str):
+                return jsonify({"error": "no_such_hint"}), 404
+            func = self._resolve_backend_func(path.split(".", 1)[0], provider)
+            if func is None:
+                # a literal hint travels in the schema and is never fetched;
+                # asking for one here is a mistake worth reporting as such
+                return jsonify({"error": "not_a_dynamic_hint"}), 404
+            try:
+                text = func(lang)
+            except Exception as exc:
+                self._logger.error(f"hint provider '{provider}' raised: {exc}")
+                return jsonify({"error": "Interner Fehler bei der Ermittlung"})
+            return jsonify({"text": str(text), "at": time.strftime("%H:%M")})
+
+        @app.route("/api/config/file", methods=["POST"])
+        def config_file():
+            """Takes an uploaded file for a parameter of type 'file': stores
+            it in the directory the host declared and sets the parameter to
+            its name (spec 2.1, type 'file')."""
+            if request.headers.get(self.API_HEADER) != "1":
+                abort(403)
+            if self._session_status(request_token()) != "valid":
+                return jsonify({"error": "invalid_token"}), 401
+            self._touch_session()
+            path = (request.form.get("path") or "").strip()
+            upload = request.files.get("file")
+            if not path or upload is None:
+                abort(400)
+            if not self._may_access(path):
+                return jsonify({"error": "admin_required"}), 403
+
+            constraints = CvvNode.get_node_constraints(self, path) or {}
+            file_dir = CvvNode.get_file_dir(self, path)
+            if constraints.get("type") != "file" or not file_dir:
+                return jsonify({"error": "not_a_file_param"}), 400
+
+            # The browser decides what to call it, so nothing it says is
+            # trusted. Note this refuses rather than cleans: stripping a
+            # directory off and carrying on would work, but a name that
+            # arrives carrying "../.." is a signal and not a typo, and the
+            # cleaned version hides it. Comparing against basename() also
+            # catches a forward slash on Windows, where the explicit test
+            # below would not.
+            raw = (upload.filename or "").strip()
+            name = os.path.basename(raw)
+            if (not name or name != raw or name in (".", "..") or
+                    ".." in name or set(name) & {"/", "\\"} or
+                    min(name) <= ' '):
+                return jsonify({"error": "Dateiname nicht zulässig"}), 400
+
+            pattern = constraints.get("patterned_string")
+            if pattern and not re.fullmatch(pattern, name):
+                return jsonify({"error": "Dateityp nicht zulässig"}), 400
+
+            payload = upload.read(self.MAX_UPLOAD_BYTES + 1)
+            if len(payload) > self.MAX_UPLOAD_BYTES:
+                return jsonify({"error": "Datei zu groß"}), 400
+
+            module, _, rest = path.partition(".")
+            if not rest:
+                abort(400)
+            target = os.path.join(file_dir, name)
+            existed = os.path.exists(target)
+            try:
+                os.makedirs(file_dir, exist_ok=True)
+                with open(target, "wb") as f:
+                    f.write(payload)
+            except OSError as exc:
+                self._logger.error(f"Storing '{target}' failed: {exc}")
+                return jsonify({"error": "Ungültige Datei"}), 500
+
+            update = name
+            for part in reversed([p for p in rest.split(".") if p]):
+                update = {part: update}
+            try:
+                update = CvvNode.normalize_json_value(self, module, update)
+                rejected = self._apply_module_update(module, update)
+            except CvvError as exc:
+                rejected = [str(exc)]
+            if rejected:
+                # the value did not take, so the file has no business being
+                # there -- unless it was already there before we arrived
+                if not existed:
+                    try:
+                        os.remove(target)
+                    except OSError:
+                        pass
+                return jsonify({"error": "Abgelehnt", "rejected": rejected}), 400
+            self._logger.info(f"'{path}' now points at the uploaded "
+                              f"'{name}' in {file_dir}.")
+            return jsonify({"value": name})
 
         @app.route("/api/config/test", methods=["POST"])
         def config_test():
@@ -1227,7 +1579,11 @@ class ConfigManager:
             if editable:
                 self._touch_session()
             with self._lock:
-                info = {"languages": sorted(self._lang_cache)}
+                info = {"languages": sorted(self._lang_cache),
+                        "options": self.language_options(),
+                        # the editor asks which language to replace *before*
+                        # the work is done, so it has to know the ceiling
+                        "max_languages": self.MAX_LANGUAGES}
                 if editable and self._session_admin:
                     info["orphans"] = {
                         lang: self._orphan_keys_of(lang_dict)
@@ -1294,8 +1650,14 @@ class ConfigManager:
             upload = request.files.get("file")
             target = (request.form.get("lang") or "").strip().lower()
             remove = (request.form.get("remove") or "").strip().lower() or None
+            name = (request.form.get("name") or "").strip()
             if upload is None or not target:
                 abort(400)
+            # Recorded before the rows are applied, and only kept if they are:
+            # a language nobody can name has no business appearing in a list
+            # that shows names.
+            if name:
+                self.set_language_name(target, name)
             report, result, total = self._apply_lang_csv(
                     target, upload.read(), remove)
             if report is None:
@@ -1336,9 +1698,16 @@ class ConfigManager:
                 previous = self._session_owner
             self._invalidate_session(f"taken over by {applicant}")
             token = self._issue_session_token(applicant)
+            # The new session starts in admin mode. Only an admin can take a
+            # session over at all -- the password was just checked -- so
+            # handing back a read-only editor that immediately demands the
+            # same password again asks the same question twice and answers
+            # neither.
+            with self._lock:
+                self._session_admin = True
             self._logger.warning(
                     f"{applicant} took the editing session over from "
-                    f"{previous or 'unknown'}.")
+                    f"{previous or 'unknown'} and is in admin mode.")
             return jsonify({"token": token})
 
         @app.route("/api/end_session", methods=["POST"])

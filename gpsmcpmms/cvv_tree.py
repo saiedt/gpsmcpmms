@@ -208,7 +208,7 @@ class CvvValue:
         bool, bytes, complex, float, frozenset, int, str, tuple, type(None)
     )
     PRIMITIVE_TYPES = (
-        "boolean", "color", "enum", "float", "int",
+        "boolean", "color", "enum", "file", "float", "int",
         "password", "path", "pingable", "string", "url"
     )
 
@@ -325,6 +325,14 @@ class CvvValue:
                     return type(val).__name__ == v
                 if not isinstance(val, str):
                     return False
+                if v == "file":
+                    # a bare name, never a route to somewhere else. The upload
+                    # sanitises as well, but a value can also arrive through
+                    # the API, and a configuration editor able to address files
+                    # outside the directory its host declared would be a
+                    # different kind of program.
+                    return (bool(val) and min(val) > ' ' and
+                            not set(val) & {"/", "\\"} and ".." not in val)
                 if v in ("path", "pingable", "url"):
                     return bool(val) and min(val) > ' '
                 return True
@@ -462,12 +470,56 @@ class CvvValue:
 
             self._constraints["keys"] = tuple(validated_keys)
 
+    def _add_dict_constraints(self, type_decl):
+        """'distinct_values': groups of paths below this node whose values must
+        stay mutually distinct.
+
+        Declared once, here, and not as a condition repeated on each
+        participant: the same rule stated in three places drifts, and the
+        participants are not siblings anyway -- one of them lives inside a
+        list and could never see the other two from where it stands.
+        """
+        groups = type_decl.get("distinct_values")
+        if groups is None:
+            return
+        if not isinstance(groups, list) or not groups:
+            critical(f"'distinct_values' is not a non-empty list: {type(groups)}")
+
+        validated = []
+        for i, group in enumerate(groups):
+            if not isinstance(group, list) or len(group) < 2:
+                critical(f"'distinct_values' group at index {i} must be a list "
+                         f"of at least two paths. Got: {group}")
+            for path in group:
+                if not (isinstance(path, str) and path.strip()):
+                    critical(f"'distinct_values' path must be a string: {path}")
+            t = tuple(p.strip() for p in group)
+            if len(set(t)) < len(t):
+                critical(f"Repeated path within one group: {group}")
+            validated.append(t)
+        self._constraints["distinct_values"] = tuple(validated)
+
     def _add_simple_val_constraints(self, decl):
         type_str = decl.get("resolved_type", decl.get("type"))
         if not type_str in self.PRIMITIVE_TYPES:
             critical(f"Specified simple type is unknown: '{type_str}'.")
 
         bound_to = decl.get("bound_to", "")
+        if type_str == "file":
+            # Recorded whether or not a pattern follows. A declared bound_to
+            # otherwise replaced the type constraint entirely, and with it the
+            # check that keeps a file name from addressing another directory --
+            # so the parameters that bothered to restrict themselves would have
+            # been the unprotected ones.
+            self._constraints["type"] = "file"
+            vals = decl.get("values")
+            if isinstance(vals, str) and vals.strip():
+                # A file parameter is an enum you can extend by uploading:
+                # which files are already on hand is a question only the host
+                # can answer -- it may well keep other files in the same
+                # directory -- so the choices come from the same provider
+                # mechanism a dynamic enum uses, and the upload adds to them.
+                self._constraints["one_of"] = vals.strip()
         if bound_to and isinstance(bound_to, str):
             match type_str:
                 case "float":
@@ -476,7 +528,9 @@ class CvvValue:
                 case "int":
                     self._constraints["ranged_int"] = (
                             CvvValue.parse_range(bound_to, True))
-                case "string":
+                case "string" | "file":
+                    # for a file the pattern bounds the *name*, which is how a
+                    # declaration says "wav only": bound_to r"\.wav$"
                     self._constraints["patterned_string"] = bound_to
                 case _:
                     critical(f"Bounded '{type_str}' rejected.")
@@ -527,6 +581,116 @@ class CvvValue:
 
         return cv.value_cond_holds(cond["op"], cond["value"])
 
+    def _without_repeated_keys(self, members):
+        """The members that do not repeat an earlier one on a declared
+        'list_keys' group (spec 4.9.2).
+
+        Until now this was enforced only by the editor hiding options already
+        taken, which works for an enum and for nothing else: a member field
+        that is typed, or captured from hardware like an RFID reader, had
+        nothing standing in its way. Two cards under the same id then both
+        existed and one silently shadowed the other.
+
+        A group whose properties are not all filled in yet does not identify
+        anything, so it cannot be repeated: half-entered members stay, exactly
+        as partial values are allowed to elsewhere.
+        """
+        groups = self._constraints.get("keys")
+        if not groups:
+            return members
+
+        seen = [set() for _ in groups]
+        kept = []
+        for member in members:
+            if not isinstance(member, dict):
+                kept.append(member)
+                continue
+            signatures = []
+            for index, group in enumerate(groups):
+                signature = tuple(member.get(prop) for prop in group)
+                if any(part is None for part in signature):
+                    continue                # not yet an identity
+                if signature in seen[index]:
+                    signatures = None       # repeats an earlier member
+                    break
+                signatures.append((index, signature))
+            if signatures is None:
+                continue
+            for index, signature in signatures:
+                seen[index].add(signature)
+            kept.append(member)
+        return kept
+
+    def _without_distinct_conflicts(self, members):
+        """Members carrying a value that another participant of a
+        'distinct_values' group already holds (spec 4.9.7).
+
+        Filtered here, on the incoming list, rather than left to the members
+        themselves: a *new* member is constructed from this very value and
+        inherits it at construction, so by the time its leaves could refuse
+        anything, the value has already arrived through the shared dict. That
+        is how a service card took the abort card's id.
+
+        Only groups reaching into this list as '<list>.*.<property>' are
+        considered -- one wildcard at member level, which is the shape the
+        declaration is for.
+        """
+        owner = self._owner
+        own_path = owner.get_path()
+        rules = []              # (property within a member, values spoken for)
+        node = owner._parent
+        while isinstance(node, CvvPathElem):
+            prefix = node.get_path() + "."
+            rel = (own_path[len(prefix):]
+                       if own_path.startswith(prefix) else None)
+            for group in node._cur_val._constraints.get(
+                    "distinct_values") or ():
+                if rel is None:
+                    continue
+                reaching = [p for p in group if p.startswith(rel + ".*.")]
+                if not reaching:
+                    continue
+                taken = set()
+                for pattern in group:
+                    if pattern in reaching:
+                        continue        # the list itself is what we are vetting
+                    found = []
+                    try:
+                        node.get_nodes_by_path(pattern, found)
+                    except CvvError:
+                        found = []
+                    for other in found:
+                        value = other.get_value()
+                        if value is not None and value != "":
+                            taken.add(value)
+                for pattern in reaching:
+                    rules.append((pattern[len(rel) + 3:], taken))
+            node = node._parent
+        if not rules:
+            return members
+
+        # Only members beyond the ones already present are vetted here. A
+        # member that exists has leaves of its own, and they refuse a colliding
+        # value while keeping the previous one -- which is what an edit should
+        # do. Dropping it instead would answer "this id is taken" by deleting
+        # the entry the user was editing.
+        existing = len(self._owner._children or {})
+        kept = []
+        for index, member in enumerate(members):
+            if not isinstance(member, dict):
+                kept.append(member)
+                continue
+            if index >= existing and any(
+                    member.get(prop) not in (None, "") and
+                    member.get(prop) in taken for prop, taken in rules):
+                continue
+            kept.append(member)
+            for prop, taken in rules:
+                value = member.get(prop)
+                if value not in (None, ""):
+                    taken.add(value)    # later members must differ from it too
+        return kept
+
     def _check_and_set_value(self, val):
         # sets only simple and list values
         result = True
@@ -544,6 +708,19 @@ class CvvValue:
                          f"with the constraints on '{self._owner.get_path()}'.")
                     result = False
                     val = list_val
+                distinct = self._without_repeated_keys(val)
+                if len(distinct) < len(val):
+                    warn(f"Members repeating a 'list_keys' group were dropped "
+                         f"from '{self._owner.get_path()}'.")
+                    result = False
+                    val = distinct
+                allowed = self._without_distinct_conflicts(val)
+                if len(allowed) < len(val):
+                    warn(f"Members whose value is already taken elsewhere in a "
+                         f"'distinct_values' group were dropped from "
+                         f"'{self._owner.get_path()}'.")
+                    result = False
+                    val = allowed
             else:
                 return False
 
@@ -704,10 +881,12 @@ class CvvValue:
         else:
             self._kind = self.DICT_KIND
             self._relevance_rules = {}
+            self._add_dict_constraints(type_spec)
             # just fix the structure of the value
             self._value = {}
             for k in type_spec:
-                self._value[k] = None
+                if k not in CvvPathElem.DICT_TYPE_KEYS:
+                    self._value[k] = None
 
         self._init_value(decl)
 
@@ -947,8 +1126,50 @@ class CvvNode:
             if lock is None:
                 continue
             with lock:
-                dump[m_id] = m_node.dump_node()
+                node_dump = m_node.dump_node()
+            cls._mark_dynamic_hints(holder, m_id, node_dump)
+            dump[m_id] = node_dump
         return json.dumps(dump, ensure_ascii=False)
+
+    @classmethod
+    def _mark_dynamic_hints(cls, holder, module_id, node):
+        """
+        Replaces a hint that names a provider with True.
+
+        Same idea as test_func above: the frontend only needs to know that
+        there is something to ask for. Shipping the string as it stands would
+        print the function's name where the reader expects a sentence.
+        """
+        if not isinstance(node, dict):
+            return
+        ui = node.get("ui")
+        if isinstance(ui, dict) and isinstance(ui.get("hint"), str):
+            if holder._resolve_backend_func(module_id,
+                                            ui["hint"]) is not None:
+                ui["hint"] = True
+        template = node.get("item_template")
+        if isinstance(template, dict):
+            cls._mark_dynamic_hints(holder, module_id, template)
+        children = node.get("children")
+        if isinstance(children, dict):
+            for child in children.values():
+                cls._mark_dynamic_hints(holder, module_id, child)
+
+    @classmethod
+    def value_breaks_distinct_values(cls, holder, path, value):
+        """Whether setting `value` at `path` would repeat another participant
+        of a 'distinct_values' group (spec 4.9.7)."""
+        node = cls._get_single_node(holder, path)
+        return (node.breaks_distinct_values(value)
+                    if isinstance(node, CvvPathElem) else
+                False)
+
+    @classmethod
+    def get_hint(cls, holder, path):
+        """The hint declared for the node at `path` -- a German sentence, or
+        the name of the provider that produces one."""
+        node = cls._get_single_node(holder, path)
+        return node._ui_props.get("hint") if node is not None else None
 
     @classmethod
     def get_node_constraints(cls, holder, path):
@@ -970,6 +1191,17 @@ class CvvNode:
         """
         node = cls._get_single_node(holder, path)
         return node._ui_props.get("test_func") if node is not None else None
+
+    @classmethod
+    def get_file_dir(cls, holder, path):
+        """
+        Returns the directory a 'file' parameter declared as the destination
+        for uploads, or None. Never leaves the backend: which directory of the
+        host's filesystem a parameter writes into is nothing the browser needs
+        to know, so dump_node() withholds it.
+        """
+        node = cls._get_single_node(holder, path)
+        return node._ui_props.get("file_dir") if node is not None else None
 
     @classmethod
     def get_protected_paths(cls, holder, module):
@@ -1160,16 +1392,18 @@ class CvvPathElem(CvvNode):
     DECLARATION_KEYS = frozenset((
         # the fixed set of keys specified in section 2.1 of the spec
         "backend_provided", "default_val", "fixed_val", "hidden", "init_only",
-        "label", "likely_val", "placeholder", "protected", "relevance",
+        "hint", "label", "likely_val", "placeholder", "protected", "relevance",
         "s2g_scale", "tooltip", "type",
         # type-specific sub-properties (see section 2.1, key 3)
-        "acquire_button", "bound_to", "values",
+        "acquire_button", "bound_to", "file_dir", "values",
         # test support (see section 4.9.4 of the spec)
         "test_func", "test_func_msg",
         # annotations added internally during type resolution
         "is_list", "resolved_type",
     ))
     LIST_TYPE_KEYS = frozenset(("list_keys", "list_member", "list_size"))
+    # directives a named dict type may carry beside its properties
+    DICT_TYPE_KEYS = frozenset(("distinct_values",))
 
     LIST_ITEM_TEMPLATE_ID = "_list_item_template"
 
@@ -1203,6 +1437,8 @@ class CvvPathElem(CvvNode):
             # the callable itself is backend-internal; the frontend only
             # needs to know that a test action exists for this node
             d["ui"]["test_func"] = True
+        # where uploads land is the host's business, not the browser's
+        d["ui"].pop("file_dir", None)
         if self._children is None:
             d["value"] = self._cur_val.get_value()
         elif self.is_list_root():
@@ -1282,6 +1518,53 @@ class CvvPathElem(CvvNode):
     def get_value(self):
         return self._cur_val.get_value()
 
+    def breaks_distinct_values(self, val):
+        """
+        Whether `val` is already held by another participant of a
+        'distinct_values' group this node belongs to (spec 4.9.7).
+
+        Walks upwards because the group is declared on the common ancestor --
+        the only place that can see all of its members. An unset value
+        participates in nothing: several empty card slots are not a collision,
+        and without that rule a device could never be half-configured.
+        """
+        if val is None or val == "":
+            return False
+        own_path = self.get_path()
+        node = self._parent
+        while isinstance(node, CvvPathElem):
+            groups = node._cur_val._constraints.get("distinct_values")
+            prefix = node.get_path() + "."
+            rel = (own_path[len(prefix):]
+                       if own_path.startswith(prefix) else None)
+            for group in groups or ():
+                # Participation is decided by the path pattern and not by
+                # which nodes exist: the editor captures a new list member
+                # into the hidden item template, and '*' over the list's real
+                # children never matches that. Judged by identity, adding a
+                # card was the one case the check sat out.
+                if rel is None or not any(self.path_matches_pattern(p, rel)
+                                          for p in group):
+                    continue
+                for pattern in group:
+                    found = []
+                    try:
+                        node.get_nodes_by_path(pattern, found)
+                    except CvvError:
+                        found = []     # a path matching nothing yet is no error
+                    for other in found:
+                        if other is not self and other.get_value() == val:
+                            return True
+            node = node._parent
+        return False
+
+    @staticmethod
+    def path_matches_pattern(pattern, path):
+        """Element-wise, with '*' standing for exactly one element."""
+        p_elems, path_elems = pattern.split("."), path.split(".")
+        return (len(p_elems) == len(path_elems) and
+                all(p == "*" or p == q for p, q in zip(p_elems, path_elems)))
+
     def impose_value(self, val, rejected=None) -> bool:
         """
         Applies all applicable values and skips only values not applicable,
@@ -1293,6 +1576,12 @@ class CvvPathElem(CvvNode):
                 # merging persisted state: a persisted "no value" must not
                 # override a declared default or fixed value
                 return True
+            if self.breaks_distinct_values(val):
+                # refused rather than dropped: unlike a repeating list member
+                # there is nothing here to drop, and keeping the previous value
+                # is what every other refused value does
+                self._note_rejection(rejected)
+                return False
             if self._cur_val.check_and_set_value(val):
                 return True
             self._note_rejection(rejected)
@@ -1381,8 +1670,12 @@ class CvvPathElem(CvvNode):
             item = self._children.get(f"{i:02}")
             if item is None:
                 critical("Inconsistent list internal state.")
-            if (i < num_updatables and
-                    not item.impose_value(elems[i], rejected)):
+            # Every member, not only the ones that already existed. A newly
+            # appended member used to take its value at construction and skip
+            # this call, and with it every check that lives here -- which is
+            # how a service card could take the abort card's id: adding a card
+            # is exactly the case that never went through impose_value.
+            if not item.impose_value(elems[i], rejected):
                 result = False
             # alias the list element with the item's composed value, so that
             # defaults and salvaged parts materialize in the list value, too
@@ -1391,6 +1684,8 @@ class CvvPathElem(CvvNode):
 
     def _expand_by_type_decl(self, type_decl):
         for prop, p_decl in type_decl.items():
+            if prop in self.DICT_TYPE_KEYS:
+                continue            # a directive on the type, not a property
             if (
                 not isinstance(p_decl, dict) or
                 not isinstance(prop, str) or
@@ -1525,7 +1820,7 @@ class CvvPathElem(CvvNode):
         self._protected = decl.get("protected", False)
 
         self._ui_props = {}
-        for k in ("label", "tooltip", "placeholder"):
+        for k in ("label", "tooltip", "placeholder", "hint", "file_dir"):
             v = decl.get(k)
             if isinstance(v, str) and v.strip():
                 self._ui_props[k] = v.strip()
