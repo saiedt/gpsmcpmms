@@ -59,8 +59,14 @@ innerhalb eines Textes eine Zeile niemals zerreißen können).
   deutsche Spalte und die Referenzspalten unverändert — sie sind die Schlüssel
   und der Kontext.
 - Ein **leeres** Feld bedeutet „noch nicht übersetzt“; dieser Eintrag erscheint
-  dann einfach auf Deutsch. Sie dürfen einige Einträge jetzt und den Rest später
-  übersetzen.
+  dann einfach auf Deutsch, und die Sprache gilt so lange als unvollständig.
+  Sie dürfen einige Einträge jetzt und den Rest später übersetzen.
+- Soll ein Eintrag **unverändert übernommen** werden, dann **wiederholen Sie den
+  deutschen Text** in Ihrer Spalte. Leer lassen genügt dafür nicht: leer heißt
+  „fehlt noch“, wiederholt heißt „ich habe hingesehen, so bleibt es“. Das kommt
+  öfter vor, als man denkt — bei einem Wort, das in Ihrer Sprache genauso lautet
+  („OK“), und bei Feldern, hinter denen gar kein Satz steckt, etwa dem
+  Formatbeispiel `004961501834300` für eine Rufnummer.
 - Sie können von Hand übersetzen oder die gesamte Datei einem KI-Assistenten
   übergeben (z. B. *„Bitte fülle die letzte Spalte mit der französischen
   Übersetzung“*). Der deutsche Quelltext und die Referenzspalten liefern alles

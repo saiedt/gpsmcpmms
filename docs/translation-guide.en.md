@@ -60,7 +60,14 @@ row).
 - Edit **only the last column** (your target language). Leave the German and
   reference columns exactly as they are — they are the keys and the context.
 - A **blank** cell means "not translated yet"; that entry will simply show the
-  German text. You may translate some entries now and the rest later.
+  German text, and the language counts as incomplete until it is filled. You may
+  translate some entries now and the rest later.
+- When an entry is to be **taken over unchanged**, **repeat the German text** in
+  your column. Leaving it blank will not do: blank means "still missing",
+  repeated means "I looked at this, and it stays". It comes up more often than
+  you would think — a word that reads the same in your language ("OK"), and
+  fields that are not a sentence at all, such as the format example
+  `004961501834300` for a phone number.
 - You can translate by hand, or hand the whole file to an AI assistant
   (e.g. *"please fill the last column with the French translation"*). The German
   source and the reference columns give it everything it needs.

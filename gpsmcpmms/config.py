@@ -16,6 +16,7 @@
 import csv
 import hashlib
 import hmac
+import inspect
 import io
 import json
 import logging
@@ -49,6 +50,16 @@ class ConfigManager:
     # how many existing languages may be included as reference columns in a
     # downloaded translation template (context for the translator/AI)
     MAX_TEMPLATE_REFS = 3
+    # bookkeeping a translation dictionary carries beside its translations;
+    # never a key anybody translates
+    LANG_FORMAT_KEY = "lang_format"
+    RESERVED_LANG_KEYS = ("lang_cache_modified", LANG_FORMAT_KEY)
+    # 2: an absent entry means untranslated, and an entry that reads like the
+    # German means a translator decided it stays that way. Until 1 every known
+    # key was present in every dictionary as its own value, and that was how
+    # "untranslated" was written down -- which left no way at all to say that a
+    # word is simply the same in both languages.
+    LANG_FORMAT = 2
 
     # Which languages a deployment may keep dictionaries for at all -- the
     # first of the two handles over that choice.
@@ -327,6 +338,8 @@ class ConfigManager:
             self._note_xlation_key(module_tooltip.strip())
         self._harvest_xlation_keys(param_dict, self._func_registry[module_id])
         self._harvest_xlation_keys(type_dict, self._func_registry[module_id])
+        self._check_values_for(param_dict, self._func_registry[module_id])
+        self._check_values_for(type_dict, self._func_registry[module_id])
         type_registry = type_dict if isinstance(type_dict, dict) else {}
         type_registry[module_id] = param_dict
         config_value = CvvNode.init_module(self, module_id, {
@@ -339,6 +352,42 @@ class ConfigManager:
         self._invalidate_session(f"module '{module_id}' registered its "
                                  "parameters")
         callback(config_value)
+
+    def discard_module(self, module_id):
+        """
+        Declares that a module has no parameters any more, and removes every
+        trace of the ones it used to have. Returns True when there was
+        something to remove.
+
+        Called by a module that can tell it is past needing them -- instead of
+        register_params, or later in the same run, whenever that becomes
+        apparent. The appliance case is a provisioning key: it has to exist
+        while a distributor prepares a device class, and must not exist on the
+        devices cloned from it afterwards. Hiding the field would not do --
+        what matters is that the value is off the card, and only deleting the
+        persisted data achieves that, since the declaration would otherwise
+        restore it at the next start.
+
+        Not a registration with an empty parameter dict, although that would
+        have been less to write. An empty dict is a shape a module can arrive
+        at by accident, and the effect here is the loss of everything a module
+        had stored: for the telephony module that would be the credentials of
+        the public line. A destructive step should take a sentence that could
+        not have been written by mistake.
+        """
+        if not (module_id and isinstance(module_id, str)):
+            raise ValueError(f"Invalid module id: {module_id}.")
+        module_id = module_id.strip()
+        removed = CvvNode.discard_module(self, module_id)
+        self._callback_registry.pop(module_id, None)
+        self._func_registry.pop(module_id, None)
+        if removed:
+            # the schema changed, so the editor's picture of it is stale
+            self._invalidate_session(f"module '{module_id}' discarded its "
+                                     "parameters")
+            self._logger.info(f"Module '{module_id}' discarded its parameters "
+                              "and everything stored for them.")
+        return removed
 
     def note_xlation_keys(self, *keys):
         """
@@ -476,18 +525,31 @@ class ConfigManager:
         different question from "is anything left to translate", and only the
         host knows which strings are its service names.
 
-        A entry still equal to its German key counts as untranslated, because
-        that is what an untouched template row looks like.
+        An entry counts as soon as it is there, whatever it says. Absence is
+        what "not translated yet" looks like -- nothing is written into a
+        dictionary until somebody translates -- which leaves an entry reading
+        like the German free to mean the opposite: that this string was looked
+        at and stays. Without that, "OK" in Polish was inexpressible and kept
+        its language incomplete for ever. German itself is the exception,
+        and has to be: it is the reference every other language
+        is translated *from*, its dictionary is deliberately empty, and asking
+        this question about it used to answer "none of them" -- which read as
+        a device with nothing translated, on every device, whenever somebody
+        looked at the editor in German.
         """
         with self._lock:
             active = set(self._active_xlation_keys)
             if keys is not None:
                 active &= {k.strip() for k in keys
                            if isinstance(k, str) and k.strip()}
+            if isinstance(lang, str) and lang.strip().split("-")[0] == "de":
+                return len(active), len(active)
             translated = self._lang_cache.get(lang, {})
+            # an empty entry is no translation either -- the upload never
+            # writes one, but a hand-edited file can
             done = sum(1 for k in active
                        if isinstance(translated.get(k), str) and
-                       translated[k] != k)
+                       translated[k])
         return done, len(active)
 
     def translate(self, key, lang):
@@ -772,10 +834,38 @@ class ConfigManager:
 
         for lang, lang_dict in self._lang_cache.items():
             lang_dict["lang_cache_modified"] = False
-            for key in self.OWN_UI_KEYS:
-                if key not in lang_dict:
-                    lang_dict[key] = key
-                    lang_dict["lang_cache_modified"] = True
+            self._migrate_lang_format(lang, lang_dict)
+
+    def _migrate_lang_format(self, lang, lang_dict):
+        """Brings a dictionary from the old encoding to the current one, once.
+
+        Until format 2 every known key was written into every dictionary as its
+        own value, and *that* was how "not translated yet" was recorded. Now an
+        absent entry says it, and an entry reading like the German says the
+        opposite: somebody looked at this string and decided it stays. Both
+        cannot be true of the same file, so the old entries have to go -- once,
+        and marked, because after the migration those very entries are the
+        deliberate ones and must survive every later start.
+
+        What this costs is the handful of words that were already right by
+        coincidence -- "OK" is Polish for OK -- and they have to be entered
+        again. There is no way to tell them apart from the thousands that were
+        merely never touched; only the person translating knows.
+        """
+        if lang_dict.get(self.LANG_FORMAT_KEY) == self.LANG_FORMAT:
+            return
+        stale = [k for k, v in lang_dict.items()
+                 if k not in self.RESERVED_LANG_KEYS and v == k]
+        for key in stale:
+            del lang_dict[key]
+        lang_dict[self.LANG_FORMAT_KEY] = self.LANG_FORMAT
+        lang_dict["lang_cache_modified"] = True
+        if stale:
+            self._logger.info(
+                    f"Translation dictionary '{lang}': {len(stale)} entries "
+                    "that merely repeated the German key were dropped; they "
+                    "used to mean 'untranslated'. An entry equal to the "
+                    "German now means the opposite, and is kept.")
 
     def _harvest_xlation_keys(self, decl_data, funcs=None):
         """
@@ -802,18 +892,52 @@ class ConfigManager:
             elif isinstance(v, dict):
                 self._harvest_xlation_keys(v, funcs)
 
+    def _check_values_for(self, decl_data, funcs):
+        """
+        Verifies at registration that a 'values_for' provider can actually be
+        called with an argument.
+
+        Without this the mismatch surfaced as a 500 the first time somebody
+        expanded the group -- a stack trace in the log, an unusable field on
+        screen, and nothing naming the declaration that caused it. A wrong
+        signature is a mistake in the source, so it belongs to startup, where
+        the person who can fix it is still looking.
+        """
+        if not isinstance(decl_data, dict):
+            return
+        for key, value in decl_data.items():
+            if not isinstance(value, dict):
+                continue
+            self._check_values_for(value, funcs)
+            if "values_for" not in value:
+                continue
+            provider = value.get("values")
+            func = funcs.get(provider) if isinstance(provider, str) else None
+            if func is None:
+                raise ValueError(
+                        f"register_params(): '{key}' declares 'values_for' "
+                        f"but its 'values' ({provider!r}) is not a function "
+                        "in func_dict.")
+            try:
+                inspect.signature(func).bind(None)
+            except TypeError:
+                raise ValueError(
+                        f"register_params(): the provider '{provider}' of "
+                        f"'{key}' has to take the value of "
+                        f"'{value['values_for']}' as its argument.") from None
+
     def _note_xlation_key(self, xlation_key):
+        # Nothing is written into the dictionaries here. A key they do not
+        # carry is a key nobody has translated -- which is all the template
+        # needs to know, and it leaves "the entry reads like the German" free
+        # to mean what a translator would want it to mean.
         with self._lock:
             self._active_xlation_keys.add(xlation_key)
-            for lang, lang_dict in self._lang_cache.items():
-                if xlation_key not in lang_dict:
-                    lang_dict[xlation_key] = xlation_key
-                    lang_dict["lang_cache_modified"] = True
 
     def _orphan_keys_of(self, lang_dict):
         # a key is orphaned when no active registration uses it (anymore)
         return sorted(k for k in lang_dict
-                      if k != "lang_cache_modified" and
+                      if k not in self.RESERVED_LANG_KEYS and
                          k not in self._active_xlation_keys)
 
     def _write_translation_file(self, lang_code, lang_dict):
@@ -856,7 +980,7 @@ class ConfigManager:
         if not (isinstance(lang_dict, dict) and all(
                     isinstance(k, str) and isinstance(v, str)
                     for k, v in lang_dict.items()
-                    if k != "lang_cache_modified")):
+                    if k not in self.RESERVED_LANG_KEYS)):
             return "invalid_dict"
         if not self._language_allowed(lang):
             return "language_not_allowed"
@@ -871,7 +995,7 @@ class ConfigManager:
                 return "too_many_languages"
 
             lang_dict = {k: v for k, v in lang_dict.items()
-                         if k != "lang_cache_modified"}
+                         if k not in self.RESERVED_LANG_KEYS}
             if lang == "de":
                 # "de" is the mandatory reference: own keys must survive
                 for key in self.OWN_UI_KEYS:
@@ -902,11 +1026,16 @@ class ConfigManager:
             return sorted(self._active_xlation_keys)
 
     def _translation_of(self, lang, key):
-        """The stored translation of `key` in `lang`, or "" if the entry is
-        absent or still equals the German key (i.e. untranslated)."""
+        """The stored translation of `key` in `lang`, or "" if there is none.
+
+        An entry that reads like the German is one of them: somebody decided
+        this string stays as it is -- because the word is the same in both
+        languages, or because it is not really a word, like the placeholder
+        showing the shape of a phone number.
+        """
         with self._lock:
             v = self._lang_cache.get(lang, {}).get(key)
-        return v if isinstance(v, str) and v != key else ""
+        return v if isinstance(v, str) else ""
 
     def _lang_template_csv(self, target, refs):
         """Builds the CSV template for translating into `target`, with a
@@ -990,14 +1119,18 @@ class ConfigManager:
         active = set(self._active_keys_sorted())
         with self._lock:
             new_dict = {k: v for k, v in self._lang_cache.get(target, {}).items()
-                        if k != "lang_cache_modified" and k in active}
+                        if k not in self.RESERVED_LANG_KEYS
+                        and k in active}
         # the uploaded rows edit only the keys they contain: a non-empty cell
         # sets a translation, a blank cell clears one; keys absent from the
-        # file keep whatever translation they already had
+        # file keep whatever translation they already had.
+        # A cell repeating the German is a translation like any other, and the
+        # only way to say "this one stays as it is" -- refusing it left every
+        # such string looking untranslated for ever.
         for key, value in uploaded.items():
             if key not in active:
                 continue
-            if value and value != key:
+            if value:
                 new_dict[key] = value
             else:
                 new_dict.pop(key, None)
@@ -1359,18 +1492,39 @@ class ConfigManager:
                                               provider)
             if func is None:
                 return jsonify({"error": f"unknown provider '{provider}'"})
+            # 'values_for': the options are computed for the current value of
+            # a sibling, which the editor sends along -- the one being edited,
+            # not the one last saved. None while that sibling is unset.
+            args = ()
+            if constraints.get("one_of_for"):
+                raw = request.args.get("arg")
+                try:
+                    args = (json.loads(raw) if raw else None,)
+                except ValueError:
+                    return jsonify({"error": "malformed argument"}), 400
             try:
-                result = func()
+                result = func(*args)
             except Exception as exc:
                 self._logger.error(f"enum provider '{provider}' raised: "
                                    f"{exc}")
                 result = "Interner Fehler bei der Wertermittlung"
             if isinstance(result, dict):
                 # dynamically delivered labels/tooltips are display strings
-                # and hence translation keys, too
+                # and hence translation keys, too -- unless the provider says
+                # otherwise. "de-DE-Wavenet-H" is a name the service made up,
+                # and a device that offered fifty of them once put fifty rows
+                # in front of every translator, for good: harvested keys stay
+                # active as long as the provider still offers them.
                 for option in result.values():
-                    self._harvest_xlation_keys(
-                            option if isinstance(option, dict) else None)
+                    if not isinstance(option, dict):
+                        continue
+                    if option.get("verbatim"):
+                        # the label is an identifier; a tooltip beside it is
+                        # still prose and still wants translating
+                        self._harvest_xlation_keys(
+                                {"tooltip": option.get("tooltip")})
+                    else:
+                        self._harvest_xlation_keys(option)
                 return jsonify({"values": result})
             return jsonify({"error": str(result)})
 

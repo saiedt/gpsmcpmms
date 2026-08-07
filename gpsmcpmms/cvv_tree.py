@@ -94,9 +94,10 @@ import logging
 import operator
 import os
 import re
+import shutil
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
 
 CVV_UNKNOWN_PHASE = 0
@@ -1237,6 +1238,58 @@ class CvvNode:
             return copy.deepcopy(m_node.get_value())
 
     @classmethod
+    def discard_module(cls, holder, module: str):
+        """
+        Forgets a module: drops its subtree, its type context and its lock,
+        and deletes everything persisted under its name. Returns True when
+        something was actually there to remove.
+
+        The counterpart to init_module, for a module whose parameters have
+        served their purpose. A device that has been provisioned no longer
+        needs the API key that provisioned it, and a key nobody can reach is
+        worth more than one guarded by a hidden field -- but a value only
+        stops existing once it is off the disk, because the declaration would
+        otherwise hand it back at the next start.
+
+        Deliberately its own entry point rather than a registration with no
+        parameters: an empty declaration is a shape a module can reach by
+        accident -- a failed import, a comprehension over an empty list -- and
+        wiping a module's stored configuration is not something that should be
+        one mistake away.
+        """
+        cls._check_holder(holder)
+        if not isinstance(module, str) or not module.strip():
+            critical("Module id must be a non-empty string.")
+        module = module.strip()
+
+        # Neither flag of _get_module_lock fits: create=True refuses a module
+        # that is registered, create=False refuses one that is not -- and the
+        # usual case here is the second, a module that decided at startup not
+        # to register at all and only wants the data of an earlier run gone.
+        with cls._global_lock:
+            lock = cls._module_locks.get(module)
+        with (lock or nullcontext()):
+            with cls._global_lock:
+                existed = (cls._root_instance is not None and
+                           module in cls._root_instance._children)
+                if cls._root_instance is not None:
+                    cls._root_instance._children.pop(module, None)
+                cls._type_context.pop(module, None)
+        # after the block: the lock itself is going too
+        with cls._global_lock:
+            cls._module_locks.pop(module, None)
+
+        directory = cls._module_dir(module)
+        if os.path.isdir(directory):
+            existed = True
+            try:
+                shutil.rmtree(directory)
+            except OSError as exc:
+                critical(f"Persisted data of '{module}' could not be "
+                         f"removed: {exc}")
+        return existed
+
+    @classmethod
     def normalize_json_value(cls, holder, module, config_value):
         """
         Normalizes a JSON-borne update payload to the internal value forms
@@ -1395,7 +1448,7 @@ class CvvPathElem(CvvNode):
         "hint", "label", "likely_val", "placeholder", "protected", "relevance",
         "s2g_scale", "tooltip", "type",
         # type-specific sub-properties (see section 2.1, key 3)
-        "acquire_button", "bound_to", "file_dir", "values",
+        "acquire_button", "bound_to", "file_dir", "values", "values_for",
         # test support (see section 4.9.4 of the spec)
         "test_func", "test_func_msg",
         # annotations added internally during type resolution
@@ -1692,10 +1745,43 @@ class CvvPathElem(CvvNode):
                 prop.isdigit()
             ):
                 critical("Not a named type declaration.")
-            CvvPathElem(self, prop, p_decl)
+            child = CvvPathElem(self, prop, p_decl)
             if "relevance" in p_decl:
                 cond = self._parse_cond_on_child(p_decl["relevance"])
                 self._cur_val.add_relevance_rule(prop, cond)
+            if "values_for" in p_decl:
+                self._bind_values_source(child, prop, p_decl["values_for"])
+
+    def _bind_values_source(self, child, prop, sibling):
+        """'values_for': the options of `prop` are computed for the current
+        value of a sibling, which is handed to the provider (spec 4.9.1).
+
+        Not a condition, so no operator and no value: nothing here decides
+        whether the field is shown -- that is what 'relevance' is for. What is
+        declared is the provider's argument, and with it the moment to ask
+        again: the editor re-asks as soon as that sibling changes, before
+        anything is saved. So a pair that belongs together -- an announcement
+        language and one of the voices that speak it -- is chosen in either
+        order and saved once.
+
+        Any sibling in the same dict will do, named before or after -- the
+        value dict is laid out from the whole declaration before a single
+        child is expanded, so both directions are equally real. What it may
+        not name is something outside its own dict, or itself.
+        """
+        if not (isinstance(sibling, str) and sibling.strip()):
+            critical(f"'values_for' of '{prop}' must name a sibling.")
+        sibling = sibling.strip()
+        if not self._cur_val.is_valid_child_key(sibling):
+            critical(f"'values_for' of '{prop}' names '{sibling}', which is "
+                     "not an earlier sibling of it.")
+        if sibling == prop:
+            critical(f"'values_for' of '{prop}' names the field itself.")
+        constraints = child._cur_val._constraints
+        if not isinstance(constraints.get("one_of"), str):
+            critical(f"'values_for' on '{prop}' needs a dynamic enum: its "
+                     "'values' must name a backend function.")
+        constraints["one_of_for"] = sibling
 
     def _normalize_json(self, val):
         cv = self._cur_val

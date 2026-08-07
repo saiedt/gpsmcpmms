@@ -128,6 +128,38 @@ Other API methods:
 | `note_xlation_keys(*keys)` | Register display strings a module only uses at runtime, so they reach the translation templates. |
 | `translate(key, lang)` | The `lang` rendering of such a string, falling back to the German original. Accepts `de` or `de-DE`. |
 | `switch_to_app_logger(logger)` | Inject the application logger (once per run). |
+| `discard_module(module_id)` | The module has no parameters any more: the declaration is dropped and everything persisted for it is deleted. |
+
+### Discarding a module's parameters
+
+`discard_module()` exists for a two-stage provisioning: a value that has to be
+present while a distributor prepares a device class, and must not be present on
+the devices cloned from it afterwards. A provisioning key is the typical case.
+
+Hiding the field would not do — what matters is that the value is off the card,
+and only deleting the persisted data achieves that, since the declaration would
+otherwise restore it at the next start. It is deliberately not the same as
+registering an empty `param_dict`: an empty dict is a shape a module can arrive
+at by accident, and the effect here is the loss of everything that module had
+stored.
+
+The module decides for itself, and it may do so either instead of registering or
+later in the same run — whenever it can first tell. In the appliance this project
+grew from, the speech module cannot tell at import time: what counts as
+"complete" is a recording for every sentence the *application* would speak, and
+the application registers after it. So it declares its parameters as usual, and
+gives them up at the moment the application hands it the list:
+
+```python
+# in the speech module, at the moment the application registers its sentences
+if len(self.voiced_languages()) >= config_mgr.MAX_LANGUAGES:
+    config_mgr.discard_module("5tts")      # …and the API key with it
+```
+
+The call returns `True` if there was anything to remove, and invalidates the
+editor session, since the schema it is showing has just changed. Registering the
+module again on a later run is the way back: if a recording is deleted, the next
+start finds something missing and keeps the parameters.
 
 ---
 
@@ -377,6 +409,24 @@ disk are read whatever the current policy says. Discarding a deployment's
 translations at startup because a rule changed later would destroy work nobody can
 get back.
 
+Because German is the source, its dictionary is deliberately empty, and
+`translation_status("de", …)` answers *complete*: every German string is already
+in its final form. For a target language, **an absent entry means untranslated
+and any entry counts as translated** — including one that reads exactly like the
+German, which is how a translator records that a string stays as it is. Some
+words are the same in two languages ("OK" is Polish for OK) and some strings are
+not sentences at all, like the placeholder showing the shape of a phone number;
+without this they could never be settled, and their language would stay
+incomplete for ever.
+
+> **Dictionary format 2.** Until format 1 every known key was written into every
+> dictionary as its own value, and *that* was how "untranslated" was recorded — so
+> the two meanings could not coexist. A dictionary without the `lang_format`
+> marker is migrated once on load: entries that merely repeat their key are
+> dropped and the marker is set. The cost is the handful that were already right
+> by coincidence; nothing tells them apart from the untouched ones, so they have
+> to be entered again, once.
+
 Translations are added/updated through a **CSV round-trip** (no timeouts, easy for
 a human or an AI):
 
@@ -386,7 +436,9 @@ a human or an AI):
    **fully quoted** (RFC 4180), so embedded `,`/`;` can never split a row.
 2. **Fill it offline**, then **upload** it. Rows are applied one by one
    (non-empty sets, blank clears, absent keeps; unknown keys skipped; unused keys
-   pruned). Adding an 8th language prompts which existing one to replace.
+   pruned). A cell repeating the German is a translation like any other — that is
+   how "take this one over unchanged" is said, and the only way to say it. Adding
+   an 8th language prompts which existing one to replace.
 3. A **report CSV** is returned with a per-row status and translated/total counts.
 
 ---
@@ -405,7 +457,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 | `GET /api/lang/info` | Language list (plus orphan keys for admins). |
 | `GET /api/lang/template?lang=&refs=` | Download a translation template (admin). |
 | `POST /api/lang/upload` | Upload a filled translation CSV (admin); returns the report, or `409` asking which language to replace. |
-| `GET /api/config/enum-options?path=` | Resolve a dynamic enum's options. |
+| `GET /api/config/enum-options?path=[&arg=]` | Resolve a dynamic enum's options; `arg` is the JSON-encoded value of the `values_for` sibling. |
 | `GET /api/value/capture?path=` | Long-poll (≤ 30 s) for a backend-captured value. |
 | `POST /api/config/test` | Run the `test_func` for `{path, value}`. |
 | `POST /api/config/probe` | Verify `{path, value}` on the device; only for `path`/`pingable` params. |
@@ -419,6 +471,31 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 - **Dynamic enums** — `values` may be a function name (in `func_dict`); the editor
   fetches options via `/api/config/enum-options` when the group is expanded. The
   function returns the options dict or an error string that blocks expansion.
+  Options are re-fetched after every save, since a provider computes them from a
+  device state that has just changed.
+
+  **`values_for`** names a sibling whose value the options are computed *for*.
+  Its current value — the one being edited, not the one last saved — is passed to
+  the provider, and the editor re-asks as soon as it changes:
+
+  ```python
+  "language": {"type": "enum", "values": "get_language_list"},
+  "voice":    {"type": "enum", "values": "get_voice_list",
+               "values_for": "language"},
+
+  def get_voice_list(language):     # None while the sibling is unset
+      ...
+  ```
+
+  So a pair that belongs together is chosen in either order and saved **once**.
+  Without it the second field answers the question of before: you would save the
+  language, reload, and only then see the voices that speak it.
+
+  It is not a condition — no operator, no value — and it is not `relevance`,
+  which decides whether a field is on screen at all. A field may carry both,
+  naming different siblings. `register_params` refuses at startup if the named
+  sibling is not in the same dict, if it is the field itself, if the field is not
+  a dynamic enum, or if the provider does not take an argument.
 - **Backend-captured values** — a `backend_provided` field shows an
   `acquire_button`; pressing it long-polls `/api/value/capture`. A module delivers
   the value with `config_mgr.handle_value_event(value, alt_target_paths)` (use

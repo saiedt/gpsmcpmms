@@ -222,11 +222,20 @@ function relevanceHolds(rule, dictValue) {
 }
 
 /* ---------- dynamic enums (spec 4.9.1) ---------- */
-async function fetchEnumOptions(path, rerender) {
-    S.enums[path] = {pending: true};
-    const r = await api(`/api/config/enum-options?path=${encodeURIComponent(path)}`);
-    S.enums[path] = (r.data && r.data.values) ? {values: r.data.values}
-                  : {error: (r.data && r.data.error) || xl("Verbindung zum Gerät verloren")};
+/* `arg` is the current value of the sibling a 'values_for' declaration named,
+   or undefined where none was declared. It is remembered beside the options,
+   because that is what says whether they are still the answer to the question
+   being asked -- and without it every render would ask again, and every
+   answer would render again. */
+async function fetchEnumOptions(path, rerender, arg) {
+    S.enums[path] = {pending: true, arg};
+    let url = `/api/config/enum-options?path=${encodeURIComponent(path)}`;
+    if (arg !== undefined)
+        url += `&arg=${encodeURIComponent(JSON.stringify(arg))}`;
+    const r = await api(url);
+    S.enums[path] = (r.data && r.data.values) ? {values: r.data.values, arg}
+                  : {error: (r.data && r.data.error) || xl("Verbindung zum Gerät verloren"),
+                     arg};
     if (S.enums[path].error) msg(S.enums[path].error, "error");
     rerender();
 }
@@ -352,7 +361,7 @@ function colorOfHex(h) {
     return [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
 }
 
-function buildInput(node, cur, commit, commitQuiet, ctx) {
+function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
     // returns an element whose 'change' leads to commit(newModelValue)
     const cons = node.constraints || {}, ui = node.ui || {};
     const fixed = S.readOnly || node.configurability === 0;
@@ -375,8 +384,12 @@ function buildInput(node, cur, commit, commitQuiet, ctx) {
         let options = Array.isArray(cons.one_of) ? cons.one_of : null;
         if (options === null) {           // dynamic enum
             const state = S.enums[node.path];
-            if (!state) {
-                fetchEnumOptions(node.path, ctx.rerender);
+            // Neu fragen, sobald das Feld, für das die Optionen berechnet
+            // werden, ein anderes geworden ist -- und zwar im Entwurf, lange
+            // vor dem Speichern: die Stimmen einer Sprache, die noch gar
+            // nicht übernommen ist.
+            if (!state || state.arg !== enumArg) {
+                fetchEnumOptions(node.path, ctx.rerender, enumArg);
                 return el("select", {disabled: ""}, el("option", {}, "…"));
             }
             if (state.pending)
@@ -386,7 +399,10 @@ function buildInput(node, cur, commit, commitQuiet, ctx) {
                           el("option", {}, state.error));
             options = Object.entries(state.values).map(([value, o]) =>
                 ({value, label: (o && o.label) || value,
-                  tooltip: o && o.tooltip}));
+                  tooltip: o && o.tooltip,
+                  // ein Name, den der Dienst vergeben hat, wird nicht
+                  // übersetzt -- und steht deshalb auch in keinem Wörterbuch
+                  verbatim: !!(o && o.verbatim)}));
         }
         // a file waiting to be sent is already choosable, though the device
         // has never heard of it -- that is the whole point of choosing before
@@ -419,7 +435,7 @@ function buildInput(node, cur, commit, commitQuiet, ctx) {
             el("option", {value: ""}, ""),
             ...options.map(o => el("option",
                 {value: o.value, title: o.tooltip ? xl(o.tooltip) : null},
-                xl(o.label))));
+                o.verbatim ? o.label : xl(o.label))));
         sel.value = cur === null || cur === undefined ? "" : cur;
         return sel;
     }
@@ -612,7 +628,13 @@ function fieldRow(node, container, relKeys, ctx) {
         setIn(container, relKeys, v);
         ctx.markDirtyQuiet();
     };
-    const input = buildInput(node, cur, commit, commitQuiet, ctx);
+    // 'values_for' nennt ein Geschwisterfeld; sein Entwurfswert ist das
+    // Argument des Anbieters. Nicht gesetzt heißt null und nicht "kein
+    // Argument" -- der Anbieter soll den Unterschied sehen können.
+    const forKey = cons.one_of_for;
+    const enumArg = forKey === undefined ? undefined
+        : (getIn(container, relKeys.slice(0, -1).concat(forKey)) ?? null);
+    const input = buildInput(node, cur, commit, commitQuiet, ctx, enumArg);
     if (input.type === "checkbox") {
         input.checked = !!cur;
         // A boolean that was never answered is neither yes nor no. Without the
@@ -1497,6 +1519,14 @@ async function reloadData(passwd) {
     S.dirty = {};
     S.listsB = {};
     S.listsA = {};
+    // Die Optionen eines dynamischen Enums rechnet das Gerät aus seinem
+    // eigenen Zustand aus, und der ist gerade ein anderer geworden. Die
+    // Stimmenliste hängt an der gespeicherten Ansagesprache: ohne diese Zeile
+    // zeigte sie nach dem Speichern weiter die Stimmen der vorigen Sprache,
+    // und nur ein Neuladen der Seite brachte sie in Ordnung. Gefragt wird
+    // dabei nur nach den Feldern, die auch zu sehen sind -- ein zugeklappter
+    // Abschnitt kostet nichts.
+    S.enums = {};
     // S.adopted deliberately survives: saving re-loads the tree, and a
     // proposal the admin has cleared on purpose must not come back -- which
     // would also leave Speichern lit, inviting them to adopt it by accident.
