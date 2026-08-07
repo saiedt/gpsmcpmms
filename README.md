@@ -446,10 +446,19 @@ a human or an AI):
    from the Declaration the string came from; a host announces that one with
    `note_xlation_keys(*keys, kind="speech")`, since nothing else could know.
 2. **Fill it offline**, then **upload** it. Rows are applied one by one
-   (non-empty sets, blank clears, absent keeps; unknown keys skipped; unused keys
-   pruned). A cell repeating the German is a translation like any other — that is
-   how "take this one over unchanged" is said, and the only way to say it. Adding
-   an 8th language prompts which existing one to replace.
+   (non-empty sets, blank clears, absent keeps; unknown keys skipped). A cell
+   repeating the German is a translation like any other — that is how "take this
+   one over unchanged" is said, and the only way to say it. Adding an 8th
+   language prompts which existing one to replace.
+
+   Both steps work from the same set: every key the software uses **plus** every
+   key any dictionary already holds. The two differ more than one would expect —
+   a string a host only registers at runtime, such as the name of a service type
+   fetched from a server, is absent from the first set until something has asked
+   for it. Cutting a template from the narrow set left those rows out of the
+   file; uploading against it deleted their translations outright. Keys that
+   really have fallen out of the software are listed under `/api/lang/info` for
+   the admin, where removing them is a decision rather than a side effect.
 3. A **report CSV** is returned with a per-row status and translated/total counts.
 
 ---

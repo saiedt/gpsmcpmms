@@ -1057,6 +1057,28 @@ class ConfigManager:
         with self._lock:
             return sorted(self._active_xlation_keys)
 
+    def _translatable_keys_sorted(self):
+        """Everything worth putting in front of a translator: what the
+        software uses now, plus everything any dictionary already holds.
+
+        The two are not the same, and the difference is not academic. A
+        runtime string -- the name of an H4H service type -- enters the active
+        set only once something has asked the server, so between a restart and
+        the first such question the eight names are missing from it while
+        their translations sit in every dictionary. A template cut in that
+        window offered 190 rows instead of 198, and the eight best-reviewed
+        lines in the file were the ones it left out.
+
+        Keys that really have fallen out of the software are still listed for
+        the admin (see /api/lang/info), where removing them is a decision.
+        """
+        with self._lock:
+            keys = set(self._active_xlation_keys)
+            for lang_dict in self._lang_cache.values():
+                keys.update(k for k in lang_dict
+                            if k not in self.RESERVED_LANG_KEYS)
+        return sorted(keys)
+
     def _kinds_of(self, key):
         """What a display string is, for the template's second column.
 
@@ -1104,7 +1126,7 @@ class ConfigManager:
         writer = csv.writer(buf, delimiter=self.CSV_DELIMITER,
                             quoting=csv.QUOTE_ALL)
         writer.writerow(columns)
-        for key in self._active_keys_sorted():
+        for key in self._translatable_keys_sorted():
             row = [key, self._kinds_of(key)]
             row += [self._translation_of(r, key) for r in refs]
             row.append(self._translation_of(target, key))
@@ -1165,11 +1187,18 @@ class ConfigManager:
             if key:
                 uploaded[key] = row[tgt_idx].strip()
 
-        active = set(self._active_keys_sorted())
+        # The same set the template was cut from -- not merely what this run
+        # has got round to registering. "Not active right now" is not the same
+        # as "no longer used": the H4H service names enter the active set only
+        # once somebody has asked the server, so an upload made before that
+        # deleted all eight translations of them, silently, for a reason
+        # nobody could see. Keys that really have fallen out of the software
+        # are listed for the admin (see /api/lang/info), where removing them
+        # is a decision rather than a side effect.
+        known = set(self._translatable_keys_sorted())
         with self._lock:
             new_dict = {k: v for k, v in self._lang_cache.get(target, {}).items()
-                        if k not in self.RESERVED_LANG_KEYS
-                        and k in active}
+                        if k not in self.RESERVED_LANG_KEYS}
         # the uploaded rows edit only the keys they contain: a non-empty cell
         # sets a translation, a blank cell clears one; keys absent from the
         # file keep whatever translation they already had.
@@ -1177,7 +1206,7 @@ class ConfigManager:
         # only way to say "this one stays as it is" -- refusing it left every
         # such string looking untranslated for ever.
         for key, value in uploaded.items():
-            if key not in active:
+            if key not in known:
                 continue
             if value:
                 new_dict[key] = value
@@ -1189,9 +1218,9 @@ class ConfigManager:
         if failure:
             return None, failure, None
 
-        report = self._lang_report_csv(target, active, uploaded, new_dict)
-        translated = sum(1 for k in active if k in new_dict)
-        return report, translated, len(active)
+        report = self._lang_report_csv(target, known, uploaded, new_dict)
+        translated = sum(1 for k in known if k in new_dict)
+        return report, translated, len(known)
 
     def _lang_report_csv(self, target, active, uploaded, new_dict):
         buf = io.StringIO()
