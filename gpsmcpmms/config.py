@@ -50,6 +50,21 @@ class ConfigManager:
     # how many existing languages may be included as reference columns in a
     # downloaded translation template (context for the translator/AI)
     MAX_TEMPLATE_REFS = 3
+    # What a display string is, as far as it changes how it gets translated --
+    # not where it came from. A label has to stay short because it sits beside
+    # a field; a tooltip may be a whole sentence; a placeholder is usually a
+    # format example that is taken over as it is; a spoken text is read by a
+    # voice, where an abbreviation or a stray parenthesis is heard rather than
+    # seen; and the editor's own chrome is none of those.
+    XLATION_KINDS = ("label", "tooltip", "placeholder", "speech", "ui")
+    # which of them a Declaration key produces. A button caption is a label --
+    # same constraint, same brevity -- and the explanatory ones are tooltips
+    # whatever they are called.
+    DECL_KEY_KINDS = {
+        "label": "label", "acquire_button": "label",
+        "tooltip": "tooltip", "hint": "tooltip", "test_func_msg": "tooltip",
+        "placeholder": "placeholder",
+    }
     # bookkeeping a translation dictionary carries beside its translations;
     # never a key anybody translates
     LANG_FORMAT_KEY = "lang_format"
@@ -333,9 +348,9 @@ class ConfigManager:
         self._callback_registry[module_id] = callback
         self._func_registry[module_id] = func_dict or {}
         if isinstance(module_label, str) and module_label.strip():
-            self._note_xlation_key(module_label.strip())
+            self._note_xlation_key(module_label.strip(), "label")
         if isinstance(module_tooltip, str) and module_tooltip.strip():
-            self._note_xlation_key(module_tooltip.strip())
+            self._note_xlation_key(module_tooltip.strip(), "tooltip")
         self._harvest_xlation_keys(param_dict, self._func_registry[module_id])
         self._harvest_xlation_keys(type_dict, self._func_registry[module_id])
         self._check_values_for(param_dict, self._func_registry[module_id])
@@ -389,16 +404,26 @@ class ConfigManager:
                               "and everything stored for them.")
         return removed
 
-    def note_xlation_keys(self, *keys):
+    def note_xlation_keys(self, *keys, kind=None):
         """
         Registers display strings that do not originate from a Declaration --
         typically texts a module speaks or shows at runtime. Without this they
         would never reach a translation template, and the cleanup would treat
         them as orphans. Call once per run, next to register_params().
+
+        `kind` says what these strings are, and appears in the translation
+        template beside them (see XLATION_KINDS). Worth passing "speech" above
+        all: nothing else in the file could tell a translator that a sentence
+        will be read aloud rather than shown, and the two are not translated
+        the same way. A Declaration says it by itself; only a runtime string
+        has to be told.
         """
+        if kind is not None and kind not in self.XLATION_KINDS:
+            raise ValueError(f"note_xlation_keys(): unknown kind {kind!r}; "
+                             f"expected one of {sorted(self.XLATION_KINDS)}.")
         for key in keys:
             if isinstance(key, str) and key.strip():
-                self._note_xlation_key(key.strip())
+                self._note_xlation_key(key.strip(), kind)
 
     def _load_language_options(self):
         """The allow-list, seeded from LANGUAGE_OPTIONS on first start.
@@ -779,6 +804,9 @@ class ConfigManager:
     # ------------------------------------------------------------------
     def _init_lang_support(self):
         self._active_xlation_keys = set(self.OWN_UI_KEYS)
+        # what each display string is, so that a translator can see it: the
+        # same words are handled differently depending on where they appear
+        self._xlation_kinds = {key: {"ui"} for key in self.OWN_UI_KEYS}
         self._lang_cache = {}
         self._lang_dir = os.path.join(self.ui_dir, "lang")
         os.makedirs(self._lang_dir, exist_ok=True)
@@ -888,7 +916,7 @@ class ConfigManager:
                     isinstance(v, str) and v.strip()):
                 if k == "hint" and funcs and v.strip() in funcs:
                     continue
-                self._note_xlation_key(v.strip())
+                self._note_xlation_key(v.strip(), self.DECL_KEY_KINDS.get(k))
             elif isinstance(v, dict):
                 self._harvest_xlation_keys(v, funcs)
 
@@ -926,13 +954,17 @@ class ConfigManager:
                         f"'{key}' has to take the value of "
                         f"'{value['values_for']}' as its argument.") from None
 
-    def _note_xlation_key(self, xlation_key):
+    def _note_xlation_key(self, xlation_key, kind=None):
         # Nothing is written into the dictionaries here. A key they do not
         # carry is a key nobody has translated -- which is all the template
         # needs to know, and it leaves "the entry reads like the German" free
         # to mean what a translator would want it to mean.
         with self._lock:
             self._active_xlation_keys.add(xlation_key)
+            if kind:
+                # a string can be several things at once: the name of a
+                # service type is shown in a list *and* read aloud
+                self._xlation_kinds.setdefault(xlation_key, set()).add(kind)
 
     def _orphan_keys_of(self, lang_dict):
         # a key is orphaned when no active registration uses it (anymore)
@@ -1025,6 +1057,19 @@ class ConfigManager:
         with self._lock:
             return sorted(self._active_xlation_keys)
 
+    def _kinds_of(self, key):
+        """What a display string is, for the template's second column.
+
+        Sorted by XLATION_KINDS rather than alphabetically, so that the column
+        reads the same way down the whole file and "label, speech" never
+        appears once as "speech, label". Empty for a string whose host never
+        said -- better an empty cell than a guess, since the guess a
+        translator would act on is the one that costs an announcement.
+        """
+        with self._lock:
+            kinds = set(self._xlation_kinds.get(key) or ())
+        return ", ".join(k for k in self.XLATION_KINDS if k in kinds)
+
     def _translation_of(self, lang, key):
         """The stored translation of `key` in `lang`, or "" if there is none.
 
@@ -1045,7 +1090,11 @@ class ConfigManager:
             existing = set(self._lang_cache)
         refs = [r for r in refs
                 if r in existing and r not in ("de", target)][:self.MAX_TEMPLATE_REFS]
-        columns = ["de"] + refs + [target]
+        # "kind" travels second, right beside the string it describes, and is
+        # not a language: the upload finds its columns by name and ignores
+        # every other one, so nothing has to be taught about it. A language
+        # code is two or three letters, so the name cannot collide with one.
+        columns = ["de", "kind"] + refs + [target]
 
         buf = io.StringIO()
         # QUOTE_ALL: every field is wrapped in double quotes (RFC 4180) so that
@@ -1056,7 +1105,7 @@ class ConfigManager:
                             quoting=csv.QUOTE_ALL)
         writer.writerow(columns)
         for key in self._active_keys_sorted():
-            row = [key]
+            row = [key, self._kinds_of(key)]
             row += [self._translation_of(r, key) for r in refs]
             row.append(self._translation_of(target, key))
             writer.writerow(row)

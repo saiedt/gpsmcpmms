@@ -46,8 +46,20 @@ The file is a UTF-8 text file. Its columns are:
 | Column        | Meaning                                                          |
 |---------------|------------------------------------------------------------------|
 | `de`          | The German source text — this is also the key. **Do not change it.** |
+| `kind`        | What the text is and where it appears (see below). **Do not change it.** |
 | reference(s)  | Existing translations, shown only for reference. **Do not change them.** |
 | `<code>` (last) | The target language — **this is the column you fill in.**       |
+
+The `kind` column tells you what matters about a row. A text can be several
+things at once, and then both are named, e.g. `label, speech`.
+
+| `kind`        | What it means for your translation                                |
+|---------------|-------------------------------------------------------------------|
+| `label`       | A caption beside a field or on a button — **keep it short**, or the layout wraps. |
+| `tooltip`     | Explanatory text behind the question mark — room for a full sentence. |
+| `placeholder` | A format example inside an input, such as a phone number. Usually **taken over unchanged** (see below). |
+| `speech`      | **Read aloud** by the device. Abbreviations, brackets and symbols are spoken as they stand; write it the way you would say it. A colon produces a short pause, a line break a full second. |
+| `ui`          | The editor's own interface — buttons, messages, headings.         |
 
 Fields are separated by a vertical bar `|`, and every field is wrapped in
 double quotes (so that commas and semicolons inside a text can never split a

@@ -125,7 +125,7 @@ Other API methods:
 | `config_ready(path=None)` | `True` if no *relevant* leaf under the match is still unset. `None`/`""`/`"*"` = whole tree. Skips empty min-0 lists and fields whose relevance condition is false. |
 | `protected_params_ready()` | Like `config_ready`, restricted to `protected` parameters. |
 | `handle_value_event(value, alt_target_paths)` | Deliver a backend-captured value to a waiting editor; `True` if one took it (see 4.9.3). |
-| `note_xlation_keys(*keys)` | Register display strings a module only uses at runtime, so they reach the translation templates. |
+| `note_xlation_keys(*keys, kind=None)` | Register display strings a module only uses at runtime, so they reach the translation templates. `kind` says what they are — pass `"speech"` for anything read aloud. |
 | `translate(key, lang)` | The `lang` rendering of such a string, falling back to the German original. Accepts `de` or `de-DE`. |
 | `switch_to_app_logger(logger)` | Inject the application logger (once per run). |
 | `discard_module(module_id)` | The module has no parameters any more: the declaration is dropped and everything persisted for it is deleted. |
@@ -431,9 +431,20 @@ Translations are added/updated through a **CSV round-trip** (no timeouts, easy f
 a human or an AI):
 
 1. **Download a template** for the target language — columns: `de` (source/key),
-   up to three chosen reference languages, and the target column (pre-filled).
-   The file is UTF-8 (with BOM), **pipe-separated (`|`)** and every field is
-   **fully quoted** (RFC 4180), so embedded `,`/`;` can never split a row.
+   `kind`, up to three chosen reference languages, and the target column
+   (pre-filled). The file is UTF-8 (with BOM), **pipe-separated (`|`)** and every
+   field is **fully quoted** (RFC 4180), so embedded `,`/`;` can never split a
+   row.
+
+   **`kind`** says what a string *is*, because the same words are translated
+   differently depending on where they appear: `label` (short, sits beside a
+   field), `tooltip` (a sentence), `placeholder` (a format example, usually taken
+   over as it is), `speech` (read aloud — abbreviations and punctuation are
+   heard, not seen) and `ui` (the editor's own chrome). A string can be several
+   at once and then says so: a service name shown in a list *and* spoken in an
+   announcement reads `label, speech`. Everything but `speech` derives itself
+   from the Declaration the string came from; a host announces that one with
+   `note_xlation_keys(*keys, kind="speech")`, since nothing else could know.
 2. **Fill it offline**, then **upload** it. Rows are applied one by one
    (non-empty sets, blank clears, absent keeps; unknown keys skipped; unused keys
    pruned). A cell repeating the German is a translation like any other — that is

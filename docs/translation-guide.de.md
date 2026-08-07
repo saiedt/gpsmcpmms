@@ -44,8 +44,20 @@ Die Datei ist eine UTF-8-Textdatei. Ihre Spalten sind:
 | Spalte          | Bedeutung                                                              |
 |-----------------|-----------------------------------------------------------------------|
 | `de`            | Der deutsche Quelltext — zugleich der Schlüssel. **Nicht verändern.**  |
+| `kind`          | Was der Text ist und wo er erscheint (siehe unten). **Nicht verändern.** |
 | Referenz(en)    | Bestehende Übersetzungen, nur zur Ansicht. **Nicht verändern.**        |
 | `<code>` (letzte) | Die Zielsprache — **diese Spalte füllen Sie aus.**                  |
+
+Die Spalte `kind` sagt Ihnen, worauf es bei dieser Zeile ankommt. Ein Text kann
+mehreres zugleich sein; dann steht beides da, etwa `label, speech`.
+
+| `kind`        | Was das für die Übersetzung heißt                                     |
+|---------------|-----------------------------------------------------------------------|
+| `label`       | Beschriftung neben einem Feld oder auf einer Schaltfläche — **kurz halten**, sonst bricht die Anzeige um. |
+| `tooltip`     | Erklärender Text hinter dem Fragezeichen — hier ist Platz für einen ganzen Satz. |
+| `placeholder` | Ein Formatbeispiel im Eingabefeld, etwa eine Rufnummer. Meist **unverändert übernehmen** (siehe unten). |
+| `speech`      | Wird vom Gerät **vorgelesen**. Abkürzungen, Klammern und Sonderzeichen werden mitgesprochen; schreiben Sie es so, wie man es sagt. Ein Doppelpunkt erzeugt eine kurze, ein Zeilenumbruch eine ganze Sekunde Pause. |
+| `ui`          | Bedienoberfläche des Editors selbst — Schaltflächen, Meldungen, Überschriften. |
 
 Die Felder sind durch einen senkrechten Strich `|` getrennt, und jedes Feld ist
 in doppelte Anführungszeichen eingeschlossen (damit Kommas und Semikolons
