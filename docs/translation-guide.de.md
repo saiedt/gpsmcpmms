@@ -165,14 +165,15 @@ einer klaren Meldung abgelehnt. Laden Sie also stets die `.csv` hoch.
 
 ## Schritt 5 — Bericht lesen
 
-Die **Status**-Spalte des Berichts bedeutet:
+Die **Status**-Spalte des Berichts ist englisch und bedeutet:
 
-| Status                                | Bedeutung                                                        |
-|---------------------------------------|------------------------------------------------------------------|
-| `übernommen`                          | Ihre Übersetzung wurde übernommen                                |
-| `keine Übersetzung`                   | das Feld wurde leer gelassen                                     |
-| `nicht in Datei`                      | die Zeile war nicht in Ihrer Datei; der bisherige Wert bleibt    |
-| `übersprungen: unbekannter Schlüssel` | dieser deutsche Schlüssel wird nicht mehr verwendet und wurde übergangen |
+| Status                 | Bedeutung                                                     |
+|------------------------|---------------------------------------------------------------|
+| `applied`              | Ihre Übersetzung wurde übernommen                              |
+| `no translation`       | das Feld wurde leer gelassen                                  |
+| `unchanged`            | die Zeile war nicht in Ihrer Datei; der bisherige Wert bleibt  |
+| `not in file`          | die Zeile war nicht in Ihrer Datei und hatte auch bisher keine Übersetzung |
+| `skipped: unknown key` | dieser Schlüssel wird nicht mehr verwendet und wurde übergangen |
 
 Wechseln Sie die Sprachauswahl auf Ihren Zielcode, um das Ergebnis direkt im
 Editor zu sehen.

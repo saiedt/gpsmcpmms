@@ -1295,16 +1295,15 @@ class ConfigManager:
         for key in sorted(active):
             value = new_dict.get(key, "")
             if key in uploaded:
-                status = ("übernommen" if value else "keine Übersetzung")
+                status = "applied" if value else "no translation"
             elif value:
-                status = "unverändert"
+                status = "unchanged"
             else:
-                status = "nicht in Datei"
+                status = "not in file"
             writer.writerow([key, value, status])
         for key, value in uploaded.items():
             if key not in active:
-                writer.writerow([key, value,
-                                 "übersprungen: unbekannter Schlüssel"])
+                writer.writerow([key, value, "skipped: unknown key"])
         return "﻿".encode("utf-8") + buf.getvalue().encode("utf-8")
 
     @staticmethod
@@ -1776,15 +1775,15 @@ class ConfigManager:
             if (not name or name != raw or name in (".", "..") or
                     ".." in name or set(name) & {"/", "\\"} or
                     min(name) <= ' '):
-                return jsonify({"error": "Dateiname nicht zulässig"}), 400
+                return jsonify({"error": "File name not allowed"}), 400
 
             pattern = constraints.get("patterned_string")
             if pattern and not re.fullmatch(pattern, name):
-                return jsonify({"error": "Dateityp nicht zulässig"}), 400
+                return jsonify({"error": "File type not allowed"}), 400
 
             payload = upload.read(self.MAX_UPLOAD_BYTES + 1)
             if len(payload) > self.MAX_UPLOAD_BYTES:
-                return jsonify({"error": "Datei zu groß"}), 400
+                return jsonify({"error": "File too large"}), 400
 
             module, _, rest = path.partition(".")
             if not rest:
@@ -1797,7 +1796,7 @@ class ConfigManager:
                     f.write(payload)
             except OSError as exc:
                 self._logger.error(f"Storing '{target}' failed: {exc}")
-                return jsonify({"error": "Ungültige Datei"}), 500
+                return jsonify({"error": "Invalid file"}), 500
 
             update = name
             for part in reversed([p for p in rest.split(".") if p]):

@@ -160,14 +160,15 @@ always upload the `.csv`.
 
 ## Step 5 — Read the report
 
-The report's **status** column (its words are in German) means:
+The report's **status** column means:
 
-| Status                              | Meaning                                                   |
-|-------------------------------------|-----------------------------------------------------------|
-| `übernommen`                        | your translation was applied                              |
-| `keine Übersetzung`                 | the cell was left blank                                   |
-| `nicht in Datei`                    | the row was not in your file; the previous value was kept |
-| `übersprungen: unbekannter Schlüssel` | that German key is no longer in use and was ignored     |
+| Status                 | Meaning                                                        |
+|------------------------|----------------------------------------------------------------|
+| `applied`              | your translation was applied                                   |
+| `no translation`       | the cell was left blank                                        |
+| `unchanged`            | the row was not in your file; the previous value was kept      |
+| `not in file`          | the row was not in your file and had no translation before     |
+| `skipped: unknown key` | that key is no longer in use and was ignored                   |
 
 Switch the language selector to your target code to see the result live in the
 editor.

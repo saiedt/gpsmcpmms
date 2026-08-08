@@ -1429,8 +1429,8 @@ function renderLangPanel(mode) {
     };
     boxes.forEach(b => b.cb.addEventListener("change", limit));
     const row2 = boxes.length ? el("div", {class: "lang-panel-row wrap"},
-        el("span", {}, xl("Deutsche Schlüssel übersetzen, mit bis zu 3 "
-                          + "Sprachen als weiterem Kontext (bitte wählen):")),
+        el("span", {}, xl("Translating the source keys, with up to 3 "
+                          + "languages as further context (please choose):")),
         ...boxes.map(b => b.label)) : null;
 
     // row 3 -- the sequence, spelled out. Three steps that always ran in this
