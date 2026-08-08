@@ -572,7 +572,17 @@ const PROBE_VERDICT = {
     missing:    () => [xl("Pfad nicht vorhanden"), "error"],
 };
 
-async function probeValue(node, value) {
+/* `undo` is given only where there is something to go back to -- when the value
+   has just been typed. Two of the seven verdicts can be nothing but a typo: a
+   name that resolves to nothing, and a path whose parent folder does not exist
+   either. Those take the field back to what it held before, because keeping
+   them means saving a value the device has already said it cannot use.
+
+   The other two failures are left standing on purpose. A host that resolves but
+   stays silent is a speakerphone switched off while somebody configures it, and
+   an absent path whose parent exists is a log file that gets written later --
+   refusing either would make the editor unusable exactly when it is needed. */
+async function probeValue(node, value, undo) {
     if (typeof value !== "string" || value.trim() === "") return;
     const r = await api("/api/config/probe",
                         {json: {path: node.path, value: value}});
@@ -582,7 +592,12 @@ async function probeValue(node, value) {
         return msg(`${xl("Prüfung fehlgeschlagen")}: ` +
                    `${d.error || xl("Verbindung zum Gerät verloren")}`,
                    "error");
-    msg(...verdict(d));
+    const [text, level] = verdict(d);
+    if (level === "error" && undo) {
+        undo();
+        return msg(`${text} — ${xl("Wert zurückgenommen")}`, "error");
+    }
+    msg(text, level);
 }
 
 function probeButton(node, currentValue) {
@@ -616,11 +631,17 @@ function fieldRow(node, container, relKeys, ctx) {
         ctx.markDirtyQuiet();
     }
     const commit = (v) => {
+        const previous = cur;
         setIn(container, relKeys, v);
         ctx.markDirty();
         ctx.rerender();
         // the answer arrives long after the re-render, so the message survives
-        if (PROBE_TYPES.has(cons.type)) probeValue(node, v);
+        // -- and so must the way back, for a verdict that refuses the value
+        if (PROBE_TYPES.has(cons.type))
+            probeValue(node, v, () => {
+                setIn(container, relKeys, previous);
+                ctx.rerender();
+            });
     };
     // Zurücknehmen während des Renderns: kein erneutes Rendern, sonst dreht
     // sich das im Kreis -- dieselbe Vorsicht wie beim likely_val oben.

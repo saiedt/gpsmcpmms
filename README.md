@@ -128,38 +128,7 @@ Other API methods:
 | `note_xlation_keys(*keys, kind=None)` | Register display strings a module only uses at runtime, so they reach the translation templates. `kind` says what they are — pass `"speech"` for anything read aloud. |
 | `translate(key, lang)` | The `lang` rendering of such a string, falling back to the German original. Accepts `de` or `de-DE`. |
 | `switch_to_app_logger(logger)` | Inject the application logger (once per run). |
-| `discard_module(module_id)` | The module has no parameters any more: the declaration is dropped and everything persisted for it is deleted. |
-
-### Discarding a module's parameters
-
-`discard_module()` exists for a two-stage provisioning: a value that has to be
-present while a distributor prepares a device class, and must not be present on
-the devices cloned from it afterwards. A provisioning key is the typical case.
-
-Hiding the field would not do — what matters is that the value is off the card,
-and only deleting the persisted data achieves that, since the declaration would
-otherwise restore it at the next start. It is deliberately not the same as
-registering an empty `param_dict`: an empty dict is a shape a module can arrive
-at by accident, and the effect here is the loss of everything that module had
-stored.
-
-The module decides for itself, and it may do so either instead of registering or
-later in the same run — whenever it can first tell. In the appliance this project
-grew from, the speech module cannot tell at import time: what counts as
-"complete" is a recording for every sentence the *application* would speak, and
-the application registers after it. So it declares its parameters as usual, and
-gives them up at the moment the application hands it the list:
-
-```python
-# in the speech module, at the moment the application registers its sentences
-if len(self.voiced_languages()) >= config_mgr.MAX_LANGUAGES:
-    config_mgr.discard_module("5tts")      # …and the API key with it
-```
-
-The call returns `True` if there was anything to remove, and invalidates the
-editor session, since the schema it is showing has just changed. Registering the
-module again on a later run is the way back: if a recording is deleted, the next
-start finds something missing and keeps the parameters.
+| `discard_module(module_id)` | The module has no parameters any more: the declaration is dropped and everything persisted for it is deleted. See [Giving up a module's parameters](#giving-up-a-modules-parameters). |
 
 ---
 
@@ -211,6 +180,7 @@ A Declaration is a dict with any of these keys (`type` is mandatory):
 | Property | For | Meaning |
 |----------|-----|---------|
 | `values` | `enum` | `{id: {"label": …, "tooltip"?: …}}`, or a **function name** (resolved via `func_dict`) for dynamic options. |
+| `values_for` | dynamic `enum` | Name of a sibling whose current value the options are computed *for*; it is passed to the provider. See *Dynamic enums* under [Advanced features](#advanced-features). |
 | `bound_to` | `int`/`float` | `"min..max"` (either side omittable). |
 | `bound_to` | `string` | a Python regular expression (without the leading `r`). |
 | `s2g_scale` | `int`/`float` | `"*N"` or `"/N"` — the editor shows the value scaled and stores it unscaled (UI only). |
@@ -329,7 +299,11 @@ and (by kind) `value`, `children` or `item_template`.
 - **Anti-CSRF.** Mutating requests require a custom header and a same-origin
   `Origin`; no cookies are used.
 - **Factory-password notice.** While `ui_passwd` still equals the factory default,
-  the editor shows a warning and an *Exit Admin Mode* action that forces a change.
+  the editor shows a warning banner. In admin mode the banner also offers *Exit
+  admin mode*, which asks for a new password and will not complete until one is
+  given — cancel it and admin mode simply stays open. It is a prompt, not an
+  enforcement: *End session* leaves without asking, so a distributor who never
+  uses the banner's button is never stopped.
 
 **Update semantics.** On `POST /api/config/update` the backend normalizes and
 strictly validates each value; valid values are applied and saved, invalid ones
@@ -551,15 +525,30 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   a value ever arrives, and so the only moment anyone can be told.
 - **Testable parameters** — `test_func` + `test_func_msg` add a Test button and a
   confirmation modal, executed via `/api/config/test`.
-- **Verifiable values** — a `pingable` or `path` field is checked as soon as it is
-  entered, and again whenever its *Prüfen* button is pressed. The check runs on the
-  device, not in the browser: the file system is the device's, and what matters
-  about a host is whether *the device* reaches it — the browser may be on the other
-  interface. Each verdict is three-way rather than yes/no, because "not there" has
-  very different meanings: unresolvable vs. resolving-but-silent for a host,
-  missing vs. not-yet-created for a path. The check is advisory — the value is
-  saved either way, since a host may legitimately be offline and a folder may only
-  be created on first use.
+- **Backend-verified values** — every field is checked, but most of them in the
+  browser, against what the declaration says. A `pingable` or `path` field is
+  different: it is checked on the **device**, because only the device can answer.
+  The file system is its own, and what matters about a host is whether *it*
+  reaches it — the browser may be on the other interface. The check runs as soon
+  as the value is entered, and again whenever *Prüfen* is pressed.
+
+  Each verdict is three-way rather than yes/no, because "not there" carries two
+  very different meanings, and they get different treatment:
+
+  | Verdict | Meaning | Effect |
+  |---------|---------|--------|
+  | `reachable` / `file` / `directory` | it is there | accepted |
+  | `silent` | the host resolves but does not answer | accepted, reported |
+  | `creatable` | the path is absent, its parent folder is not | accepted, reported |
+  | `unresolvable` | the name resolves to nothing | **refused** |
+  | `missing` | not even the parent folder exists | **refused** |
+
+  The two refusals are the ones that can only be a typo, and the field goes back
+  to what it held before. The other two are legitimate states of a working
+  device: a speakerphone can be switched off while it is configured, and a log
+  file is created on first use. Pressing *Prüfen* on a value already in the form
+  only ever reports — asking for a check is not asking for the value to be taken
+  away.
 - **Proposed values** — a `likely_val` is offered by the editor rather than by the
   backend: the field arrives pre-filled and the module counts as unsaved, so the
   admin either accepts the proposal by saving or types over it. Clearing the field
@@ -609,6 +598,37 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   A generated sentence cannot itself be a translation key, so a provider formats
   its own templates and should announce them with `note_xlation_keys()` — otherwise
   they reach no translation template until someone has already seen the hint.
+
+### Giving up a module's parameters
+
+`discard_module()` exists for a two-stage provisioning: a value that has to be
+present while a distributor prepares a device class, and must not be present on
+the devices cloned from it afterwards. A provisioning key is the typical case.
+
+Hiding the field would not do — what matters is that the value is off the card,
+and only deleting the persisted data achieves that, since the declaration would
+otherwise restore it at the next start. It is deliberately not the same as
+registering an empty `param_dict`: an empty dict is a shape a module can arrive
+at by accident, and the effect here is the loss of everything that module had
+stored.
+
+The module decides for itself, and it may do so either instead of registering or
+later in the same run — whenever it can first tell. In the appliance this project
+grew from, the speech module cannot tell at import time: what counts as
+"complete" is a recording for every sentence the *application* would speak, and
+the application registers after it. So it declares its parameters as usual, and
+gives them up at the moment the application hands it the list:
+
+```python
+# in the speech module, at the moment the application registers its sentences
+if len(self.voiced_languages()) >= config_mgr.MAX_LANGUAGES:
+    config_mgr.discard_module("5tts")      # …and the API key with it
+```
+
+The call returns `True` if there was anything to remove, and invalidates the
+editor session, since the schema it is showing has just changed. Registering the
+module again on a later run is the way back: if a recording is deleted, the next
+start finds something missing and keeps the parameters.
 
 ---
 
