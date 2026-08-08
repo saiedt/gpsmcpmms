@@ -12,34 +12,39 @@ as you need and continue later at any point.
 - You need the **administrator password** (the one set when the device was
   provisioned).
 - Only one administrator can edit at a time.
-- To read the editor itself in English, choose **en** in the language selector
-  (**Sprache / Language**) in the top row. The button names below then appear in
-  English; their German originals are given in brackets, because a new device
-  starts in German.
+- The editor opens in your browser's language if a translation for it exists, and
+  in English otherwise. **Language** in the top row switches it at any time; the
+  button names below are the English ones.
 
 ---
 
 ## Step 1 — Unlock administrator mode
 
-1. In the top row, click **Show protected parameters**
-   *(Geschützte Parameter anzeigen)*.
+1. In the top row, click **Show protected parameters**.
 2. Enter the administrator password.
 
-A **Manage translations** *(Übersetzungen verwalten)* button now appears.
+Two buttons now appear: **Add new translation** and **Edit existing
+translation**.
 
 ---
 
 ## Step 2 — Download a template
 
-1. Click **Manage translations**.
-2. Under **Target language** *(Zielsprache)*, either pick an existing language,
-   or choose **New language code** *(Neuer Sprachcode)* and type a 2–3 letter
-   code such as `fr`, `it` or `es`.
-3. Under **Reference languages (max. 3)** *(Referenzsprachen (max. 3))*, tick up
-   to three existing languages to include as helper columns. They give a human
-   translator — or an AI assistant — extra context.
-4. Click **Download template** *(Vorlage herunterladen)*. A file named
-   `<code>.csv` (for example `fr.csv`) is saved to your computer.
+1. Click **Add new translation** for a language the device does not have yet, or
+   **Edit existing translation** to improve one it does. (The second is disabled
+   while there is nothing to edit, and says so: *No translation exists yet*.)
+2. For a new language, type a 2–3 letter **Language code** such as `fr`, `it` or
+   `es`, and the **Language name** as speakers of it write it — `Français`, not
+   `French`. That name is what every language menu will show.
+3. On the next row, tick up to three existing languages as helper columns:
+   *Translating the source keys, with up to 3 languages as further context*. They
+   give a human translator — or an AI assistant — something to compare against.
+4. Click **Download CSV**. A file named `<code>.csv` (for example `fr.csv`) is
+   saved to your computer.
+
+> If seven languages already exist, adding an eighth asks which one to drop
+> first — *Choose the language to be replaced*. English and German cannot be
+> dropped.
 
 The file is a UTF-8 text file. Its columns are:
 
@@ -70,20 +75,26 @@ row).
 
 ## Step 3 — Fill in the translations
 
-- Edit **only the last column** (your target language). Leave the German and
-  reference columns exactly as they are — they are the keys and the context.
-- A **blank** cell means "not translated yet"; that entry will simply show the
-  German text, and the language counts as incomplete until it is filled. You may
+- Edit **only the last column** (your target language). Leave `key`, `src`, `kind`
+  and the reference columns exactly as they are — they are the keys and the
+  context.
+- A **blank** cell means "not translated yet"; that entry will show the source
+  text instead, and the language counts as incomplete until it is filled. You may
   translate some entries now and the rest later.
-- When an entry is to be **taken over unchanged**, **repeat the German text** in
+- When an entry is to be **taken over unchanged**, **repeat the source text** in
   your column. Leaving it blank will not do: blank means "still missing",
   repeated means "I looked at this, and it stays". It comes up more often than
   you would think — a word that reads the same in your language ("OK"), and
   fields that are not a sentence at all, such as the format example
   `004961501834300` for a phone number.
+- Watch the `src` column: not every key is in the same language. This library
+  writes English ones, and an application built on it may write its own in
+  another — so a row may present you with German to translate from, and the `en`
+  column beside it is then the one to lean on.
 - You can translate by hand, or hand the whole file to an AI assistant
-  (e.g. *"please fill the last column with the French translation"*). The German
-  source and the reference columns give it everything it needs.
+  (e.g. *"please fill the last column with the French translation; rows marked
+  `placeholder` are format examples, rows marked `speech` are read aloud"*). The
+  source text, the `kind` and the reference columns give it everything it needs.
 
 ### Editing in Microsoft Excel (please read)
 
@@ -145,9 +156,10 @@ a small helper formula:
 
 ## Step 4 — Upload the file
 
-1. Back in **Manage translations**, next to **Upload translation file**
-   *(Übersetzungsdatei hochladen)*, choose your filled `<code>.csv`.
-2. Click **Upload** *(Hochladen)*.
+1. Back in the translation panel, the third row spells out the sequence:
+   *Translation file: start by* … *then* … *finally*. Click
+   **Select completed CSV** and choose your filled `<code>.csv`.
+2. Click **Upload the selected CSV**.
 3. A report named `<code>.report.csv` downloads automatically, and a short
    message shows how many entries were translated (e.g. *"37 / 152 translated"*).
 
@@ -178,11 +190,14 @@ editor.
 ## Good to know
 
 - **Up to seven languages** can exist at once. If you add an eighth, the editor
-  asks which existing language to remove (German can never be removed).
-- **German (`de`) is the source** and cannot be edited or removed here — it
-  comes from the software itself.
-- Translations may stay **partial**: anything untranslated is shown in German,
-  and re-downloading the template shows your saved progress, so you can always
-  continue later.
-- When you are finished, click **End session** *(Sitzung beenden)* so that
-  another administrator can edit.
+  asks which existing language to remove. **English** and **German** cannot be
+  removed: English is what the keys are written in, German is what this project
+  ships for.
+- A language needs no translation of the keys already written in it — they count
+  as done. That is why a device whose application is written in German reports
+  German as complete without anyone translating its labels into German.
+- Translations may stay **partial**: anything untranslated shows its source
+  text, and re-downloading the template shows your saved progress, so you can
+  always continue later.
+- When you are finished, click **End session** so that another administrator
+  can edit.

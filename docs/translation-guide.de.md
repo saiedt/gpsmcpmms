@@ -13,8 +13,9 @@ später weitermachen.
 - Sie benötigen das **Administrator-Passwort** (das bei der Inbetriebnahme des
   Geräts festgelegt wurde).
 - Es kann immer nur ein Administrator gleichzeitig bearbeiten.
-- Der Editor startet auf Deutsch. Über die Sprachauswahl (**Sprache**) in der
-  obersten Zeile können Sie jederzeit eine andere Sprache wählen.
+- Der Editor startet in der Sprache Ihres Browsers, sofern es dafür eine
+  Übersetzung gibt, sonst auf Englisch. Über die Sprachauswahl (**Sprache**)
+  in der obersten Zeile können Sie jederzeit wechseln.
 
 ---
 
@@ -23,21 +24,31 @@ später weitermachen.
 1. Klicken Sie in der obersten Zeile auf **Geschützte Parameter anzeigen**.
 2. Geben Sie das Administrator-Passwort ein.
 
-Nun erscheint die Schaltfläche **Übersetzungen verwalten**.
+Nun erscheinen zwei Schaltflächen: **Neue Übersetzung hinzufügen** und
+**Vorhandene Übersetzung bearbeiten**.
 
 ---
 
-## Schritt 2 — Vorlage herunterladen
+## Schritt 2 — Vorlage (CSV) herunterladen
 
-1. Klicken Sie auf **Übersetzungen verwalten**.
-2. Wählen Sie unter **Zielsprache** entweder eine bestehende Sprache aus, oder
-   wählen Sie **Neuer Sprachcode** und geben Sie einen 2–3 Buchstaben langen
-   Code ein, z. B. `fr`, `it` oder `es`.
-3. Setzen Sie unter **Referenzsprachen (max. 3)** bis zu drei Häkchen bei
-   bestehenden Sprachen. Diese werden als zusätzliche Hilfsspalten aufgenommen
-   und geben einem menschlichen Übersetzer — oder einer KI — nützlichen Kontext.
-4. Klicken Sie auf **Vorlage herunterladen**. Eine Datei namens `<code>.csv`
+1. Klicken Sie auf **Neue Übersetzung hinzufügen** für eine Sprache, die das
+   Gerät noch nicht hat, oder auf **Vorhandene Übersetzung bearbeiten**, um
+   eine vorhandene zu verbessern. (Die zweite ist gesperrt, solange es nichts
+   zu bearbeiten gibt, und sagt das auch: *Noch keine Übersetzung vorhanden*.)
+2. Geben Sie für eine neue Sprache einen 2–3 Buchstaben langen **Sprachcode**
+   ein, z. B. `fr`, `it` oder `es`, und als **Sprachname**, wie die Sprache sich
+   selbst nennt — `Français`, nicht `Französisch`. Unter diesem Namen steht sie
+   danach in jeder Sprachauswahl.
+3. Setzen Sie in der Zeile darunter bis zu drei Häkchen bei bestehenden
+   Sprachen: *Quellschlüssel übersetzen, mit bis zu 3 Sprachen als weiterem
+   Kontext*. Sie geben einem menschlichen Übersetzer — oder einer KI — etwas zum
+   Vergleichen.
+4. Klicken Sie auf **CSV herunterladen**. Eine Datei namens `<code>.csv`
    (z. B. `fr.csv`) wird auf Ihrem Rechner gespeichert.
+
+> Bestehen bereits sieben Sprachen, fragt die achte, welche dafür entfallen
+> soll — *Zu ersetzende Sprache wählen*. Englisch und Deutsch lassen sich nicht
+> entfernen.
 
 Die Datei ist eine UTF-8-Textdatei. Ihre Spalten sind:
 
@@ -68,22 +79,28 @@ innerhalb eines Textes eine Zeile niemals zerreißen können).
 
 ## Schritt 3 — Übersetzungen eintragen
 
-- Bearbeiten Sie **nur die letzte Spalte** (Ihre Zielsprache). Lassen Sie die
-  deutsche Spalte und die Referenzspalten unverändert — sie sind die Schlüssel
-  und der Kontext.
+- Bearbeiten Sie **nur die letzte Spalte** (Ihre Zielsprache). Lassen Sie
+  `key`, `src`, `kind` und die Referenzspalten unverändert — sie sind die
+  Schlüssel und der Kontext.
 - Ein **leeres** Feld bedeutet „noch nicht übersetzt“; dieser Eintrag erscheint
-  dann einfach auf Deutsch, und die Sprache gilt so lange als unvollständig.
-  Sie dürfen einige Einträge jetzt und den Rest später übersetzen.
+  dann im Wortlaut seines Schlüssels, und die Sprache gilt so lange als
+  unvollständig. Sie dürfen einige Einträge jetzt und den Rest später übersetzen.
 - Soll ein Eintrag **unverändert übernommen** werden, dann **wiederholen Sie den
-  deutschen Text** in Ihrer Spalte. Leer lassen genügt dafür nicht: leer heißt
+  Text des Schlüssels** in Ihrer Spalte. Leer lassen genügt dafür nicht: leer heißt
   „fehlt noch“, wiederholt heißt „ich habe hingesehen, so bleibt es“. Das kommt
   öfter vor, als man denkt — bei einem Wort, das in Ihrer Sprache genauso lautet
   („OK“), und bei Feldern, hinter denen gar kein Satz steckt, etwa dem
   Formatbeispiel `004961501834300` für eine Rufnummer.
+- Achten Sie auf die Spalte `src`: nicht jeder Schlüssel ist in derselben
+  Sprache. Die Bibliothek schreibt englische, eine darauf aufbauende Anwendung
+  darf eigene in einer anderen schreiben — eine Zeile kann Ihnen also Deutsch
+  zum Übersetzen vorlegen, und dann ist die Spalte `en` daneben die, an der Sie
+  sich festhalten.
 - Sie können von Hand übersetzen oder die gesamte Datei einem KI-Assistenten
   übergeben (z. B. *„Bitte fülle die letzte Spalte mit der französischen
-  Übersetzung“*). Der deutsche Quelltext und die Referenzspalten liefern alles
-  Nötige.
+  Übersetzung; Zeilen mit `placeholder` sind Formatbeispiele, Zeilen mit
+  `speech` werden vorgelesen“*). Quelltext, `kind` und die Referenzspalten
+  liefern alles Nötige.
 
 ### Bearbeiten in Microsoft Excel (bitte lesen)
 
@@ -149,9 +166,10 @@ Zeilen daher mit einer kleinen Hilfsformel:
 
 ## Schritt 4 — Datei hochladen
 
-1. Wählen Sie zurück in **Übersetzungen verwalten** neben
-   **Übersetzungsdatei hochladen** Ihre ausgefüllte `<code>.csv`.
-2. Klicken Sie auf **Hochladen**.
+1. Die dritte Zeile des Bereichs nennt die Reihenfolge:
+   *Übersetzungsdatei: zuerst* … *dann* … *zuletzt*. Klicken Sie auf
+   **Fertige CSV auswählen** und wählen Sie Ihre ausgefüllte `<code>.csv`.
+2. Klicken Sie auf **Ausgewählte CSV hochladen**.
 3. Ein Bericht namens `<code>.report.csv` wird automatisch heruntergeladen, und
    eine kurze Meldung zeigt, wie viele Einträge übersetzt wurden
    (z. B. *„37 / 152 übersetzt“*).
@@ -183,12 +201,16 @@ Editor zu sehen.
 ## Gut zu wissen
 
 - Es können **bis zu sieben Sprachen** gleichzeitig bestehen. Fügen Sie eine
-  achte hinzu, fragt der Editor, welche bestehende Sprache entfernt werden soll
-  (Deutsch kann nie entfernt werden).
-- **Deutsch (`de`) ist die Quelle** und kann hier weder bearbeitet noch entfernt
-  werden — es kommt aus der Software selbst.
-- Übersetzungen dürfen **unvollständig** bleiben: alles Nichtübersetzte wird auf
-  Deutsch angezeigt, und ein erneutes Herunterladen der Vorlage zeigt Ihren
-  gespeicherten Fortschritt, sodass Sie jederzeit weitermachen können.
+  achte hinzu, fragt der Editor, welche bestehende entfallen soll. **Englisch**
+  und **Deutsch** lassen sich nicht entfernen: in Englisch sind die Schlüssel
+  geschrieben, und Deutsch ist die Sprache, für die dieses Projekt gebaut ist.
+- Eine Sprache braucht keine Übersetzung der Schlüssel, die schon in ihr
+  geschrieben sind — die zählen als erledigt. Deshalb meldet ein Gerät, dessen
+  Anwendung deutsch geschrieben ist, Deutsch als vollständig, ohne dass jemand
+  seine Beschriftungen ins Deutsche übersetzt hätte.
+- Übersetzungen dürfen **unvollständig** bleiben: alles Nichtübersetzte wird im
+  Wortlaut seines Schlüssels angezeigt, und ein erneutes Herunterladen der
+  Vorlage zeigt Ihren gespeicherten Fortschritt, sodass Sie jederzeit
+  weitermachen können.
 - Klicken Sie am Ende auf **Sitzung beenden**, damit ein anderer Administrator
   bearbeiten kann.
