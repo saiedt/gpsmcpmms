@@ -540,15 +540,22 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   | `reachable` / `file` / `directory` | it is there | accepted |
   | `silent` | the host resolves but does not answer | accepted, reported |
   | `creatable` | the path is absent, its parent folder is not | accepted, reported |
-  | `unresolvable` | the name resolves to nothing | **refused** |
-  | `missing` | not even the parent folder exists | **refused** |
+  | `unresolvable` | the name resolves to nothing | **field marked, save refused** |
+  | `missing` | not even the parent folder exists | **field marked, save refused** |
 
-  The two refusals are the ones that can only be a typo, and the field goes back
-  to what it held before. The other two are legitimate states of a working
-  device: a speakerphone can be switched off while it is configured, and a log
-  file is created on first use. Pressing *Prüfen* on a value already in the form
-  only ever reports — asking for a check is not asking for the value to be taken
-  away.
+  The last two can only be a typo, so the field is marked exactly as one the
+  browser itself rejects, and **Save** refuses the module while it stands. The
+  value is *marked, not withdrawn*: what somebody typed stays on screen to be
+  corrected, which is what the browser's own checks do — they simply refuse
+  before the value is committed, whereas this answer arrives afterwards. It makes
+  no difference whether the verdict came from typing or from pressing *Prüfen*;
+  the same verdict marks the same field, and Save is the one gate.
+
+  The other two are legitimate states of a working device — a speakerphone can
+  be switched off while it is configured, a log file is created on first use —
+  and they leave no mark at all. One caveat on `unresolvable`: a name is also
+  unresolvable when the device's own DNS is broken, and then a correct hostname
+  blocks the save. An address gets around it.
 - **Proposed values** — a `likely_val` is offered by the editor rather than by the
   backend: the field arrives pre-filled and the module counts as unsaved, so the
   admin either accepts the proposal by saving or types over it. Clearing the field

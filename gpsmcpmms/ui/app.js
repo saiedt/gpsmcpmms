@@ -38,6 +38,7 @@ const S = {
     pendingFiles: {},        // dump path -> [{name, file}] chosen, not yet sent
     listsA: {},              // dump path -> {sel}
     listsB: {},              // dump path -> {pos, draft, changed}
+    probeBad: {},            // dump path -> the device refused this value
 };
 
 function xl(key) { return S.xl[key] || key; }
@@ -572,18 +573,26 @@ const PROBE_VERDICT = {
     missing:    () => [xl("Pfad nicht vorhanden"), "error"],
 };
 
-/* `undo` is given only where there is something to go back to -- when the value
-   has just been typed. Two of the seven verdicts can be nothing but a typo: a
-   name that resolves to nothing, and a path whose parent folder does not exist
-   either. Those take the field back to what it held before, because keeping
-   them means saving a value the device has already said it cannot use.
+/* Two of the seven verdicts can be nothing but a typo: a name that resolves to
+   nothing, and a path whose parent folder does not exist either. Those mark the
+   field, exactly as a value the browser itself rejects is marked, and Speichern
+   refuses the module until it is dealt with -- a value the device has already
+   said it cannot use has no business being stored.
 
-   The other two failures are left standing on purpose. A host that resolves but
-   stays silent is a speakerphone switched off while somebody configures it, and
-   an absent path whose parent exists is a log file that gets written later --
-   refusing either would make the editor unusable exactly when it is needed. */
-async function probeValue(node, value, undo) {
-    if (typeof value !== "string" || value.trim() === "") return;
+   Marked, not withdrawn: what somebody typed stays on screen to be corrected,
+   which is what fail() does for the checks that run in the browser. The
+   difference is only in the timing -- those refuse before the value is
+   committed, this answer arrives afterwards.
+
+   The other two failures leave no mark at all. A host that resolves but stays
+   silent is a speakerphone switched off while somebody configures it, and an
+   absent path whose parent exists is a log file written on first use; refusing
+   either would make the editor unusable exactly when it is needed. */
+async function probeValue(node, value, rerender) {
+    if (typeof value !== "string" || value.trim() === "") {
+        delete S.probeBad[node.path];
+        return;
+    }
     const r = await api("/api/config/probe",
                         {json: {path: node.path, value: value}});
     const d = r.data || {};
@@ -593,18 +602,25 @@ async function probeValue(node, value, undo) {
                    `${d.error || xl("Verbindung zum Gerät verloren")}`,
                    "error");
     const [text, level] = verdict(d);
-    if (level === "error" && undo) {
-        undo();
-        return msg(`${text} — ${xl("Wert zurückgenommen")}`, "error");
-    }
+    const refused = level === "error";
+    const changed = refused !== !!S.probeBad[node.path];
+    if (refused) S.probeBad[node.path] = text;
+    else delete S.probeBad[node.path];
     msg(text, level);
+    // erst melden, dann neu zeichnen: das Neuzeichnen darf die Meldung nicht
+    // überholen, und ohne es bliebe die Markierung aus
+    if (changed && rerender) rerender();
 }
 
-function probeButton(node, currentValue) {
+function probeButton(node, currentValue, rerender) {
     const btn = el("button", {class: "small"}, xl("Prüfen"));
     btn.addEventListener("click", async () => {
         btn.disabled = true;
-        try { await probeValue(node, currentValue()); }
+        // Dasselbe Urteil hat dieselbe Folge, ob es auf Knopfdruck kommt oder
+        // von selbst: es markiert das Feld. Ein Knopf, der nur berichtet und
+        // ein Feld, das sich davon nichts merkt, hinterließe zwei Wahrheiten
+        // über denselben Wert.
+        try { await probeValue(node, currentValue(), rerender); }
         finally { btn.disabled = false; }
     });
     return btn;
@@ -631,17 +647,12 @@ function fieldRow(node, container, relKeys, ctx) {
         ctx.markDirtyQuiet();
     }
     const commit = (v) => {
-        const previous = cur;
         setIn(container, relKeys, v);
         ctx.markDirty();
         ctx.rerender();
-        // the answer arrives long after the re-render, so the message survives
-        // -- and so must the way back, for a verdict that refuses the value
-        if (PROBE_TYPES.has(cons.type))
-            probeValue(node, v, () => {
-                setIn(container, relKeys, previous);
-                ctx.rerender();
-            });
+        // the answer arrives long after the re-render, so the message survives;
+        // a verdict that refuses the value marks the field on the next one
+        if (PROBE_TYPES.has(cons.type)) probeValue(node, v, ctx.rerender);
     };
     // Zurücknehmen während des Renderns: kein erneutes Rendern, sonst dreht
     // sich das im Kreis -- dieselbe Vorsicht wie beim likely_val oben.
@@ -677,7 +688,11 @@ function fieldRow(node, container, relKeys, ctx) {
     const repeats = !!(filled && (
         (ctx.usedEnumValues && ctx.usedEnumValues.has(cur)) ||
         takenElsewhere(ctx, absKeys).has(cur)));
-    if (repeats && input.classList) input.classList.add("invalid");
+    // Vom Gerät zurückgewiesen: dieselbe Markierung wie bei einer Eingabe, die
+    // der Browser selbst zurückweist -- nur kommt das Urteil hier von dort, wo
+    // der Wert später gebraucht wird.
+    const refused = S.probeBad[node.path];
+    if ((repeats || refused) && input.classList) input.classList.add("invalid");
 
     const row = el("div", {class: "field-row"},
         el("label", {}, xl(node.ui.label || node.path.split(".").pop())),
@@ -685,11 +700,13 @@ function fieldRow(node, container, relKeys, ctx) {
             {class: "help", title: xl(node.ui.tooltip)}, "?") : null,
         input,
         repeats ? el("span", {class: "field-note"},
-                     xl("Wert bereits vergeben")) : null);
+                     xl("Wert bereits vergeben"))
+                : refused ? el("span", {class: "field-note"}, refused) : null);
     if (node.configurability === 2 && node.ui.acquire_button && !S.readOnly)
         row.append(acquireButton(node, input, commit));
     if (PROBE_TYPES.has(cons.type) && !S.readOnly)
-        row.append(probeButton(node, () => getIn(container, relKeys)));
+        row.append(probeButton(node, () => getIn(container, relKeys),
+                               ctx.rerender));
     if (cons.type === "file" && !S.readOnly)
         row.append(uploadButton(node, ctx, commit));
     if (node.ui.test_func && !S.readOnly)
@@ -1111,6 +1128,17 @@ async function saveModule(mid) {
     if (!checkModuleLists(S.cvv[mid], S.edit[mid],
                           (m) => failure = m)) {
         msg(failure, "error");
+        return;
+    }
+    // Was das Gerät zurückgewiesen hat, geht nicht auf das Gerät. Hier und
+    // nicht beim Eintippen: dort wird markiert, damit der Tippfehler zu sehen
+    // und zu berichtigen ist -- weggenommen wird er nicht.
+    const refused = Object.keys(S.probeBad)
+                          .filter(p => p === mid || p.startsWith(mid + "."));
+    if (refused.length) {
+        msg(`${xl("Übernehmen fehlgeschlagen")}: ` +
+            refused.map(p => `${p.split(".").pop()} (${S.probeBad[p]})`)
+                   .join(", "), "error");
         return;
     }
     if (!await confirmUnsetBooleans(mid)) return;
@@ -1540,6 +1568,9 @@ async function reloadData(passwd) {
     S.dirty = {};
     S.listsB = {};
     S.listsA = {};
+    // Die Zurückweisungen gehören zu den Entwurfswerten, die gerade verworfen
+    // wurden: was jetzt im Formular steht, kommt vom Gerät und ist dort gültig.
+    S.probeBad = {};
     // Die Optionen eines dynamischen Enums rechnet das Gerät aus seinem
     // eigenen Zustand aus, und der ist gerade ein anderer geworden. Die
     // Stimmenliste hängt an der gespeicherten Ansagesprache: ohne diese Zeile

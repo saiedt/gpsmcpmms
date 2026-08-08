@@ -155,7 +155,7 @@ class ConfigManager:
         "Der Test konnte nicht gestartet werden.",
         "Die Testroutine wurde ohne Fehler ausgeführt.",
         "Die Testroutine konnte den Test nicht durchführen.",
-        "Prüfen", "Prüfung fehlgeschlagen", "Wert zurückgenommen",
+        "Prüfen", "Prüfung fehlgeschlagen",
         "Erreichbar", "keine Antwort auf Ping", "Name nicht auflösbar",
         "Datei vorhanden", "Ordner vorhanden", "Pfad nicht vorhanden",
         "Noch nicht vorhanden, kann angelegt werden",
