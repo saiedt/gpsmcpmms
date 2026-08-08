@@ -50,6 +50,25 @@ class ConfigManager:
     # how many existing languages may be included as reference columns in a
     # downloaded translation template (context for the translator/AI)
     MAX_TEMPLATE_REFS = 3
+    # The language a display string is *written* in when it reaches this
+    # library: the key language. A key is its own fallback, so whatever is not
+    # translated is shown in this language.
+    #
+    # English, because this is a public library: a German key set would oblige
+    # anyone adopting it to write German labels and translate them into their
+    # own language. A host is free to write its keys in another language -- the
+    # appliance this grew from writes German ones, so that a missing German
+    # translation still leaves its users with German -- and says so with
+    # `decl_lang` on register_params().
+    DECL_LANG = "en"
+    # The template's first column holds the keys, whatever language each is
+    # written in. It was called "de" while that was the only possibility; a
+    # file still carrying that header uploads unchanged, because a header the
+    # upload does not recognise falls back to the first column.
+    KEY_COLUMN = "key"
+    # Neither may be removed to make room for another: DECL_LANG is what every
+    # dictionary is written against, and German is what this project ships for.
+    PROTECTED_LANGS = ("en", "de")
     # What a display string is, as far as it changes how it gets translated --
     # not where it came from. A label has to stay short because it sits beside
     # a field; a tooltip may be a whole sentence; a placeholder is usually a
@@ -131,56 +150,59 @@ class ConfigManager:
 
     # German display strings internal to config.py and its editor; they act
     # as keys into the translation dictionaries (spec 4.3)
+    # The editor's own display strings, in the language this library is written
+    # in. They are keys like any other, so a deployment that wants the editor in
+    # German takes it from the shipped de.json -- see DECL_LANG.
     OWN_UI_KEYS = (
-        "Hub4Help Konfigurationseditor",
-        "Speichern", "Anwenden", "Entfernen", "Rückgängig",
-        "Sitzung beenden", "Geschützte Parameter anzeigen",
-        "Admin-Modus verlassen", "Sprache",
-        "Falsches Passwort",
-        "Nur-Lese-Modus: Eine andere Sitzung ist aktiv",
-        "Sitzung übernehmen", "Sitzung übernommen",
-        "Das Gerät verwendet noch das werksseitige Standardpasswort",
-        "Ungültige Eingabe", "Übernehmen fehlgeschlagen",
-        "Verbindung zum Gerät verloren",
-        "OK", "Abbrechen", "Gespeichert", "Abgelehnt", "Test", "Neu",
-        "Passwort", "Neues Passwort",
-        "Wert wird gelesen...", "Wert übernommen", "Zeitüberschreitung",
-        "Eintrag wirklich entfernen?", "Liste ist voll",
-        "Diese Optionen wurden nie gesetzt; als „nein“/„deaktiviert“ übernehmen?",
-        "Zu wenige Einträge in", "Erneut laden",
-        # Der Ausgang eines Tests, in drei Stufen: nicht angelaufen, gelaufen,
-        # gelaufen aber nicht durchführbar. "Erfolgreich" stand hier einmal und
-        # versprach zu viel -- was der Test wert war, hört und sieht nur, wer
-        # davorsteht.
-        "Der Test konnte nicht gestartet werden.",
-        "Die Testroutine wurde ohne Fehler ausgeführt.",
-        "Die Testroutine konnte den Test nicht durchführen.",
-        "Prüfen", "Prüfung fehlgeschlagen",
-        "Erreichbar", "keine Antwort auf Ping", "Name nicht auflösbar",
-        "Datei vorhanden", "Ordner vorhanden", "Pfad nicht vorhanden",
-        "Noch nicht vorhanden, kann angelegt werden",
+        "Hub4Help Configuration Editor",
+        "Save", "Apply", "Remove", "Undo",
+        "End session", "Show protected parameters",
+        "Exit admin mode", "Language",
+        "Incorrect password",
+        "Read-only mode: another session is active",
+        "Take over session", "Session taken over",
+        "The device is still using the factory default password",
+        "Invalid input", "Apply failed",
+        "Connection to the device lost",
+        "OK", "Cancel", "Saved", "Rejected", "Test", "New",
+        "Password", "New password",
+        "Reading value...", "Value applied", "Timeout",
+        "Really remove this entry?", "List is full",
+        "These options were never set; apply them as “no”/“disabled”?",
+        "Too few entries in", "Reload",
+        # How a test came out, in three grades: never started, ran, ran but
+        # could not carry the test out. "Successful" stood here once and
+        # promised too much -- what a test was worth is heard and seen only by
+        # whoever is standing in front of the device.
+        "The test could not be started.",
+        "The test routine ran without errors.",
+        "The test routine could not carry out the test.",
+        "Check", "Check failed",
+        "Reachable", "no response to ping", "Name cannot be resolved",
+        "File exists", "Folder exists", "Path does not exist",
+        "Does not exist yet, can be created",
         # Translation management. Two verbs rather than one noun: "manage"
         # never said whether you were about to add or to improve, and the
         # panel looked identical either way.
-        "Neue Übersetzung hinzufügen", "Vorhandene Übersetzung bearbeiten",
-        "Neue Sprache", "Sprachcode", "Sprachname", "Zu ersetzen",
-        "Bearbeitung von",
-        "Deutsche Schlüssel übersetzen, mit bis zu 3 Sprachen als weiterem "
-            "Kontext (bitte wählen):",
-        "Übersetzungsdatei: zuerst", "dann", "zuletzt",
-        "CSV herunterladen", "Fertige CSV auswählen",
-        "Ausgewählte CSV hochladen",
-        "Noch keine Übersetzung vorhanden",
+        "Add new translation", "Edit existing translation",
+        "New language", "Language code", "Language name", "To be replaced",
+        "Editing",
+        "Translating the source keys, with up to 3 languages as further "
+            "context (please choose):",
+        "Translation file: start by", "then", "finally",
+        "Download CSV", "Select completed CSV",
+        "Upload the selected CSV",
+        "No translation exists yet",
         # still reachable: the panel asks in row 1b before any work is done,
         # but a CSV arriving another way can still run into a full set
-        "Zu ersetzende Sprache wählen",
-        "übersetzt", "Übersetzung verarbeitet", "Ungültige Datei",
-        "Wert bereits vergeben",
-        "Datei auswählen", "Dateityp nicht zulässig",
-        "Dateiname nicht zulässig", "Datei zu groß",
+        "Choose the language to be replaced",
+        "translated", "Translation processed", "Invalid file",
+        "Value already taken",
+        "Choose file", "File type not allowed",
+        "File name not allowed", "File too large",
         # a hint states something about the present; without the moment it was
         # established it would keep asserting it long after it stopped being so
-        "Stand", "Aktualisieren",
+        "As of", "Refresh",
     )
 
     # Declaration keys whose string values are German display strings and
@@ -240,6 +262,9 @@ class ConfigManager:
         # Central registries: keyed by module_id
         self._callback_registry: dict = {}
         self._func_registry: dict = {}
+        # the language each module writes its display strings in; a tree may
+        # hold modules that do not agree, which is why it is per module
+        self._module_langs: dict = {}
 
         # exclusive editing session of the config-editor (spec 4.8)
         self._session_token = None
@@ -258,18 +283,22 @@ class ConfigManager:
         # initialize cvv and own config params
         self._cvv_root = CvvNode.register(self, self.cvv_dir)
         CvvNode.set_logger(self, self._logger)
-        own_decl = { "type": self.OWN_MODULE_ID, "label": "Konfigurationsdienst" }
+        own_decl = { "type": self.OWN_MODULE_ID,
+                     "label": "Configuration service" }
         own_types = { self.OWN_MODULE_ID: {
                 "ui_passwd": {
-                    "type": "password", "label": "UI-Passwort",
+                    "type": "password", "label": "UI password",
                     "protected": True,
                     "default_val": self.FACTORY_DEFAULT_PASSWD,
-                    "tooltip": "Administrator-Passwort zum Freischalten "
-                             + "geschützter Parameter."
+                    "tooltip": "Administrator password for unlocking "
+                             + "protected parameters."
                 }
             }}
-        self._harvest_xlation_keys(own_decl)
-        self._harvest_xlation_keys(own_types)
+        # this library's own module, so its strings are in DECL_LANG like the
+        # rest of them
+        self._module_langs[self.OWN_MODULE_ID] = self.DECL_LANG
+        self._harvest_xlation_keys(own_decl, lang=self.DECL_LANG)
+        self._harvest_xlation_keys(own_types, lang=self.DECL_LANG)
         my_config = CvvNode.init_module(self, self.OWN_MODULE_ID,
                                         own_decl, own_types)
         if not isinstance(my_config, dict):
@@ -328,7 +357,7 @@ class ConfigManager:
 
     def register_params(self, module_id, module_label, param_dict,
                         callback, type_dict=None, module_tooltip=None,
-                        func_dict=None):
+                        func_dict=None, decl_lang=None):
         if not (module_id and isinstance(module_id, str) and
                 not module_id in self._callback_registry
         ):
@@ -345,14 +374,21 @@ class ConfigManager:
         ):
             raise ValueError("register_params(): 'func_dict' must map "
                              "function names to callables.")
+        # In which language this module's display strings are written. Only its
+        # own -- a tree may hold modules written in different ones, and this
+        # library's own strings are always DECL_LANG.
+        lang = (decl_lang or self.DECL_LANG).strip().split("-")[0]
+        self._module_langs[module_id] = lang
         self._callback_registry[module_id] = callback
         self._func_registry[module_id] = func_dict or {}
         if isinstance(module_label, str) and module_label.strip():
-            self._note_xlation_key(module_label.strip(), "label")
+            self._note_xlation_key(module_label.strip(), "label", lang)
         if isinstance(module_tooltip, str) and module_tooltip.strip():
-            self._note_xlation_key(module_tooltip.strip(), "tooltip")
-        self._harvest_xlation_keys(param_dict, self._func_registry[module_id])
-        self._harvest_xlation_keys(type_dict, self._func_registry[module_id])
+            self._note_xlation_key(module_tooltip.strip(), "tooltip", lang)
+        self._harvest_xlation_keys(param_dict, self._func_registry[module_id],
+                                  lang)
+        self._harvest_xlation_keys(type_dict, self._func_registry[module_id],
+                                  lang)
         self._check_values_for(param_dict, self._func_registry[module_id])
         self._check_values_for(type_dict, self._func_registry[module_id])
         type_registry = type_dict if isinstance(type_dict, dict) else {}
@@ -404,7 +440,7 @@ class ConfigManager:
                               "and everything stored for them.")
         return removed
 
-    def note_xlation_keys(self, *keys, kind=None):
+    def note_xlation_keys(self, *keys, kind=None, module_id=None):
         """
         Registers display strings that do not originate from a Declaration --
         typically texts a module speaks or shows at runtime. Without this they
@@ -417,13 +453,19 @@ class ConfigManager:
         will be read aloud rather than shown, and the two are not translated
         the same way. A Declaration says it by itself; only a runtime string
         has to be told.
+
+        `module_id` says whose strings these are, and with that which language
+        they are written in -- the one that module passed as `decl_lang`. Left
+        out, they count as DECL_LANG: right for a host writing in the same
+        language as this library, wrong for one that does not.
         """
         if kind is not None and kind not in self.XLATION_KINDS:
             raise ValueError(f"note_xlation_keys(): unknown kind {kind!r}; "
                              f"expected one of {sorted(self.XLATION_KINDS)}.")
+        lang = self._module_langs.get(module_id, self.DECL_LANG)
         for key in keys:
             if isinstance(key, str) and key.strip():
-                self._note_xlation_key(key.strip(), kind)
+                self._note_xlation_key(key.strip(), kind, lang)
 
     def _load_language_options(self):
         """The allow-list, seeded from LANGUAGE_OPTIONS on first start.
@@ -500,9 +542,10 @@ class ConfigManager:
         language on a device that reads aloud.
 
         A validator that raises is treated as a yes. Refusing to configure a
-        device because a check itself is broken would be the worse failure,
-        and "de" is accepted regardless: it is the reference every other
-        dictionary is written against.
+        device because a check itself is broken would be the worse failure, and
+        the protected languages are accepted regardless: DECL_LANG is what every
+        other dictionary is written against, and German is what this project
+        ships for.
         """
         self._language_validator = validator if callable(validator) else None
 
@@ -513,7 +556,7 @@ class ConfigManager:
         return dict(self._language_options)
 
     def _language_allowed(self, lang):
-        if lang == "de":
+        if lang in self.PROTECTED_LANGS:
             return True
         if self._language_validator is not None:
             try:
@@ -527,7 +570,7 @@ class ConfigManager:
 
     def supported_languages(self):
         """
-        The languages a translation dictionary exists for, "de" always among
+        The languages a translation dictionary exists for, DECL_LANG always among
         them.
 
         A host application that addresses its users in one of these -- the
@@ -553,28 +596,29 @@ class ConfigManager:
         An entry counts as soon as it is there, whatever it says. Absence is
         what "not translated yet" looks like -- nothing is written into a
         dictionary until somebody translates -- which leaves an entry reading
-        like the German free to mean the opposite: that this string was looked
-        at and stays. Without that, "OK" in Polish was inexpressible and kept
-        its language incomplete for ever. German itself is the exception,
-        and has to be: it is the reference every other language
-        is translated *from*, its dictionary is deliberately empty, and asking
-        this question about it used to answer "none of them" -- which read as
-        a device with nothing translated, on every device, whenever somebody
-        looked at the editor in German.
+        like its key free to mean the opposite: that this string was looked at
+        and stays. Without that, "OK" in Polish was inexpressible and kept its
+        language incomplete for ever.
+
+        A key needs no translation into the language it is already written in,
+        and that is not one language for the whole tree: this library writes
+        English keys, a host may write its own in German. So a key counts as
+        done for its *own* declaration language -- otherwise every German label
+        of the appliance would be reported as missing from German, for ever,
+        while the device displays it perfectly.
         """
         with self._lock:
             active = set(self._active_xlation_keys)
             if keys is not None:
                 active &= {k.strip() for k in keys
                            if isinstance(k, str) and k.strip()}
-            if isinstance(lang, str) and lang.strip().split("-")[0] == "de":
-                return len(active), len(active)
+            code = lang.strip().split("-")[0] if isinstance(lang, str) else ""
             translated = self._lang_cache.get(lang, {})
             # an empty entry is no translation either -- the upload never
             # writes one, but a hand-edited file can
             done = sum(1 for k in active
-                       if isinstance(translated.get(k), str) and
-                       translated[k])
+                       if self._xlation_langs.get(k, self.DECL_LANG) == code or
+                       (isinstance(translated.get(k), str) and translated[k]))
         return done, len(active)
 
     def translate(self, key, lang):
@@ -807,6 +851,9 @@ class ConfigManager:
         # what each display string is, so that a translator can see it: the
         # same words are handled differently depending on where they appear
         self._xlation_kinds = {key: {"ui"} for key in self.OWN_UI_KEYS}
+        # and which language each was written in -- this library's own are in
+        # DECL_LANG, a host's are in whatever it declares
+        self._xlation_langs = {key: self.DECL_LANG for key in self.OWN_UI_KEYS}
         self._lang_cache = {}
         self._lang_dir = os.path.join(self.ui_dir, "lang")
         os.makedirs(self._lang_dir, exist_ok=True)
@@ -857,8 +904,8 @@ class ConfigManager:
                 lang_dict = {}
             self._lang_cache[lang_code] = lang_dict
 
-        if "de" not in self._lang_cache:
-            self._lang_cache["de"] = {}
+        if self.DECL_LANG not in self._lang_cache:
+            self._lang_cache[self.DECL_LANG] = {}
 
         for lang, lang_dict in self._lang_cache.items():
             lang_dict["lang_cache_modified"] = False
@@ -895,17 +942,18 @@ class ConfigManager:
                     "used to mean 'untranslated'. An entry equal to the "
                     "German now means the opposite, and is kept.")
 
-    def _harvest_xlation_keys(self, decl_data, funcs=None):
+    def _harvest_xlation_keys(self, decl_data, funcs=None, lang=None):
         """
-        Collects all German display strings -- labels, tooltips,
-        placeholders, acquire-button labels, hints and test messages,
-        including those of enum options -- from registered declaration data
-        as keys into the translation dictionaries.
+        Collects all display strings -- labels, tooltips, placeholders,
+        acquire-button labels, hints and test messages, including those of enum
+        options -- from registered declaration data as keys into the
+        translation dictionaries.
 
         `funcs` is the registering module's func_dict, needed to tell the two
         kinds of hint apart: a hint that names a provider is a function name,
-        not German, and translating it would put "get_lang_report" in front of
-        every translator.
+        not a display string, and translating it would put "get_lang_report" in
+        front of every translator. `lang` is the language the module writes its
+        strings in.
         """
         if not isinstance(decl_data, dict):
             return
@@ -916,9 +964,10 @@ class ConfigManager:
                     isinstance(v, str) and v.strip()):
                 if k == "hint" and funcs and v.strip() in funcs:
                     continue
-                self._note_xlation_key(v.strip(), self.DECL_KEY_KINDS.get(k))
+                self._note_xlation_key(v.strip(),
+                                       self.DECL_KEY_KINDS.get(k), lang)
             elif isinstance(v, dict):
-                self._harvest_xlation_keys(v, funcs)
+                self._harvest_xlation_keys(v, funcs, lang)
 
     def _check_values_for(self, decl_data, funcs):
         """
@@ -954,7 +1003,7 @@ class ConfigManager:
                         f"'{key}' has to take the value of "
                         f"'{value['values_for']}' as its argument.") from None
 
-    def _note_xlation_key(self, xlation_key, kind=None):
+    def _note_xlation_key(self, xlation_key, kind=None, lang=None):
         # Nothing is written into the dictionaries here. A key they do not
         # carry is a key nobody has translated -- which is all the template
         # needs to know, and it leaves "the entry reads like the German" free
@@ -965,6 +1014,10 @@ class ConfigManager:
                 # a string can be several things at once: the name of a
                 # service type is shown in a list *and* read aloud
                 self._xlation_kinds.setdefault(xlation_key, set()).add(kind)
+            if lang:
+                # first declarer wins: the same words registered twice are one
+                # key, and it cannot be written in two languages at once
+                self._xlation_langs.setdefault(xlation_key, lang)
 
     def _orphan_keys_of(self, lang_dict):
         # a key is orphaned when no active registration uses it (anymore)
@@ -989,7 +1042,7 @@ class ConfigManager:
     def _get_translation_dict(self, lang_code):
         with self._lock:
             if not lang_code or lang_code not in self._lang_cache:
-                lang_code = "de"
+                lang_code = self.DECL_LANG
             lang_dict = self._lang_cache[lang_code]
             file_path = os.path.join(self._lang_dir, f"{lang_code}.json")
             if (lang_dict.get("lang_cache_modified") or
@@ -1019,7 +1072,7 @@ class ConfigManager:
 
         with self._lock:
             if replace is not None and (
-                    replace in ("de", lang) or
+                    replace in self.PROTECTED_LANGS or replace == lang or
                     replace not in self._lang_cache):
                 return "invalid_replace"
             if (lang not in self._lang_cache and replace is None and
@@ -1028,10 +1081,6 @@ class ConfigManager:
 
             lang_dict = {k: v for k, v in lang_dict.items()
                          if k not in self.RESERVED_LANG_KEYS}
-            if lang == "de":
-                # "de" is the mandatory reference: own keys must survive
-                for key in self.OWN_UI_KEYS:
-                    lang_dict.setdefault(key, key)
             lang_dict["lang_cache_modified"] = False
 
             # atomic write-and-update: cache first, then disk (spec 4.3.1)
@@ -1105,18 +1154,31 @@ class ConfigManager:
         return v if isinstance(v, str) else ""
 
     def _lang_template_csv(self, target, refs):
-        """Builds the CSV template for translating into `target`, with a
-        column of German source keys, one column per reference language, and
-        the target column (pre-filled with any existing translation)."""
+        """Builds the CSV template for translating into `target`: the source
+        keys, what each of them is, which language it is written in, one column
+        per reference language, and the target column (pre-filled with any
+        existing translation).
+
+        DECL_LANG always travels as a reference, even unasked. A key written in
+        German gets its English beside it and vice versa, so neither language
+        reads as the privileged one -- which is the truth of it: this library
+        writes English keys, a host may write its own in something else, and the
+        'src' column says which is which per row.
+        """
         with self._lock:
             existing = set(self._lang_cache)
-        refs = [r for r in refs
-                if r in existing and r not in ("de", target)][:self.MAX_TEMPLATE_REFS]
-        # "kind" travels second, right beside the string it describes, and is
-        # not a language: the upload finds its columns by name and ignores
-        # every other one, so nothing has to be taught about it. A language
-        # code is two or three letters, so the name cannot collide with one.
-        columns = ["de", "kind"] + refs + [target]
+        wanted = ([self.DECL_LANG] if self.DECL_LANG != target else []) + list(refs)
+        refs, seen = [], set()
+        for r in wanted:
+            if r in existing and r != target and r not in seen:
+                seen.add(r)
+                refs.append(r)
+        refs = refs[:self.MAX_TEMPLATE_REFS + 1]
+        # 'src' and 'kind' travel next to the string they describe, and neither
+        # is a language: the upload finds its columns by name and ignores every
+        # other one, so nothing has to be taught about them. A language code is
+        # two or three letters, so the names cannot collide with one.
+        columns = [self.KEY_COLUMN, "src", "kind"] + refs + [target]
 
         buf = io.StringIO()
         # QUOTE_ALL: every field is wrapped in double quotes (RFC 4180) so that
@@ -1127,7 +1189,8 @@ class ConfigManager:
                             quoting=csv.QUOTE_ALL)
         writer.writerow(columns)
         for key in self._translatable_keys_sorted():
-            row = [key, self._kinds_of(key)]
+            row = [key, self._xlation_langs.get(key, self.DECL_LANG),
+                   self._kinds_of(key)]
             row += [self._translation_of(r, key) for r in refs]
             row.append(self._translation_of(target, key))
             writer.writerow(row)
@@ -1150,7 +1213,7 @@ class ConfigManager:
         where error is a string tag or a dict for the removal prompt."""
         if not (isinstance(target, str) and re.fullmatch(r"[a-z]{2,3}", target)):
             return None, "invalid_lang", None
-        if target == "de":
+        if target == self.DECL_LANG:
             return None, "cannot_edit_de", None
         if raw[:4] == b"PK\x03\x04":
             # an .xlsx/.ods workbook (a ZIP), not a text CSV
@@ -1164,7 +1227,8 @@ class ConfigManager:
             return None, "empty_file", None
 
         header = [c.strip() for c in rows[0]]
-        de_idx = header.index("de") if "de" in header else 0
+        key_idx = (header.index(self.KEY_COLUMN)
+                   if self.KEY_COLUMN in header else 0)
         if target not in header:
             return None, "target_column_missing", None
         tgt_idx = header.index(target)
@@ -1174,16 +1238,17 @@ class ConfigManager:
         with self._lock:
             is_new = target not in self._lang_cache
             over_limit = is_new and len(self._lang_cache) >= self.MAX_LANGUAGES
-            removable = sorted(l for l in self._lang_cache if l != "de")
+            removable = sorted(l for l in self._lang_cache
+                               if l not in self.PROTECTED_LANGS)
         if over_limit and not (isinstance(remove, str) and remove in removable):
             return None, {"error": "too_many_languages",
                           "removable": removable}, None
 
         uploaded = {}
         for row in rows[1:]:
-            if len(row) <= max(de_idx, tgt_idx):
+            if len(row) <= max(key_idx, tgt_idx):
                 continue
-            key = row[de_idx].strip()
+            key = row[key_idx].strip()
             if key:
                 uploaded[key] = row[tgt_idx].strip()
 
@@ -1226,7 +1291,7 @@ class ConfigManager:
         buf = io.StringIO()
         writer = csv.writer(buf, delimiter=self.CSV_DELIMITER,
                             quoting=csv.QUOTE_ALL)
-        writer.writerow(["de", target, "status"])
+        writer.writerow([self.KEY_COLUMN, target, "status"])
         for key in sorted(active):
             value = new_dict.get(key, "")
             if key in uploaded:
@@ -1593,6 +1658,10 @@ class ConfigManager:
                 # and a device that offered fifty of them once put fifty rows
                 # in front of every translator, for good: harvested keys stay
                 # active as long as the provider still offers them.
+                # the provider belongs to a module, and so do the words it
+                # returns: they are written in that module's language
+                opt_lang = self._module_langs.get(path.split(".", 1)[0],
+                                                  self.DECL_LANG)
                 for option in result.values():
                     if not isinstance(option, dict):
                         continue
@@ -1600,9 +1669,10 @@ class ConfigManager:
                         # the label is an identifier; a tooltip beside it is
                         # still prose and still wants translating
                         self._harvest_xlation_keys(
-                                {"tooltip": option.get("tooltip")})
+                                {"tooltip": option.get("tooltip")},
+                                lang=opt_lang)
                     else:
-                        self._harvest_xlation_keys(option)
+                        self._harvest_xlation_keys(option, lang=opt_lang)
                 return jsonify({"values": result})
             return jsonify({"error": str(result)})
 
@@ -1651,7 +1721,8 @@ class ConfigManager:
                 return jsonify({"error": "invalid_token"}), 401
             self._touch_session()
             path = (request.args.get("path") or "").strip()
-            lang = (request.args.get("lang") or "").strip() or "de"
+            lang = ((request.args.get("lang") or "").strip()
+                    or self.DECL_LANG)
             if not path:
                 abort(400)
             if not self._may_access(path):
@@ -1860,7 +1931,8 @@ class ConfigManager:
             if not admin:
                 return jsonify({"error": "admin_required"}), 403
             target = (request.args.get("lang") or "").strip().lower()
-            if not re.fullmatch(r"[a-z]{2,3}", target) or target == "de":
+            if (not re.fullmatch(r"[a-z]{2,3}", target)
+                    or target == self.DECL_LANG):
                 return jsonify({"error": "invalid_lang"}), 400
             refs = [r.strip().lower()
                     for r in (request.args.get("refs") or "").split(",")

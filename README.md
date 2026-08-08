@@ -104,7 +104,7 @@ A module describes itself with two dicts:
 ```python
 config_mgr.register_params(
     module_id, module_label, param_dict, callback,
-    type_dict=None, module_tooltip=None, func_dict=None)
+    type_dict=None, module_tooltip=None, func_dict=None, decl_lang=None)
 ```
 
 - Called **once per run** per module (register the same schema every run; only
@@ -113,6 +113,8 @@ config_mgr.register_params(
   again whenever the editor commits a change to that module.
 - `func_dict` maps function names referenced in Declarations (dynamic enums, see
   [Advanced features](#advanced-features)) to callables.
+- `decl_lang` is the language this module's display strings are written in;
+  it defaults to `DECL_LANG`. See [Multi-linguality](#multi-linguality).
 
 **Value priority** (highest wins): `fixed_val` → saved user input → `default_val`
 → *no value* (`None`).
@@ -125,8 +127,8 @@ Other API methods:
 | `config_ready(path=None)` | `True` if no *relevant* leaf under the match is still unset. `None`/`""`/`"*"` = whole tree. Skips empty min-0 lists and fields whose relevance condition is false. |
 | `protected_params_ready()` | Like `config_ready`, restricted to `protected` parameters. |
 | `handle_value_event(value, alt_target_paths)` | Deliver a backend-captured value to a waiting editor; `True` if one took it (see 4.9.3). |
-| `note_xlation_keys(*keys, kind=None)` | Register display strings a module only uses at runtime, so they reach the translation templates. `kind` says what they are — pass `"speech"` for anything read aloud. |
-| `translate(key, lang)` | The `lang` rendering of such a string, falling back to the German original. Accepts `de` or `de-DE`. |
+| `note_xlation_keys(*keys, kind=None, module_id=None)` | Register display strings a module only uses at runtime, so they reach the translation templates. `kind` says what they are — pass `"speech"` for anything read aloud; `module_id` says whose they are, and so which language they are written in. |
+| `translate(key, lang)` | The `lang` rendering of such a string, falling back to the key itself. Accepts `de` or `de-DE`. |
 | `switch_to_app_logger(logger)` | Inject the application logger (once per run). |
 | `discard_module(module_id)` | The module has no parameters any more: the declaration is dropped and everything persisted for it is deleted. See [Giving up a module's parameters](#giving-up-a-modules-parameters). |
 
@@ -139,7 +141,7 @@ A Declaration is a dict with any of these keys (`type` is mandatory):
 | Key | Meaning |
 |-----|---------|
 | `type` | A primitive type (below) or a named type from `type_dict`. |
-| `label` | Display label. German text doubles as the translation key. |
+| `label` | Display label. The text doubles as its own translation key. |
 | `tooltip` | Hover help. |
 | `placeholder` | HTML-style placeholder for an input field. |
 | `default_val` | Initial value; may be overwritten by the user. |
@@ -150,7 +152,7 @@ A Declaration is a dict with any of these keys (`type` is mandatory):
 | `hidden` | Hide from the editor. |
 | `protected` | Hidden until the admin unlocks with the password. |
 | `backend_provided` | Value is captured by backend logic (e.g. an NFC reader), read-only in the editor. Requires `acquire_button`; may combine with `init_only`. |
-| `hint` | A statement about how things stand, shown **above** the field. Either literal German text, or the name of a `func_dict` entry making it dynamic — see [Hints](#hints). Not a tooltip: a tooltip explains and never expires, a hint reports and can stop being true. |
+| `hint` | A statement about how things stand, shown **above** the field. Either literal text, or the name of a `func_dict` entry making it dynamic — see [Hints](#hints). Not a tooltip: a tooltip explains and never expires, a hint reports and can stop being true. |
 
 **Primitive types**
 
@@ -350,11 +352,28 @@ label:
 
 ## Multi-linguality
 
-German is the source language: the German `label`/`tooltip`/`placeholder` strings
-**are** the translation keys. Dictionaries live at `ui_dir/lang/<code>.json`;
-missing keys fall back to German, so a language may stay partially translated.
-Up to **seven** languages may coexist; `de` is mandatory. Corrupt dictionary files
-are quarantined and regenerated at startup.
+A display string **is** its own translation key: the `label`/`tooltip`/
+`placeholder` text as written. Dictionaries live at `ui_dir/lang/<code>.json`;
+missing keys fall back to the key itself, so a language may stay partially
+translated and still read. Up to **seven** languages may coexist; `en` and `de`
+cannot be replaced to make room. Corrupt dictionary files are quarantined and
+regenerated at startup.
+
+**Which language the keys are in** is not one answer for the whole tree. This
+library writes its own in `DECL_LANG` — English, so that adopting it does not
+oblige anyone to write German labels — and a module says what *its* strings are
+written in with `decl_lang` on `register_params()`:
+
+```python
+config_mgr.register_params(…, decl_lang="de")     # this module's texts are German
+```
+
+That is not cosmetic. A key needs no translation into the language it is already
+written in, so `decl_lang` is what makes a German label count as done for German
+instead of being reported missing for ever. It also decides the fallback: the
+appliance this grew from keeps German keys precisely so that a missing German
+translation still leaves its users with German rather than English. Both facts
+travel to a translator in the template's `src` column.
 
 **Which languages may be added** is governed by two handles, in this order:
 
@@ -383,15 +402,13 @@ disk are read whatever the current policy says. Discarding a deployment's
 translations at startup because a rule changed later would destroy work nobody can
 get back.
 
-Because German is the source, its dictionary is deliberately empty, and
-`translation_status("de", …)` answers *complete*: every German string is already
-in its final form. For a target language, **an absent entry means untranslated
-and any entry counts as translated** — including one that reads exactly like the
-German, which is how a translator records that a string stays as it is. Some
-words are the same in two languages ("OK" is Polish for OK) and some strings are
-not sentences at all, like the placeholder showing the shape of a phone number;
-without this they could never be settled, and their language would stay
-incomplete for ever.
+A key counts as done for its own `decl_lang` without any entry: it is already in
+that language. Otherwise **an absent entry means untranslated and any entry
+counts as translated** — including one that reads exactly like the key, which is
+how a translator records that a string stays as it is. Some words are the same in
+two languages ("OK" is Polish for OK) and some strings are not sentences at all,
+like the placeholder showing the shape of a phone number; without this they could
+never be settled, and their language would stay incomplete for ever.
 
 > **Dictionary format 2.** Until format 1 every known key was written into every
 > dictionary as its own value, and *that* was how "untranslated" was recorded — so
@@ -421,7 +438,7 @@ a human or an AI):
    `note_xlation_keys(*keys, kind="speech")`, since nothing else could know.
 2. **Fill it offline**, then **upload** it. Rows are applied one by one
    (non-empty sets, blank clears, absent keeps; unknown keys skipped). A cell
-   repeating the German is a translation like any other — that is how "take this
+   repeating the key is a translation like any other — that is how "take this
    one over unchanged" is said, and the only way to say it. Adding an 8th
    language prompts which existing one to replace.
 
@@ -785,7 +802,7 @@ What a distributor actually does at the device, and what carries it:
 
 None of that is a separate mechanism bolted on: it is one declaration per
 parameter, read by the backend for validation and by the editor for the form. The
-same German label that appears beside a field is the key its translation is stored
+same label that appears beside a field is the key its translation is stored
 under, so a device that speaks Turkish needs no string table in the application —
 and in the appliance this grew from, the sentences the device *says out loud* go
 through exactly that path too.

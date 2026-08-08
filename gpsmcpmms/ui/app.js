@@ -23,7 +23,13 @@ const S = {
     protectedOmitted: false,
     cvv: {},                 // parsed /api/cvv_data dump
     xl: {},                  // active translation dictionary
-    lang: localStorage.getItem("gpsmcpmms_lang") || "de",
+    // Was jemand zuletzt gewählt hat, sonst die Sprache seines Browsers, sonst
+    // die der Quellschlüssel. Fest "de" stand hier, solange die Schlüssel
+    // deutsch waren; jetzt wäre das eine Sprache, die dem Gerät niemand gesagt
+    // hat -- und für einen deutschen Zugang kommt sie ohnehin heraus. Ob es ein
+    // Wörterbuch dafür gibt, entscheidet loadLangList().
+    lang: localStorage.getItem("gpsmcpmms_lang") ||
+          (navigator.language || "").split("-")[0] || "en",
     languages: ["de"],
     langNames: {},           // code -> name, from ui_dir/languages.json
     maxLanguages: 7,         // how many dictionaries may coexist
@@ -111,7 +117,7 @@ function modal(text, options = {}) {
         }, xl("OK"))];
         if (!options.alert) {
             buttons.push(el("button", {onclick: () => close(null)},
-                            xl("Abbrechen")));
+                            xl("Cancel")));
         }
         // An array becomes one paragraph per entry. A newline would not do:
         // the text lands in a single <p>, where the browser folds it away.
@@ -235,7 +241,7 @@ async function fetchEnumOptions(path, rerender, arg) {
         url += `&arg=${encodeURIComponent(JSON.stringify(arg))}`;
     const r = await api(url);
     S.enums[path] = (r.data && r.data.values) ? {values: r.data.values, arg}
-                  : {error: (r.data && r.data.error) || xl("Verbindung zum Gerät verloren"),
+                  : {error: (r.data && r.data.error) || xl("Connection to the device lost"),
                      arg};
     if (S.enums[path].error) msg(S.enums[path].error, "error");
     rerender();
@@ -253,7 +259,7 @@ async function fetchHint(path, rerender) {
     S.hints[path] = (r.data && typeof r.data.text === "string")
                   ? {text: r.data.text, at: r.data.at}
                   : {error: (r.data && r.data.error) ||
-                            xl("Verbindung zum Gerät verloren")};
+                            xl("Connection to the device lost")};
     rerender();
 }
 
@@ -273,9 +279,9 @@ function hintFor(node, ctx) {
         return el("div", {class: "hint invalid"}, state.error);
     return el("div", {class: "hint"},
         el("span", {class: "hint-text"}, state.text),
-        el("span", {class: "hint-meta"}, `${xl("Stand")} ${state.at}`),
+        el("span", {class: "hint-meta"}, `${xl("As of")} ${state.at}`),
         el("button", {class: "hint-refresh", type: "button",
-                      title: xl("Aktualisieren"),
+                      title: xl("Refresh"),
                       onclick: () => fetchHint(node.path, ctx.rerender)},
            "↻"));
 }
@@ -315,7 +321,7 @@ function uploadButton(node, ctx, commit) {
                 selected = name;
             }
             if (refused.length)
-                msg(`${xl("Dateityp nicht zulässig")}: ${refused.join(", ")}`,
+                msg(`${xl("File type not allowed")}: ${refused.join(", ")}`,
                     "error");
             if (selected !== null) commit(selected);
             else ctx.rerender();
@@ -323,7 +329,7 @@ function uploadButton(node, ctx, commit) {
     return el("span", {class: "file-upload"}, picker,
         el("button", {class: "btn", type: "button",
                       onclick: () => picker.click()},
-           xl("Datei auswählen")));
+           xl("Choose file")));
 }
 
 /* Sends what the file fields of a module are holding, just before its values
@@ -343,7 +349,7 @@ async function flushPendingFiles(mid) {
             if (!resp.ok) {
                 let err = resp.status;
                 try { err = (await resp.json()).error || err; } catch (e) {/**/}
-                msg(`${xl("Ungültige Datei")}: ${name}: ${err}`, "error");
+                msg(`${xl("Invalid file")}: ${name}: ${err}`, "error");
                 return false;
             }
         }
@@ -369,7 +375,7 @@ function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
     const backend = node.configurability === 2;
     const fail = (input) => {
         input.classList.add("invalid");
-        msg(xl("Ungültige Eingabe"), "error");
+        msg(xl("Invalid input"), "error");
         setTimeout(() => input.focus(), 0);   // keep the focus (spec 4.5)
     };
     const ok = (input, v) => { input.classList.remove("invalid"); commit(v); };
@@ -494,7 +500,7 @@ function acquireButton(node, input, commit) {
         // capture may ever be outstanding, otherwise a single backend event
         // would land in whichever field happened to ask first while the other
         // keeps waiting (see handle_value_event, spec 4.9.3).
-        const thaw = freeze(xl("Wert wird gelesen..."));
+        const thaw = freeze(xl("Reading value..."));
         let r = null;
         try {
             r = await api(
@@ -509,14 +515,14 @@ function acquireButton(node, input, commit) {
         if (data && data.value !== null && data.value !== undefined) {
             input.value = data.value;
             commit(data.value);
-            msg(xl("Wert übernommen"), "ok");
+            msg(xl("Value applied"), "ok");
         } else if (data && data.timeout) {
-            msg(xl("Zeitüberschreitung"), "error");
+            msg(xl("Timeout"), "error");
         } else {
             // the device answers refusals with the German key, so that the
             // session's own language decides how they read
             msg(data && data.error ? xl(data.error)
-                                   : xl("Verbindung zum Gerät verloren"),
+                                   : xl("Connection to the device lost"),
                 "error");
         }
     });
@@ -535,10 +541,10 @@ function testButton(node, currentValue) {
         // allein, wer zuhört.
         const clean = (r.status === 200) && !!r.data.result;
         const outcome = (r.status !== 200)
-            ? xl("Der Test konnte nicht gestartet werden.")
+            ? xl("The test could not be started.")
             : (r.data.result
-                ? xl("Die Testroutine wurde ohne Fehler ausgeführt.")
-                : xl("Die Testroutine konnte den Test nicht durchführen."));
+                ? xl("The test routine ran without errors.")
+                : xl("The test routine could not carry out the test."));
         // Der technische Grund steht darunter und nicht hinter einem
         // Doppelpunkt: der Satz endet auf einen Punkt, und "... werden.: 500"
         // liest sich wie ein Tippfehler. Übersetzt wird er nicht -- was der
@@ -564,13 +570,13 @@ function testButton(node, currentValue) {
    different meanings (a typo, or a box that is merely switched off). */
 const PROBE_TYPES = new Set(["path", "pingable"]);
 const PROBE_VERDICT = {
-    reachable:  (d) => [`${xl("Erreichbar")}: ${d.address}`, "ok"],
-    silent:     (d) => [`${d.address}: ${xl("keine Antwort auf Ping")}`, "info"],
-    unresolvable: () => [xl("Name nicht auflösbar"), "error"],
-    file:       () => [xl("Datei vorhanden"), "ok"],
-    directory:  () => [xl("Ordner vorhanden"), "ok"],
-    creatable:  () => [xl("Noch nicht vorhanden, kann angelegt werden"), "info"],
-    missing:    () => [xl("Pfad nicht vorhanden"), "error"],
+    reachable:  (d) => [`${xl("Reachable")}: ${d.address}`, "ok"],
+    silent:     (d) => [`${d.address}: ${xl("no response to ping")}`, "info"],
+    unresolvable: () => [xl("Name cannot be resolved"), "error"],
+    file:       () => [xl("File exists"), "ok"],
+    directory:  () => [xl("Folder exists"), "ok"],
+    creatable:  () => [xl("Does not exist yet, can be created"), "info"],
+    missing:    () => [xl("Path does not exist"), "error"],
 };
 
 /* Two of the seven verdicts can be nothing but a typo: a name that resolves to
@@ -598,8 +604,8 @@ async function probeValue(node, value, rerender) {
     const d = r.data || {};
     const verdict = PROBE_VERDICT[d.outcome];
     if (r.status !== 200 || !verdict)
-        return msg(`${xl("Prüfung fehlgeschlagen")}: ` +
-                   `${d.error || xl("Verbindung zum Gerät verloren")}`,
+        return msg(`${xl("Check failed")}: ` +
+                   `${d.error || xl("Connection to the device lost")}`,
                    "error");
     const [text, level] = verdict(d);
     const refused = level === "error";
@@ -613,7 +619,7 @@ async function probeValue(node, value, rerender) {
 }
 
 function probeButton(node, currentValue, rerender) {
-    const btn = el("button", {class: "small"}, xl("Prüfen"));
+    const btn = el("button", {class: "small"}, xl("Check"));
     btn.addEventListener("click", async () => {
         btn.disabled = true;
         // Dasselbe Urteil hat dieselbe Folge, ob es auf Knopfdruck kommt oder
@@ -700,7 +706,7 @@ function fieldRow(node, container, relKeys, ctx) {
             {class: "help", title: xl(node.ui.tooltip)}, "?") : null,
         input,
         repeats ? el("span", {class: "field-note"},
-                     xl("Wert bereits vergeben"))
+                     xl("Value already taken"))
                 : refused ? el("span", {class: "field-note"}, refused) : null);
     if (node.configurability === 2 && node.ui.acquire_button && !S.readOnly)
         row.append(acquireButton(node, input, commit));
@@ -838,7 +844,7 @@ function renderListA(node, container, relKeys, ctx) {
         const v = raw === "" ? null : raw;
         if (v === null) {                                    // A.6, removal
             if (st.sel !== null &&
-                    await modal(xl("Eintrag wirklich entfernen?")) !== null) {
+                    await modal(xl("Really remove this entry?")) !== null) {
                 list.splice(st.sel, 1);
                 st.sel = null;
                 ctx.markDirty();
@@ -847,7 +853,7 @@ function renderListA(node, container, relKeys, ctx) {
             return;
         }
         if (!validValue(tpl.constraints, v)) {
-            msg(xl("Ungültige Eingabe"), "error");
+            msg(xl("Invalid input"), "error");
             return;
         }
         const existing = list.indexOf(v);
@@ -856,7 +862,7 @@ function renderListA(node, container, relKeys, ctx) {
             list[st.sel] = v;                                // replace
         } else {
             if (list.length >= cons.max_size) {
-                msg(xl("Liste ist voll"), "error");
+                msg(xl("List is full"), "error");
                 return;
             }
             list.push(v);
@@ -887,7 +893,7 @@ function renderListA(node, container, relKeys, ctx) {
             el("tbody", {}, ...rows))),
         el("div", {class: "apply-line"},
             el("button", {disabled: fixed ? "" : null,
-                onclick: () => commitVal(valInput.value)}, xl("Anwenden"))));
+                onclick: () => commitVal(valInput.value)}, xl("Apply"))));
     return body;
 }
 
@@ -1031,13 +1037,13 @@ function renderListB(node, container, relKeys, ctx) {
 
     const apply = el("button", {class: "primary",
         disabled: S.readOnly || !st.changed || repeatsKey ? "" : null},
-        xl("Anwenden"));
+        xl("Apply"));
     apply.addEventListener("click", () => {
         if (st.pos <= list.length) {
             list[st.pos - 1] = deepCopy(st.draft);
         } else {
             if (list.length >= cons.max_size)
-                return msg(xl("Liste ist voll"), "error");
+                return msg(xl("List is full"), "error");
             list.push(deepCopy(st.draft));
         }
         setIn(container, relKeys, list);
@@ -1047,7 +1053,7 @@ function renderListB(node, container, relKeys, ctx) {
     });
     const remove = el("button", {
         disabled: structureFixed || st.pos > list.length ? "" : null},
-        xl("Entfernen"));
+        xl("Remove"));
     remove.addEventListener("click", () => {
         list.splice(st.pos - 1, 1);
         setIn(container, relKeys, list);
@@ -1055,7 +1061,7 @@ function renderListB(node, container, relKeys, ctx) {
         goTo(st.pos);                                   // B.6 leave event
     });
     const undo = el("button",
-        {disabled: !st.changed ? "" : null}, xl("Rückgängig"));
+        {disabled: !st.changed ? "" : null}, xl("Undo"));
     undo.addEventListener("click", () => { st.draft = null; ctx.rerender(); });
 
     // "Neu" jumps to the empty new-record slot (position list_size+1) to add
@@ -1064,7 +1070,7 @@ function renderListB(node, container, relKeys, ctx) {
     const neu = el("button", {
         disabled: structureFixed || list.length >= cons.max_size || isNew
                       ? "" : null,
-        onclick: () => goTo(list.length + 1)}, xl("Neu"));
+        onclick: () => goTo(list.length + 1)}, xl("New"));
 
     return el("div", {class: "group-body list-b"},
         el("div", {class: "layout"}, recordBody, nav),
@@ -1077,7 +1083,7 @@ function checkModuleLists(node, value, focusErr) {
     if (node.item_template) {
         const list = value || [];
         if (list.length < node.constraints.min_size) {
-            focusErr(`${xl("Zu wenige Einträge in")} ` +
+            focusErr(`${xl("Too few entries in")} ` +
                      `"${xl(node.ui.label || node.path)}"`);
             return false;
         }
@@ -1116,7 +1122,7 @@ async function confirmUnsetBooleans(mid) {
     collectUnsetBooleans(S.cvv[mid], S.edit, [mid], found);
     if (!found.length) return true;
     const answered = await modal(
-        xl("Diese Optionen wurden nie gesetzt; als „nein“/„deaktiviert“ übernehmen?") +
+        xl("These options were never set; apply them as “no”/“disabled”?") +
         " " + found.map(f => f.label).join(", "));
     if (!answered) return false;
     for (const f of found) setIn(S.edit, f.keys, false);
@@ -1136,7 +1142,7 @@ async function saveModule(mid) {
     const refused = Object.keys(S.probeBad)
                           .filter(p => p === mid || p.startsWith(mid + "."));
     if (refused.length) {
-        msg(`${xl("Übernehmen fehlgeschlagen")}: ` +
+        msg(`${xl("Apply failed")}: ` +
             refused.map(p => `${p.split(".").pop()} (${S.probeBad[p]})`)
                    .join(", "), "error");
         return;
@@ -1148,12 +1154,12 @@ async function saveModule(mid) {
     const r = await api("/api/config/update",
         {json: {module: mid, value: S.edit[mid]}});
     if (r.status === 401) {
-        await modal(xl("Verbindung zum Gerät verloren"), {alert: true});
+        await modal(xl("Connection to the device lost"), {alert: true});
         location.reload();
         return;
     }
     if (r.status !== 200) {
-        msg(`${xl("Übernehmen fehlgeschlagen")}: ` +
+        msg(`${xl("Apply failed")}: ` +
             ((r.data && r.data.error) || r.status), "error");
         return;
     }
@@ -1161,10 +1167,10 @@ async function saveModule(mid) {
     await reloadData();
     renderAll();
     if (rejected.length > 0) {
-        msg(`${xl("Übernehmen fehlgeschlagen")}: ${xl("Abgelehnt")}: ` +
+        msg(`${xl("Apply failed")}: ${xl("Rejected")}: ` +
             rejected.join(", "), "error");
     } else {
-        msg(xl("Gespeichert"), "ok");
+        msg(xl("Saved"), "ok");
     }
 }
 
@@ -1187,7 +1193,7 @@ function renderModule(mid) {
                 body.append(el("div", {class: "save-row"},
                     el("button", {class: "primary",
                         disabled: S.dirty[mid] ? null : "",
-                        onclick: () => saveModule(mid)}, xl("Speichern"))));
+                        onclick: () => saveModule(mid)}, xl("Save"))));
             }
             return body;
         }, "module");
@@ -1195,11 +1201,11 @@ function renderModule(mid) {
 
 /* ---------- level 0: general features (spec 4.4, 4.5, 4.8, C) ---------- */
 async function unlockProtected() {
-    const passwd = await modal(xl("Passwort"),
+    const passwd = await modal(xl("Password"),
                                {input: {type: "password"}});
     if (passwd === null) return;
     await reloadData(passwd);
-    if (S.wrongPasswd) msg(xl("Falsches Passwort"), "error");
+    if (S.wrongPasswd) msg(xl("Incorrect password"), "error");
     renderAll();
 }
 
@@ -1210,30 +1216,30 @@ async function unlockProtected() {
    carried into the new session: protected parameters still need the separate,
    deliberate unlock. */
 async function takeOverSession() {
-    const passwd = await modal(xl("Passwort"),
+    const passwd = await modal(xl("Password"),
                                {input: {type: "password"}});
     if (passwd === null) return;
     const r = await api("/api/session/takeover", {json: {passwd}});
     if (r.status !== 200 || !r.data || !r.data.token) {
-        msg(r.status === 403 ? xl("Falsches Passwort")
-                             : xl("Verbindung zum Gerät verloren"), "error");
+        msg(r.status === 403 ? xl("Incorrect password")
+                             : xl("Connection to the device lost"), "error");
         return;
     }
     S.token = r.data.token;
     await reloadData();
     renderAll();
-    msg(xl("Sitzung übernommen"), "ok");   // after the re-render, or it is lost
+    msg(xl("Session taken over"), "ok");   // after the re-render, or it is lost
 }
 
 async function exitAdminMode() {
     if (S.factory) {
-        const neu = await modal(xl("Neues Passwort"),
+        const neu = await modal(xl("New password"),
                                 {input: {type: "password"}});
         if (neu === null || neu === "") return;
         const r = await api("/api/config/update",
             {json: {module: "config", value: {ui_passwd: neu}}});
         if (r.status !== 200 || r.data.rejected.length) {
-            msg(xl("Übernehmen fehlgeschlagen"), "error");
+            msg(xl("Apply failed"), "error");
             return;
         }
     }
@@ -1275,17 +1281,17 @@ function authHeaders() {
 
 async function downloadTemplate(target, refs) {
     if (!/^[a-z]{2,3}$/.test(target))
-        return msg(xl("Ungültige Eingabe"), "error");
+        return msg(xl("Invalid input"), "error");
     const url = `/api/lang/template?lang=${target}` +
                 `&refs=${encodeURIComponent(refs.join(","))}`;
     const resp = await fetch(url, {headers: authHeaders()});
     if (!resp.ok) {
         let err = resp.status;
         try { err = (await resp.json()).error || err; } catch (e) { /**/ }
-        return msg(`${xl("Übernehmen fehlgeschlagen")}: ${err}`, "error");
+        return msg(`${xl("Apply failed")}: ${err}`, "error");
     }
     triggerDownload(await resp.blob(), `${target}.csv`);
-    msg(`${xl("CSV herunterladen")}: ${target}.csv`, "ok");
+    msg(`${xl("Download CSV")}: ${target}.csv`, "ok");
 }
 
 function targetFromFileName(file) {
@@ -1299,12 +1305,12 @@ async function uploadTranslation(file, remove, code, name) {
     // file name is only the fallback for a file that arrived another way.
     let target = (code || "").trim().toLowerCase() || targetFromFileName(file);
     if (!target) {
-        target = await modal(xl("Sprachcode"), {input: {}});
+        target = await modal(xl("Language code"), {input: {}});
         if (target === null) return;
         target = target.trim().toLowerCase();
     }
     if (!/^[a-z]{2,3}$/.test(target))
-        return msg(xl("Ungültige Eingabe"), "error");
+        return msg(xl("Invalid input"), "error");
     const fd = new FormData();
     fd.append("file", file);
     fd.append("lang", target);
@@ -1317,7 +1323,7 @@ async function uploadTranslation(file, remove, code, name) {
         {method: "POST", headers: authHeaders(), body: fd});
     if (resp.status === 409) {                 // an 8th language needs room
         const body = await resp.json();
-        const pick = await modal(xl("Zu ersetzende Sprache wählen"),
+        const pick = await modal(xl("Choose the language to be replaced"),
                                  {select: body.removable});
         if (pick === null) return;
         return uploadTranslation(file, pick);
@@ -1325,7 +1331,7 @@ async function uploadTranslation(file, remove, code, name) {
     if (!resp.ok) {
         let err = resp.status;
         try { err = (await resp.json()).error || err; } catch (e) { /**/ }
-        return msg(`${xl("Ungültige Datei")}: ${err}`, "error");
+        return msg(`${xl("Invalid file")}: ${err}`, "error");
     }
     const translated = resp.headers.get("X-GPSMCPMMS-Translated");
     const total = resp.headers.get("X-GPSMCPMMS-Total");
@@ -1334,8 +1340,8 @@ async function uploadTranslation(file, remove, code, name) {
     await loadLangList();
     renderAll();
     // message after the re-render, so renderAll() does not wipe it
-    msg(`${xl("Übersetzung verarbeitet")}: ` +
-        `${translated} / ${total} ${xl("übersetzt")}`, "ok");
+    msg(`${xl("Translation processed")}: ` +
+        `${translated} / ${total} ${xl("translated")}`, "ok");
 }
 
 /* ---------- managing translations ----------
@@ -1363,16 +1369,16 @@ function renderLangPanel(mode) {
         else st.target = active[0];
         targetOf = () => sel.value;
         row1 = el("div", {class: "lang-panel-row"},
-            el("span", {}, xl("Bearbeitung von") + ":"), sel);
+            el("span", {}, xl("Editing") + ":"), sel);
     } else {
         const unused = Object.keys(S.langNames || {})
             .filter(c => !S.languages.includes(c))
             .sort((a, b) => langName(a).localeCompare(langName(b)));
         const code = el("input", {type: "text", class: "lang-code",
-                                  placeholder: xl("Sprachcode"),
+                                  placeholder: xl("Language code"),
                                   value: st.newCode || ""});
         const name = el("input", {type: "text", class: "lang-name",
-                                  placeholder: xl("Sprachname"),
+                                  placeholder: xl("Language name"),
                                   value: st.newName || ""});
         const pick = el("select", {onchange: (e) => {
             const c = e.target.value;
@@ -1392,7 +1398,7 @@ function renderLangPanel(mode) {
         targetOf = () => (code.value || "").trim().toLowerCase();
 
         row1 = el("div", {class: "lang-panel-row"},
-            el("span", {}, xl("Neue Sprache") + ":"), pick, code, name);
+            el("span", {}, xl("New language") + ":"), pick, code, name);
     }
 
     // row 1b -- only when every slot is taken. Asked here, before any work,
@@ -1403,7 +1409,7 @@ function renderLangPanel(mode) {
             ...active.map(l => el("option", {value: l}, langName(l))));
         replaceOf = () => sel.value;
         row1b = el("div", {class: "lang-panel-row"},
-            el("span", {}, xl("Zu ersetzen") + ":"), sel);
+            el("span", {}, xl("To be replaced") + ":"), sel);
     }
 
     // row 2 -- context languages: everything active except German, and except
@@ -1432,27 +1438,27 @@ function renderLangPanel(mode) {
     const picker = el("input", {type: "file", accept: ".csv",
                                 style: "display:none"});
     const choose = el("button", {class: "small", type: "button",
-        onclick: () => picker.click()}, xl("Fertige CSV auswählen"));
+        onclick: () => picker.click()}, xl("Select completed CSV"));
     picker.addEventListener("change", () => {
         // the label becomes the file name: otherwise nothing on screen says
         // what the third button is about to send
         choose.textContent = picker.files.length ? picker.files[0].name
-                                                 : xl("Fertige CSV auswählen");
+                                                 : xl("Select completed CSV");
     });
     const row3 = el("div", {class: "lang-panel-row"},
-        el("span", {}, xl("Übersetzungsdatei: zuerst")),
+        el("span", {}, xl("Translation file: start by")),
         el("button", {class: "small primary", type: "button", onclick: () =>
             downloadTemplate(targetOf(),
                 boxes.filter(b => b.cb.checked && b.l !== targetOf())
-                     .map(b => b.l))}, xl("CSV herunterladen")),
-        el("span", {}, xl("dann")), picker, choose,
-        el("span", {}, xl("zuletzt")),
+                     .map(b => b.l))}, xl("Download CSV")),
+        el("span", {}, xl("then")), picker, choose,
+        el("span", {}, xl("finally")),
         el("button", {class: "small", type: "button", onclick: () => {
             if (!picker.files.length) return;
             uploadTranslation(picker.files[0], replaceOf(),
                               mode === "new" ? targetOf() : null,
                               mode === "new" ? (st.newName || "").trim() : null);
-        }}, xl("Ausgewählte CSV hochladen")));
+        }}, xl("Upload the selected CSV")));
 
     const panel = el("div", {class: "lang-panel"}, row1, row1b, row2, row3);
     limit();
@@ -1464,18 +1470,18 @@ function renderAll() {
     const app = document.getElementById("app");
     app.innerHTML = "";
     app.append(
-        el("h1", {class: "title"}, xl("Hub4Help Konfigurationseditor")),
+        el("h1", {class: "title"}, xl("Hub4Help Configuration Editor")),
         el("hr", {class: "title-rule"}));
 
     const general = el("div", {class: "general-row"});
     if (S.protectedOmitted && !S.readOnly)
         general.append(el("button", {onclick: unlockProtected},
-                          xl("Geschützte Parameter anzeigen")));
+                          xl("Show protected parameters")));
     const langSel = el("select", {onchange: (e) =>
                                       switchLanguage(e.target.value)},
         ...S.languages.map(l => el("option", {value: l}, langName(l))));
     langSel.value = S.languages.includes(S.lang) ? S.lang : "de";
-    general.append(el("span", {}, xl("Sprache") + ":"), langSel);
+    general.append(el("span", {}, xl("Language") + ":"), langSel);
     if (S.admin) {
         const toggle = (mode) => {
             S.langPanel = S.langPanel === mode ? null : mode;
@@ -1488,38 +1494,38 @@ function renderAll() {
             el("button", {class: "small" + (S.langPanel === "new"
                                                 ? " primary" : ""),
                           onclick: () => toggle("new")},
-               xl("Neue Übersetzung hinzufügen")),
+               xl("Add new translation")),
             el("button", {class: "small" + (S.langPanel === "edit"
                                                 ? " primary" : ""),
                           disabled: S.languages.length < 2 ? "" : null,
                           title: S.languages.length < 2
-                                     ? xl("Noch keine Übersetzung vorhanden")
+                                     ? xl("No translation exists yet")
                                      : null,
                           onclick: () => toggle("edit")},
-               xl("Vorhandene Übersetzung bearbeiten")));
+               xl("Edit existing translation")));
     }
     general.append(el("span", {class: "spacer"}));
     if (!S.readOnly)
         general.append(el("button", {onclick: async () => {
             await api("/api/end_session", {json: {}});
             location.reload();
-        }}, xl("Sitzung beenden")));
+        }}, xl("End session")));
     app.append(general);
     if (S.admin && S.langPanel) app.append(renderLangPanel(S.langPanel));
     app.append(el("div", {id: "messages"}));
 
     if (S.readOnly)
         app.append(el("div", {class: "banner readonly"},
-            xl("Nur-Lese-Modus: Eine andere Sitzung ist aktiv"),
+            xl("Read-only mode: another session is active"),
             el("button", {class: "small", onclick: () => location.reload()},
-               xl("Erneut laden")),
+               xl("Reload")),
             el("button", {class: "small", onclick: takeOverSession},
-               xl("Sitzung übernehmen"))));
+               xl("Take over session"))));
     if (S.factory)
         app.append(el("div", {class: "banner"},
-            xl("Das Gerät verwendet noch das werksseitige Standardpasswort"),
+            xl("The device is still using the factory default password"),
             S.admin ? el("button", {class: "small", onclick: exitAdminMode},
-                         xl("Admin-Modus verlassen")) : null));
+                         xl("Exit admin mode")) : null));
 
     // sorted by module id, which is how a device controls the order of the
     // groups on screen -- prefix the ids and you have chosen the sequence
@@ -1540,6 +1546,11 @@ async function loadLangList() {
     if (r.data && r.data.languages) S.languages = r.data.languages;
     if (r.data && r.data.options) S.langNames = r.data.options;
     if (r.data && r.data.max_languages) S.maxLanguages = r.data.max_languages;
+    // Der Browser darf eine Sprache nennen, für die es hier kein Wörterbuch
+    // gibt. Angezeigt würden dann die Schlüssel selbst -- lesbar, aber die
+    // Auswahlliste stünde auf etwas, was nicht darin vorkommt.
+    if (S.languages.length && !S.languages.includes(S.lang))
+        S.lang = S.languages.includes("en") ? "en" : S.languages[0];
 }
 
 /* What a language is called. A code is a last resort and a sign that somebody
@@ -1598,9 +1609,9 @@ async function boot() {
         document.getElementById("app").innerHTML = "";
         document.getElementById("app").append(
             el("div", {class: "banner"},
-               xl("Verbindung zum Gerät verloren"),
+               xl("Connection to the device lost"),
                el("button", {class: "small",
-                   onclick: () => location.reload()}, xl("Erneut laden"))));
+                   onclick: () => location.reload()}, xl("Reload"))));
     }
 }
 

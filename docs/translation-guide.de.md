@@ -43,7 +43,8 @@ Die Datei ist eine UTF-8-Textdatei. Ihre Spalten sind:
 
 | Spalte          | Bedeutung                                                              |
 |-----------------|-----------------------------------------------------------------------|
-| `de`            | Der deutsche Quelltext — zugleich der Schlüssel. **Nicht verändern.**  |
+| `key`           | Der Quelltext — zugleich der Schlüssel. **Nicht verändern.**           |
+| `src`           | Die Sprache, in der dieser Schlüssel geschrieben ist. **Nicht verändern.** |
 | `kind`          | Was der Text ist und wo er erscheint (siehe unten). **Nicht verändern.** |
 | Referenz(en)    | Bestehende Übersetzungen, nur zur Ansicht. **Nicht verändern.**        |
 | `<code>` (letzte) | Die Zielsprache — **diese Spalte füllen Sie aus.**                  |

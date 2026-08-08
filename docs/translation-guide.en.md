@@ -45,7 +45,8 @@ The file is a UTF-8 text file. Its columns are:
 
 | Column        | Meaning                                                          |
 |---------------|------------------------------------------------------------------|
-| `de`          | The German source text — this is also the key. **Do not change it.** |
+| `key`         | The source text — this is also the key. **Do not change it.**     |
+| `src`         | Which language that key is written in. **Do not change it.**      |
 | `kind`        | What the text is and where it appears (see below). **Do not change it.** |
 | reference(s)  | Existing translations, shown only for reference. **Do not change them.** |
 | `<code>` (last) | The target language — **this is the column you fill in.**       |
