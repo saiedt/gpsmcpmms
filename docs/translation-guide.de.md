@@ -102,6 +102,68 @@ innerhalb eines Textes eine Zeile niemals zerreißen können).
   `speech` werden vorgelesen“*). Quelltext, `kind` und die Referenzspalten
   liefern alles Nötige.
 
+### Die Datei einem KI-Assistenten übergeben
+
+Hängen Sie die heruntergeladene `<code>.csv` an und geben Sie eine Anweisung wie
+die folgende. Ersetzen Sie `<SPRACHE>` durch die gewünschte Sprache und
+`<code>` durch den Spaltennamen, und lassen Sie die Regeln stehen — jede von
+ihnen steht da, weil ihr Fehlen eine Datei erzeugt, die richtig aussieht und
+etwas kaputt macht.
+
+> Du übersetzt die Bedienoberfläche eines Konfigurationseditors ins
+> **\<SPRACHE\>**. Die angehängte `<code>.csv` ist eine UTF-8-Textdatei, eine
+> Zeile je Zeichenkette, Felder durch `|` getrennt, jedes Feld in doppelten
+> Anführungszeichen.
+>
+> Die Spalten sind `key` (der Quelltext), `src` (die Sprache, in der dieser Text
+> geschrieben ist), `kind` (was der Text ist), dann eine oder mehrere
+> Referenzsprachen, und zuletzt die Zielspalte `<code>` — die einzige Spalte,
+> in die du schreiben darfst.
+>
+> 1. Gib die **vollständige** Datei zurück: jede Zeile, in derselben
+>    Reihenfolge, im selben Format, nichts hinzugefügt, nichts weggelassen,
+>    nichts zusammengefasst oder abgekürzt.
+> 2. Fülle **nur die letzte Spalte**. Übernimm `key`, `src`, `kind` und die
+>    Referenzspalten unverändert.
+> 3. Alles in geschweiften Klammern — `{n}`, `{langs}`, `{max}`, `{service}`,
+>    `{scope}` — ist ein Platzhalter, den die Software zur Laufzeit einsetzt.
+>    Übernimm ihn genau so, samt Klammern und Schreibweise darin. Du darfst ihn
+>    im Satz verschieben, wenn die Grammatik von \<SPRACHE\> es verlangt. Für
+>    `{scope}` wird eine andere Zeile derselben Datei eingesetzt — lass die
+>    runden Klammern darum stehen, wo der Quelltext sie hat, und schreibe die
+>    Wörter nicht selbst hinein.
+> 4. Beachte die Spalte `kind`:
+>    - `label` — Beschriftung neben einem Feld oder auf einer Schaltfläche:
+>      **kurz halten**.
+>    - `tooltip` — erklärender Text: ein ganzer Satz ist in Ordnung.
+>    - `placeholder` — ein Formatbeispiel, etwa eine Rufnummer: den Quelltext
+>      unverändert wiederholen, es sei denn, das Format ist in \<SPRACHE\>
+>      wirklich ein anderes.
+>    - `speech` — wird von einem Gerät **vorgelesen**, einem älteren Menschen,
+>      der vielleicht gerade um Hilfe bittet. Schreibe es so, wie man es sagt:
+>      keine Abkürzungen, keine Klammern, keine Sonderzeichen. Behalte die
+>      Satzzeichen, denn ein Doppelpunkt wird zu einer kurzen und ein
+>      Zeilenumbruch zu einer einsekündigen Pause. Sprich die zuhörende Person
+>      höflich an.
+>    - `ui` — Schaltflächen und Meldungen des Editors selbst, gelesen von einer
+>      administrierenden Person.
+> 5. Ist ein Text in \<SPRACHE\> schon richtig, wie er dasteht — etwa ein Wort,
+>    das genauso lautet —, dann **wiederhole ihn** statt die Zelle leer zu
+>    lassen. Eine leere Zelle heißt „noch nicht übersetzt“.
+> 6. Nutze die Referenzspalten als Kontext. `src` sagt dir, in welcher Sprache
+>    der Schlüssel selbst steht, und das ist nicht in jeder Zeile dieselbe.
+> 7. Verwende die Anführungszeichen und Satzzeichen, wie sie in \<SPRACHE\>
+>    üblich sind.
+>
+> Gib zuerst die Datei zurück. Falls du irgendwo raten musstest, nenne diese
+> Zeilen danach kurz.
+
+Zwei Dinge lohnt es, an der Antwort zu prüfen, bevor Sie sie hochladen: dass sie
+**so viele Zeilen hat wie die Datei, die Sie gesendet haben**, und dass kein
+`{…}`-Platzhalter übersetzt oder verloren gegangen ist. Um das Übrige kümmert
+sich das Hochladen — eine Zeile, mit der es nichts anfangen kann, steht im
+Bericht und verschwindet nicht stillschweigend.
+
 ### Bearbeiten in Microsoft Excel (bitte lesen)
 
 Deutsches Excel erfordert eine bestimmte Vorgehensweise — **öffnen Sie die Datei

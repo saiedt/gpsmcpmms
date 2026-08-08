@@ -96,6 +96,57 @@ row).
   `placeholder` are format examples, rows marked `speech` are read aloud"*). The
   source text, the `kind` and the reference columns give it everything it needs.
 
+### Handing the file to an AI assistant
+
+Attach the downloaded `<code>.csv` and give it a prompt like the one below.
+Replace `<LANGUAGE>` with the language you want and `<code>` with the column
+name, and keep the rules — each one is there because leaving it out produces a
+file that looks right and breaks something.
+
+> You are translating the interface of a configuration editor into
+> **\<LANGUAGE\>**. The attached `<code>.csv` is UTF-8 text, one row per string,
+> fields separated by `|`, every field wrapped in double quotes.
+>
+> The columns are `key` (the source text), `src` (the language that text is
+> written in), `kind` (what the text is), then one or more reference languages,
+> and last the target column `<code>` — the only column you may write in.
+>
+> 1. Return the **complete** file: every row, in the same order, same format,
+>    nothing added, nothing omitted, nothing summarised or abbreviated.
+> 2. Fill **only the last column**. Copy `key`, `src`, `kind` and the reference
+>    columns through unchanged.
+> 3. Anything in curly braces — `{n}`, `{langs}`, `{max}`, `{service}`, `{scope}`
+>    — is a placeholder the software fills in at runtime. Keep each one exactly
+>    as it is, including the braces and the spelling inside them. You may move it
+>    within the sentence if the grammar of \<LANGUAGE\> requires it. `{scope}` is
+>    filled with another row of this same file, so leave the brackets around it
+>    where the source has them and do not write the words in yourself.
+> 4. Respect the `kind` column:
+>    - `label` — a caption beside a field or on a button: **keep it short**.
+>    - `tooltip` — explanatory text: a full sentence is fine.
+>    - `placeholder` — a format example, such as a phone number: repeat the
+>      source text unchanged unless that format really differs in \<LANGUAGE\>.
+>    - `speech` — **read aloud** by a device, to an elderly person who may be
+>      asking for help. Write it the way you would say it: no abbreviations, no
+>      brackets, no symbols. Keep the punctuation, because a colon becomes a
+>      short pause and a line break a one-second pause. Address the listener
+>      politely.
+>    - `ui` — the editor's own buttons and messages, read by an administrator.
+> 5. If a text is already correct as it stands in \<LANGUAGE\> — a word that is
+>    the same, for instance — **repeat it** rather than leaving the cell empty.
+>    An empty cell means "not translated yet".
+> 6. Use the reference columns for context. `src` tells you which language the
+>    key itself is in, and it is not the same for every row.
+> 7. Use the quotation marks and punctuation conventions of \<LANGUAGE\>.
+>
+> Return the file first. If you had to guess anywhere, list those rows briefly
+> afterwards.
+
+Two things are worth checking on the answer before you upload it: that it has
+**as many rows as the file you sent**, and that no `{…}` placeholder has been
+translated or lost. The upload reports the rest — and a row it cannot use is
+listed in the report rather than silently dropped.
+
 ### Editing in Microsoft Excel (please read)
 
 German Excel needs a specific procedure — **do not double-click the file**.
