@@ -907,6 +907,27 @@ class ConfigManager:
         if self.DECL_LANG not in self._lang_cache:
             self._lang_cache[self.DECL_LANG] = {}
 
+        # A dictionary that covers not a single one of this library's own
+        # display strings was written against different keys -- almost always
+        # one from before the source language changed. Nothing is broken: the
+        # editor falls back to the keys and stays readable. But it reads in
+        # DECL_LANG, and every language reports incomplete, and neither is
+        # obvious from looking at it. Said once at startup, it costs a line;
+        # unsaid, it costs somebody an afternoon.
+        own = {key for key, lang in self._xlation_langs.items()
+               if lang == self.DECL_LANG}
+        for lang, entries in sorted(self._lang_cache.items()):
+            if lang == self.DECL_LANG or not entries or not own:
+                continue
+            if not (own & set(entries)):
+                self._logger.warning(
+                        f"Translation dictionary '{lang}' has {len(entries)} "
+                        f"entries but none for the {len(own)} display strings "
+                        f"of this library. It was written against different "
+                        f"keys -- if the source language changed, replace the "
+                        f"dictionaries in '{self._lang_dir}' with the ones "
+                        f"shipped in the package.")
+
         for lang, lang_dict in self._lang_cache.items():
             lang_dict["lang_cache_modified"] = False
             self._migrate_lang_format(lang, lang_dict)
