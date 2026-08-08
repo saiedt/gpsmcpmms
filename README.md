@@ -293,7 +293,7 @@ and (by kind) `value`, `children` or `item_template`.
 - **Taking it back.** Because the token is memory-only, closing the window — or
   merely reloading the page — abandons a session that the device still considers
   live, locking the admin out of their own editor until it times out. The
-  read-only banner therefore offers **Sitzung übernehmen**, which reclaims the
+  read-only banner therefore offers **Take over session**, which reclaims the
   lock on proof of the admin password and invalidates the previous token. The
   password is not carried into the new session: seeing protected parameters
   still takes the separate unlock. Every transition of the lock — granted,
@@ -518,7 +518,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 - **List uniqueness** — simple-value lists forbid duplicates; `list_keys` declares
   uniqueness for record lists, and the editor hides already-used enum options. A
   member repeating another on a declared group is dropped and reported, and the
-  editor marks the colliding field and disables *Anwenden*: hiding taken options
+  editor marks the colliding field and disables *Apply*: hiding taken options
   works for an enum and for nothing else, so a typed or captured value — an RFID
   arrives from the reader — had nothing standing in its way.
 - **Distinctness across paths** — `distinct_values` on a named *dict* type names
@@ -547,7 +547,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   different: it is checked on the **device**, because only the device can answer.
   The file system is its own, and what matters about a host is whether *it*
   reaches it — the browser may be on the other interface. The check runs as soon
-  as the value is entered, and again whenever *Prüfen* is pressed.
+  as the value is entered, and again whenever *Check* is pressed.
 
   Each verdict is three-way rather than yes/no, because "not there" carries two
   very different meanings, and they get different treatment:
@@ -565,7 +565,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   value is *marked, not withdrawn*: what somebody typed stays on screen to be
   corrected, which is what the browser's own checks do — they simply refuse
   before the value is committed, whereas this answer arrives afterwards. It makes
-  no difference whether the verdict came from typing or from pressing *Prüfen*;
+  no difference whether the verdict came from typing or from pressing *Check*;
   the same verdict marks the same field, and Save is the one gate.
 
   The other two are legitimate states of a working device — a speakerphone can
@@ -590,7 +590,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   files there, and only it can say which ones qualify.
 
   ```python
-  "ring_tone": {"label": "Klingelton", "type": "file",
+  "ring_tone": {"label": "Ring tone", "type": "file",
                 "file_dir": "/etc/freeswitch/audio",
                 "bound_to": r".+\.wav",          # fullmatch, not a suffix search
                 "values": "get_ring_tone_list"}
