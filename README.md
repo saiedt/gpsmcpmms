@@ -738,10 +738,19 @@ param_dict={
 
 ## Related work & limitations
 
-Python has plenty of configuration tooling, but it is fragmented and no single
-popular package covers this exact niche — framework-agnostic self-registration
-**plus** an auto-generated web editor **plus** validation, persistence and i18n in
-one box. It splits roughly into three camps:
+What this was built for is **commissioning**: taking an appliance from a bare
+image to a device that is provisioned, tested and personalised for one customer —
+and doing it in a single pass, standing at the device, through a browser. Every
+part of that pass comes out of the same declarations: the validation, the editor
+that collects the values, the verification against the real hardware, the test
+buttons that prove it works, and the language the device will speak to the person
+using it. No build step, no service to run, no separate string table, and no user
+interface to write.
+
+Python has plenty of configuration tooling, but it is fragmented, and none of it
+covers that arc — framework-agnostic self-registration **plus** an auto-generated
+web editor **plus** validation, persistence and i18n in one box. It splits roughly
+into three camps:
 
 - **Loading & typed validation** — [`pydantic` / `pydantic-settings`](https://docs.pydantic.dev/),
   [`dynaconf`](https://www.dynaconf.com/), [`hydra`](https://hydra.cc/) + `omegaconf`,
@@ -758,6 +767,34 @@ one box. It splits roughly into three camps:
 - **Distributed config & feature flags** — Consul, etcd, Vault; Unleash, Flagsmith,
   LaunchDarkly. Powerful, but they need a server/service and target fleets, not a
   single offline device.
+
+### Commissioning in one pass
+
+What a distributor actually does at the device, and what carries it:
+
+| Step | What does the work |
+|------|--------------------|
+| Lock what the customer may not change, leave the rest open | `protected` + the admin password; `fixed_val` and `init_only` for what is settled once |
+| Type addresses, keys and credentials | the declared types, `bound_to` patterns, `password` masking |
+| Confirm that a host and a folder really exist **on the device** | the `pingable` / `path` verification, which refuses a typo at Save |
+| Read a value off the hardware instead of typing it | `backend_provided` + `acquire_button`, long-polled from the reader |
+| Offer only the choices that exist right now | dynamic enums, and `values_for` for a pair that depends on itself |
+| Prove it works before leaving | `test_func` buttons — hear the ring tone, call the number, watch the LED |
+| Hand the device over in the customer's language | every display string is already a translation key; the CSV round-trip fills seven languages |
+| Take the provisioning secrets off the card | `discard_module()` |
+
+None of that is a separate mechanism bolted on: it is one declaration per
+parameter, read by the backend for validation and by the editor for the form. The
+same German label that appears beside a field is the key its translation is stored
+under, so a device that speaks Turkish needs no string table in the application —
+and in the appliance this grew from, the sentences the device *says out loud* go
+through exactly that path too.
+
+The catch is real and worth stating: the application has to be written to declare
+these things rather than hardcode them. A module that validates its own input, or
+builds its own screen, or keeps its own texts, gets none of it. The reward for
+declaring instead is that the whole commissioning pass — and every language of it
+— falls out of what you already had to write down.
 
 ### What this project adds
 
@@ -788,8 +825,10 @@ Deliberate trade-offs for a trusted-LAN appliance:
 - **Single process, single device, single active editor** — no layered config
   sources or `${var}` interpolation, no distributed consistency, no fleet-wide
   hot-reload, and no schema versioning/migration across releases.
-- **Maturity** — a purpose-built component, not a battle-tested library with a
-  large test suite, a security process and a community behind it.
+- **Maturity** — purpose-built rather than battle-tested: no security process and
+  no community behind it. What it *has* been through is one real appliance, whose
+  every parameter, hardware capture, test button and spoken announcement in seven
+  languages runs through it — which is evidence of fitness, not of hardening.
 
 ### When to use something else
 
@@ -801,11 +840,12 @@ Deliberate trade-offs for a trusted-LAN appliance:
 | Distributed / fleet config, feature flags | Consul / etcd, Unleash / Flagsmith |
 | A schema-driven form without a custom DSL | JSON Schema + RJSF |
 
-For its actual target — an **offline appliance where non-technical users edit
-rich, structured, hardware-linked configuration through a browser on a trusted
-LAN, in several languages** — there is no drop-in open-source equivalent; Home
-Assistant's config flows come closest but are not extractable as a standalone
-library.
+But for the job at the top of this section — **commissioning an offline appliance:
+provisioning it, verifying it against its own hardware, testing it and handing it
+over personalised and in the customer's language, in one pass at the device** —
+picking from that table means assembling four or five of them and writing the
+editor yourself. There is no drop-in open-source equivalent; Home Assistant's
+config flows come closest in spirit and are not extractable as a library.
 
 ---
 
