@@ -50,8 +50,7 @@ The file is a UTF-8 text file. Its columns are:
 
 | Column        | Meaning                                                          |
 |---------------|------------------------------------------------------------------|
-| `key`         | The source text — this is also the key. **Do not change it.**     |
-| `src`         | Which language that key is written in. **Do not change it.**      |
+| `en`, `de`    | The same text in both, whichever it was written in first. Translate from either — **do not change them.** |
 | `kind`        | What the text is and where it appears (see below). **Do not change it.** |
 | reference(s)  | Existing translations, shown only for reference. **Do not change them.** |
 | `<code>` (last) | The target language — **this is the column you fill in.**       |
@@ -75,9 +74,8 @@ row).
 
 ## Step 3 — Fill in the translations
 
-- Edit **only the last column** (your target language). Leave `key`, `src`, `kind`
-  and the reference columns exactly as they are — they are the keys and the
-  context.
+- Edit **only the last column** (your target language). Leave every column to
+  the left of it exactly as it is — they are the source and the context.
 - A **blank** cell means "not translated yet"; that entry will show the source
   text instead, and the language counts as incomplete until it is filled. You may
   translate some entries now and the rest later.
@@ -87,10 +85,10 @@ row).
   you would think — a word that reads the same in your language ("OK"), and
   fields that are not a sentence at all, such as the format example
   `004961501834300` for a phone number.
-- Watch the `src` column: not every key is in the same language. This library
-  writes English ones, and an application built on it may write its own in
-  another — so a row may present you with German to translate from, and the `en`
-  column beside it is then the one to lean on.
+- The two leading columns are the **same text in two languages**, and both are
+  filled. Translate from whichever you read better; you never have to work out
+  which of them the software considers the original, because rewording a
+  source text creates a new row rather than quietly outdating its neighbour.
 - You can translate by hand, or hand the whole file to an AI assistant
   (e.g. *"please fill the last column with the French translation; rows marked
   `placeholder` are format examples, rows marked `speech` are read aloud"*). The
@@ -107,14 +105,15 @@ file that looks right and breaks something.
 > **\<LANGUAGE\>**. The attached `<code>.csv` is UTF-8 text, one row per string,
 > fields separated by `|`, every field wrapped in double quotes.
 >
-> The columns are `key` (the source text), `src` (the language that text is
-> written in), `kind` (what the text is), then one or more reference languages,
-> and last the target column `<code>` — the only column you may write in.
+> The first two columns are the same text in two languages — translate from
+> whichever you handle better, they are equally valid. Then `kind` (what the
+> text is), possibly further reference languages, and last the target column
+> `<code>` — the only column you may write in.
 >
 > 1. Return the **complete** file: every row, in the same order, same format,
 >    nothing added, nothing omitted, nothing summarised or abbreviated.
-> 2. Fill **only the last column**. Copy `key`, `src`, `kind` and the reference
->    columns through unchanged.
+> 2. Fill **only the last column**. Copy every column to the left of it through
+>    unchanged.
 > 3. Anything in curly braces — `{n}`, `{langs}`, `{max}`, `{service}`, `{scope}`
 >    — is a placeholder the software fills in at runtime. Keep each one exactly
 >    as it is, including the braces and the spelling inside them. You may move it
@@ -135,8 +134,7 @@ file that looks right and breaks something.
 > 5. If a text is already correct as it stands in \<LANGUAGE\> — a word that is
 >    the same, for instance — **repeat it** rather than leaving the cell empty.
 >    An empty cell means "not translated yet".
-> 6. Use the reference columns for context. `src` tells you which language the
->    key itself is in, and it is not the same for every row.
+> 6. Use the other columns for context when a text is short or ambiguous.
 > 7. Use the quotation marks and punctuation conventions of \<LANGUAGE\>.
 >
 > Return the file first. If you had to guess anywhere, list those rows briefly

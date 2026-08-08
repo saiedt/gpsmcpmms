@@ -54,8 +54,7 @@ Die Datei ist eine UTF-8-Textdatei. Ihre Spalten sind:
 
 | Spalte          | Bedeutung                                                              |
 |-----------------|-----------------------------------------------------------------------|
-| `key`           | Der Quelltext — zugleich der Schlüssel. **Nicht verändern.**           |
-| `src`           | Die Sprache, in der dieser Schlüssel geschrieben ist. **Nicht verändern.** |
+| `en`, `de`      | Derselbe Text in beiden Sprachen, gleich in welcher er zuerst geschrieben wurde. Übersetzen Sie aus einer von beiden — **nicht verändern.** |
 | `kind`          | Was der Text ist und wo er erscheint (siehe unten). **Nicht verändern.** |
 | Referenz(en)    | Bestehende Übersetzungen, nur zur Ansicht. **Nicht verändern.**        |
 | `<code>` (letzte) | Die Zielsprache — **diese Spalte füllen Sie aus.**                  |
@@ -79,9 +78,8 @@ innerhalb eines Textes eine Zeile niemals zerreißen können).
 
 ## Schritt 3 — Übersetzungen eintragen
 
-- Bearbeiten Sie **nur die letzte Spalte** (Ihre Zielsprache). Lassen Sie
-  `key`, `src`, `kind` und die Referenzspalten unverändert — sie sind die
-  Schlüssel und der Kontext.
+- Bearbeiten Sie **nur die letzte Spalte** (Ihre Zielsprache). Lassen Sie alle
+  Spalten links davon unverändert — sie sind die Quelle und der Kontext.
 - Ein **leeres** Feld bedeutet „noch nicht übersetzt“; dieser Eintrag erscheint
   dann im Wortlaut seines Schlüssels, und die Sprache gilt so lange als
   unvollständig. Sie dürfen einige Einträge jetzt und den Rest später übersetzen.
@@ -91,11 +89,11 @@ innerhalb eines Textes eine Zeile niemals zerreißen können).
   öfter vor, als man denkt — bei einem Wort, das in Ihrer Sprache genauso lautet
   („OK“), und bei Feldern, hinter denen gar kein Satz steckt, etwa dem
   Formatbeispiel `004961501834300` für eine Rufnummer.
-- Achten Sie auf die Spalte `src`: nicht jeder Schlüssel ist in derselben
-  Sprache. Die Bibliothek schreibt englische, eine darauf aufbauende Anwendung
-  darf eigene in einer anderen schreiben — eine Zeile kann Ihnen also Deutsch
-  zum Übersetzen vorlegen, und dann ist die Spalte `en` daneben die, an der Sie
-  sich festhalten.
+- Die beiden ersten Spalten sind **derselbe Text in zwei Sprachen**, und beide
+  sind gefüllt. Übersetzen Sie aus der, die Sie besser lesen; welche davon die
+  Software für das Original hält, brauchen Sie nie zu wissen — wird ein
+  Quelltext umformuliert, entsteht eine neue Zeile und nicht eine still veraltete
+  daneben.
 - Sie können von Hand übersetzen oder die gesamte Datei einem KI-Assistenten
   übergeben (z. B. *„Bitte fülle die letzte Spalte mit der französischen
   Übersetzung; Zeilen mit `placeholder` sind Formatbeispiele, Zeilen mit
@@ -115,16 +113,16 @@ etwas kaputt macht.
 > Zeile je Zeichenkette, Felder durch `|` getrennt, jedes Feld in doppelten
 > Anführungszeichen.
 >
-> Die Spalten sind `key` (der Quelltext), `src` (die Sprache, in der dieser Text
-> geschrieben ist), `kind` (was der Text ist), dann eine oder mehrere
-> Referenzsprachen, und zuletzt die Zielspalte `<code>` — die einzige Spalte,
-> in die du schreiben darfst.
+> Die ersten zwei Spalten sind derselbe Text in zwei Sprachen — übersetze aus
+> der, die du besser beherrschst, beide sind gleichwertig. Dann `kind` (was der
+> Text ist), moeglicherweise weitere Referenzsprachen, und zuletzt die
+> Zielspalte `<code>` — die einzige Spalte, in die du schreiben darfst.
 >
 > 1. Gib die **vollständige** Datei zurück: jede Zeile, in derselben
 >    Reihenfolge, im selben Format, nichts hinzugefügt, nichts weggelassen,
 >    nichts zusammengefasst oder abgekürzt.
-> 2. Fülle **nur die letzte Spalte**. Übernimm `key`, `src`, `kind` und die
->    Referenzspalten unverändert.
+> 2. Fülle **nur die letzte Spalte**. Übernimm alle Spalten links davon
+>    unverändert.
 > 3. Alles in geschweiften Klammern — `{n}`, `{langs}`, `{max}`, `{service}`,
 >    `{scope}` — ist ein Platzhalter, den die Software zur Laufzeit einsetzt.
 >    Übernimm ihn genau so, samt Klammern und Schreibweise darin. Du darfst ihn
@@ -150,8 +148,8 @@ etwas kaputt macht.
 > 5. Ist ein Text in \<SPRACHE\> schon richtig, wie er dasteht — etwa ein Wort,
 >    das genauso lautet —, dann **wiederhole ihn** statt die Zelle leer zu
 >    lassen. Eine leere Zelle heißt „noch nicht übersetzt“.
-> 6. Nutze die Referenzspalten als Kontext. `src` sagt dir, in welcher Sprache
->    der Schlüssel selbst steht, und das ist nicht in jeder Zeile dieselbe.
+> 6. Nutze die anderen Spalten als Kontext, wenn ein Text kurz oder mehrdeutig
+>    ist.
 > 7. Verwende die Anführungszeichen und Satzzeichen, wie sie in \<SPRACHE\>
 >    üblich sind.
 >

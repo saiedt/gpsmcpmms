@@ -373,7 +373,9 @@ written in, so `decl_lang` is what makes a German label count as done for German
 instead of being reported missing for ever. It also decides the fallback: the
 appliance this grew from keeps German keys precisely so that a missing German
 translation still leaves its users with German rather than English. Both facts
-travel to a translator in the template's `src` column.
+reach a translator without being spelled out: the template leads with the
+protected languages, both filled, so a row written in German arrives with its
+English beside it and vice versa.
 
 **Which languages may be added** is governed by two handles, in this order:
 
@@ -466,7 +468,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 | `POST /api/config/update` | Apply `{module, value}`; returns `{rejected: […]}`. |
 | `GET /api/schema[/<lang>]` | Translation dictionary for a language (defaults to `de`). |
 | `GET /api/lang/info` | Language list (plus orphan keys for admins). |
-| `GET /api/lang/template?lang=&refs=` | Download a translation template (admin). |
+| `GET /api/lang/template?lang=&refs=` | Download a translation template (admin): the protected languages, `kind`, chosen references, then the target column. |
 | `POST /api/lang/upload` | Upload a filled translation CSV (admin); returns the report, or `409` asking which language to replace. |
 | `GET /api/config/enum-options?path=[&arg=]` | Resolve a dynamic enum's options; `arg` is the JSON-encoded value of the `values_for` sibling. |
 | `GET /api/value/capture?path=` | Long-poll (≤ 30 s) for a backend-captured value. |

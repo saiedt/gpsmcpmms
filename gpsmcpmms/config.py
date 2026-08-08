@@ -66,9 +66,12 @@ class ConfigManager:
     # file still carrying that header uploads unchanged, because a header the
     # upload does not recognise falls back to the first column.
     KEY_COLUMN = "key"
-    # Neither may be removed to make room for another: DECL_LANG is what every
-    # dictionary is written against, and German is what this project ships for.
-    PROTECTED_LANGS = ("en", "de")
+    # Which languages may not be dropped to make room for another is not a list
+    # this library can write down: it is DECL_LANG, plus whichever languages the
+    # host writes its own keys in (see `decl_lang`). Dropping one of those would
+    # take away the dictionary that renders *this* library's strings in it -- so
+    # a deployment writing German keys would lose the German editor. See
+    # protected_langs().
     # What a display string is, as far as it changes how it gets translated --
     # not where it came from. A label has to stay short because it sits beside
     # a field; a tooltip may be a whole sentence; a placeholder is usually a
@@ -555,8 +558,26 @@ class ConfigManager:
         supported_languages()."""
         return dict(self._language_options)
 
+    def protected_langs(self):
+        """The languages that cannot be replaced, DECL_LANG first.
+
+        DECL_LANG because every dictionary is written against it, and each
+        language a module declares its own keys in because that is a language
+        this deployment addresses somebody in: its dictionary is where the
+        library's own strings are rendered for them. For a host writing English
+        keys the answer is just DECL_LANG, which is as it should be -- nothing
+        else is privileged, and no policy of one project is baked in here.
+
+        Deliberately without the lock: this is called from inside locked
+        sections and self._lock is not reentrant, so taking it here deadlocked
+        the upload. Nothing is lost by reading unlocked -- _module_langs only
+        ever gains entries, and only while modules register.
+        """
+        others = sorted(set(self._module_langs.values()) - {self.DECL_LANG})
+        return (self.DECL_LANG, *others)
+
     def _language_allowed(self, lang):
-        if lang in self.PROTECTED_LANGS:
+        if lang in self.protected_langs():
             return True
         if self._language_validator is not None:
             try:
@@ -1093,7 +1114,7 @@ class ConfigManager:
 
         with self._lock:
             if replace is not None and (
-                    replace in self.PROTECTED_LANGS or replace == lang or
+                    replace in self.protected_langs() or replace == lang or
                     replace not in self._lang_cache):
                 return "invalid_replace"
             if (lang not in self._lang_cache and replace is None and
@@ -1188,18 +1209,33 @@ class ConfigManager:
         """
         with self._lock:
             existing = set(self._lang_cache)
-        wanted = ([self.DECL_LANG] if self.DECL_LANG != target else []) + list(refs)
-        refs, seen = [], set()
-        for r in wanted:
+        # The protected languages lead, both of them, and neither is "the key
+        # column": whichever of the two a row was written in, the other holds
+        # its translation, so both cells are filled and a translator reads
+        # whichever they know. There used to be a `key` column in front, which
+        # meant every row had one empty cell among these two -- empty precisely
+        # because that text was sitting in `key` instead.
+        leading = [lang for lang in self.protected_langs()
+                   if lang != target]
+        seen = set(leading)
+        extra = []
+        for r in refs:
             if r in existing and r != target and r not in seen:
                 seen.add(r)
-                refs.append(r)
-        refs = refs[:self.MAX_TEMPLATE_REFS + 1]
-        # 'src' and 'kind' travel next to the string they describe, and neither
-        # is a language: the upload finds its columns by name and ignores every
-        # other one, so nothing has to be taught about them. A language code is
-        # two or three letters, so the names cannot collide with one.
-        columns = [self.KEY_COLUMN, "src", "kind"] + refs + [target]
+                extra.append(r)
+        extra = extra[:self.MAX_TEMPLATE_REFS]
+        # There is no column saying which of the leading two is the original,
+        # because knowing it would change nothing. A key *is* its text, so
+        # rewording a source string produces a new key rather than staling an
+        # old translation: what a translator meets is a filled cell or an empty
+        # one, never a filled cell that has quietly gone wrong. Both languages
+        # are therefore equally good to translate from, and the choice is the
+        # translator's -- whichever they read.
+        #
+        # 'kind' is not a language, and the upload finds its columns by name and
+        # ignores the others, so nothing has to be taught about it; a language
+        # code is two or three letters, so the name cannot collide with one.
+        columns = leading + ["kind"] + extra + [target]
 
         buf = io.StringIO()
         # QUOTE_ALL: every field is wrapped in double quotes (RFC 4180) so that
@@ -1210,9 +1246,12 @@ class ConfigManager:
                             quoting=csv.QUOTE_ALL)
         writer.writerow(columns)
         for key in self._translatable_keys_sorted():
-            row = [key, self._xlation_langs.get(key, self.DECL_LANG),
-                   self._kinds_of(key)]
-            row += [self._translation_of(r, key) for r in refs]
+            src = self._xlation_langs.get(key, self.DECL_LANG)
+            # in the column of its own language a key stands for itself
+            row = [key if lang == src else self._translation_of(lang, key)
+                   for lang in leading]
+            row += [self._kinds_of(key)]
+            row += [self._translation_of(r, key) for r in extra]
             row.append(self._translation_of(target, key))
             writer.writerow(row)
         # UTF-8 BOM so that spreadsheet apps open the umlauts correctly
@@ -1248,11 +1287,20 @@ class ConfigManager:
             return None, "empty_file", None
 
         header = [c.strip() for c in rows[0]]
-        key_idx = (header.index(self.KEY_COLUMN)
-                   if self.KEY_COLUMN in header else 0)
         if target not in header:
             return None, "target_column_missing", None
         tgt_idx = header.index(target)
+        # Which cell of a row is the key it edits. Not a fixed column: a row is
+        # written in one of the protected languages and translated in the other,
+        # so each candidate is tried against the keys we know and the one that
+        # is a key wins. That also keeps a template downloaded earlier usable,
+        # whatever its first column was called.
+        candidates = [header.index(lang) for lang in self.protected_langs()
+                      if lang in header and header.index(lang) != tgt_idx]
+        if self.KEY_COLUMN in header:
+            candidates.insert(0, header.index(self.KEY_COLUMN))
+        if not candidates:
+            candidates = [0]
         if not self._language_allowed(target):
             return None, "language_not_allowed", None
 
@@ -1260,18 +1308,10 @@ class ConfigManager:
             is_new = target not in self._lang_cache
             over_limit = is_new and len(self._lang_cache) >= self.MAX_LANGUAGES
             removable = sorted(l for l in self._lang_cache
-                               if l not in self.PROTECTED_LANGS)
+                               if l not in self.protected_langs())
         if over_limit and not (isinstance(remove, str) and remove in removable):
             return None, {"error": "too_many_languages",
                           "removable": removable}, None
-
-        uploaded = {}
-        for row in rows[1:]:
-            if len(row) <= max(key_idx, tgt_idx):
-                continue
-            key = row[key_idx].strip()
-            if key:
-                uploaded[key] = row[tgt_idx].strip()
 
         # The same set the template was cut from -- not merely what this run
         # has got round to registering. "Not active right now" is not the same
@@ -1282,6 +1322,24 @@ class ConfigManager:
         # are listed for the admin (see /api/lang/info), where removing them
         # is a decision rather than a side effect.
         known = set(self._translatable_keys_sorted())
+
+        uploaded = {}
+        for row in rows[1:]:
+            if len(row) <= tgt_idx:
+                continue
+            key = ""
+            for idx in candidates:
+                if idx >= len(row):
+                    continue
+                cell = row[idx].strip()
+                if cell in known:
+                    key = cell
+                    break
+                if not key:
+                    key = cell        # unknown, but reportable as such
+            if key:
+                uploaded[key] = row[tgt_idx].strip()
+
         with self._lock:
             new_dict = {k: v for k, v in self._lang_cache.get(target, {}).items()
                         if k not in self.RESERVED_LANG_KEYS}
