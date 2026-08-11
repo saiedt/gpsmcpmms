@@ -112,6 +112,7 @@
     "No translation exists yet": "Brak tłumaczenia",
     "OK": "OK",
     "Password": "Hasło",
+    "Passwort": "Hasło",
     "Passwort des geräteeigenen WLANs, im Klartext lesbar, damit es an zu verbindende Geräte weitergegeben werden kann. Eine Änderung trennt alle verbundenen Geräte.": "Hasło własnej sieci Wi-Fi urządzenia, pokazane jawnie, aby można je było przekazać podłączanym urządzeniom. Zmiana rozłącza wszystkie połączone urządzenia.",
     "Passwort für die Anmeldung des Freisprechers. Als geschützter Parameter ist es erst nach der Anmeldung sichtbar, dann aber im Klartext, um die Einrichtung am Gerät zu ermöglichen.": "Hasło rejestracji zestawu głośnomówiącego. Jako parametr chroniony jest widoczne dopiero po zalogowaniu — i wtedy jawnie, aby można było skonfigurować urządzenie.",
     "Path does not exist": "Ścieżka nie istnieje",

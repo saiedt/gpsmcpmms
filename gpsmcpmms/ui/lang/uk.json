@@ -112,6 +112,7 @@
     "No translation exists yet": "Перекладу ще немає",
     "OK": "Гаразд",
     "Password": "Пароль",
+    "Passwort": "Пароль",
     "Passwort des geräteeigenen WLANs, im Klartext lesbar, damit es an zu verbindende Geräte weitergegeben werden kann. Eine Änderung trennt alle verbundenen Geräte.": "Пароль власної мережі Wi-Fi пристрою; показаний відкрито, щоб його можна було передати пристроям, які під'єднуються. Зміна від'єднує всі під'єднані пристрої.",
     "Passwort für die Anmeldung des Freisprechers. Als geschützter Parameter ist es erst nach der Anmeldung sichtbar, dann aber im Klartext, um die Einrichtung am Gerät zu ermöglichen.": "Пароль для реєстрації гучномовного зв'язку. Це захищений параметр, тому видно його лише після входу — і тоді відкритим текстом, щоб пристрій можна було налаштувати.",
     "Path does not exist": "Шлях не існує",

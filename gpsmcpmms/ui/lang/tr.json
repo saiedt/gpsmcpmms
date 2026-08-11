@@ -112,6 +112,7 @@
     "No translation exists yet": "Henüz çeviri yok",
     "OK": "Tamam",
     "Password": "Parola",
+    "Passwort": "Parola",
     "Passwort des geräteeigenen WLANs, im Klartext lesbar, damit es an zu verbindende Geräte weitergegeben werden kann. Eine Änderung trennt alle verbundenen Geräte.": "Cihazın kendi WLAN parolası; bağlanacak cihazlara verilebilmesi için açık yazıyla gösterilir. Değiştirilirse bağlı tüm cihazların bağlantısı kesilir.",
     "Passwort für die Anmeldung des Freisprechers. Als geschützter Parameter ist es erst nach der Anmeldung sichtbar, dann aber im Klartext, um die Einrichtung am Gerät zu ermöglichen.": "Hoparlörün kaydolurken kullandığı parola. Korumalı bir parametre olduğu için ancak oturum açıldıktan sonra görünür, o zaman da cihazda kurulumu yapabilmek için açık metin olarak.",
     "Path does not exist": "Yol yok",
