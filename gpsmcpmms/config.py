@@ -644,9 +644,10 @@ class ConfigManager:
 
     def translate(self, key, lang):
         """
-        The `lang` rendering of a German display string, falling back to the
-        German original when the language is unknown or the entry is still
-        untranslated. The key is noted as active on the way, so a string only
+        The `lang` rendering of a display string, falling back to the string
+        itself when the language is unknown or the entry is still untranslated.
+        A key is written in the language its module declares, which need not be
+        this library's. The key is noted as active on the way, so a string only
         ever spoken at runtime still shows up in the translation templates.
         """
         if not (isinstance(key, str) and key.strip()):
@@ -656,10 +657,15 @@ class ConfigManager:
         if not (isinstance(lang, str) and lang.strip()):
             return key
         lang = lang.strip()
-        translated = self._translation_of(lang, key)
+        # looked up under the key this string shares with another, but falling
+        # back to the caller's own wording: an alias exists because some
+        # dictionary rendered the two alike, and that dictionary may since have
+        # lost the entry. Then the label reads as its module wrote it.
+        canonical = self._xlation_aliases.get(key, key)
+        translated = self._translation_of(lang, canonical)
         if not translated and "-" in lang:
             # dictionaries are keyed by language, callers may hold a locale
-            translated = self._translation_of(lang.split("-")[0], key)
+            translated = self._translation_of(lang.split("-")[0], canonical)
         return translated or key
 
     def handle_value_event(self, value, alt_target_paths):
@@ -875,6 +881,9 @@ class ConfigManager:
         # and which language each was written in -- this library's own are in
         # DECL_LANG, a host's are in whatever it declares
         self._xlation_langs = {key: self.DECL_LANG for key in self.OWN_UI_KEYS}
+        # a display string that a dictionary already offers under another key:
+        # {the repeat: the key it stands for}. See _synonym_of().
+        self._xlation_aliases = {}
         self._lang_cache = {}
         self._lang_dir = os.path.join(self.ui_dir, "lang")
         os.makedirs(self._lang_dir, exist_ok=True)
@@ -1045,12 +1054,83 @@ class ConfigManager:
                         f"'{key}' has to take the value of "
                         f"'{value['values_for']}' as its argument.") from None
 
+    def _synonym_of(self, key, lang):
+        """The key a `lang` string already has, when one of them is the same
+        string under another name. Called with self._lock held.
+
+        Keys in two languages cannot be compared as strings -- but they can
+        once both stand in the same language, and the dictionaries hold
+        exactly that: the `lang` rendering of every key declared elsewhere. A
+        host that declares "Passwort" in German is writing the very string
+        de.json offers for this library's "Password", and the model everything
+        here rests on says that identical display strings are one key. So they
+        become one, and the German label inherits every translation "Password"
+        already has -- in the six languages on hand and in the seventh nobody
+        has started yet.
+
+        Only what the dictionaries can already project is found. Without a
+        `lang` dictionary there is nothing to compare in, and the two stay
+        apart; that is the honest answer rather than a missed one, and the
+        template then simply offers both.
+        """
+        book = self._lang_cache.get(lang) or {}
+        if not book:
+            return None
+        matches = [other for other, other_lang in self._xlation_langs.items()
+                   if other_lang != lang and other != key and
+                   isinstance(book.get(other), str) and
+                   book[other].strip() == key]
+        if not matches:
+            return None
+        # DECL_LANG anchors, whatever the order of registration: this library
+        # is the one part of the tree every host shares, so its wording is the
+        # one worth keeping when two of them turn out to be the same string.
+        for match in sorted(matches):
+            if self._xlation_langs.get(match) == self.DECL_LANG:
+                return match
+        return sorted(matches)[0]
+
+    def _rescan_synonyms(self, lang):
+        """A dictionary that has just arrived settles what an earlier one
+        could not. Called with self._lock held.
+
+        Detection at registration needs the module's own language already
+        translated. Where that dictionary comes later -- uploaded rather than
+        shipped -- the two keys start out apart, and an upload is the only
+        thing that can change the answer: nothing else alters what the
+        dictionaries are able to compare. So every key written in the language
+        just uploaded gets asked once more.
+        """
+        for key in sorted(k for k, l in self._xlation_langs.items()
+                          if l == lang and k not in self._xlation_aliases):
+            synonym = self._synonym_of(key, lang)
+            if not synonym:
+                continue
+            self._xlation_aliases[key] = synonym
+            self._active_xlation_keys.discard(key)
+            self._xlation_kinds.setdefault(synonym, set()).update(
+                    self._xlation_kinds.get(key, ()))
+            self._logger.info(
+                f"Translation key {key!r} ({lang}) is what {synonym!r} already "
+                "says; the uploaded dictionary makes them one key.")
+
     def _note_xlation_key(self, xlation_key, kind=None, lang=None):
         # Nothing is written into the dictionaries here. A key they do not
         # carry is a key nobody has translated -- which is all the template
         # needs to know, and it leaves "the entry reads like the German" free
         # to mean what a translator would want it to mean.
         with self._lock:
+            if lang and xlation_key not in self._xlation_langs:
+                # only on the way in: at runtime translate() passes no language
+                # and the answer is already in the map
+                synonym = self._synonym_of(xlation_key, lang)
+                if synonym:
+                    self._xlation_aliases[xlation_key] = synonym
+                    self._logger.info(
+                        f"Translation key {xlation_key!r} ({lang}) is what "
+                        f"{synonym!r} already says; taken as one key, with the "
+                        "translations it has.")
+            xlation_key = self._xlation_aliases.get(xlation_key, xlation_key)
             self._active_xlation_keys.add(xlation_key)
             if kind:
                 # a string can be several things at once: the name of a
@@ -1378,6 +1458,11 @@ class ConfigManager:
                                                remove if over_limit else None)
         if failure:
             return None, failure, None
+        # the second chance: this file may be the first rendering of the
+        # library's own strings in a host's language, and with it two keys that
+        # stood apart turn out to be one
+        with self._lock:
+            self._rescan_synonyms(target)
 
         report = self._lang_report_csv(target, known, uploaded, new_dict)
         translated = sum(1 for k in known if k in new_dict)

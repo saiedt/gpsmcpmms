@@ -248,5 +248,9 @@ editor.
 - Translations may stay **partial**: anything untranslated shows its source
   text, and re-downloading the template shows your saved progress, so you can
   always continue later.
+- Sometimes you will find **one row where you might expect two**. If the
+  application writes a label that is word for word what the editor's own text
+  already says in that language, the two are one entry: you translate it once,
+  and both use your wording. The `kind` column then lists both uses.
 - When you are finished, click **End session** so that another administrator
   can edit.

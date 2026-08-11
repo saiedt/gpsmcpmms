@@ -377,6 +377,23 @@ reach a translator without being spelled out: the template leads with the
 protected languages, both filled, so a row written in German arrives with its
 English beside it and vice versa.
 
+**Two languages, one string.** Two keys in two languages cannot be compared —
+but they can once both stand in the same language, and the dictionaries hold
+exactly that. When a module declares `Passwort` in German and `de.json` already
+renders this library's `Password` as “Passwort”, the two are the same display
+string, and the rule this whole model rests on says the same string is one key.
+So they become one: the German label inherits every translation `Password`
+already has, in the languages on hand and in the next one nobody has started.
+The template then offers one row instead of two that mean the same thing.
+
+The check runs where the answer can change — when a module registers, and again
+when a dictionary is uploaded, because that upload may be the first rendering of
+this library's strings in the host's language. Where no such dictionary exists
+there is nothing to compare in, and the two keys simply stay apart; that is the
+honest answer, not a missed one. The reading is logged by both keys, and the
+host's own wording remains its fallback, so a dictionary that later loses the
+entry leaves the label reading as its module wrote it.
+
 **Which languages may be added** is governed by two handles, in this order:
 
 1. **A validator the host registers** — `set_language_validator(fn)`, where

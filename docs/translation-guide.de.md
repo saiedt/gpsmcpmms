@@ -272,5 +272,10 @@ Editor zu sehen.
   Wortlaut seines Schlüssels angezeigt, und ein erneutes Herunterladen der
   Vorlage zeigt Ihren gespeicherten Fortschritt, sodass Sie jederzeit
   weitermachen können.
+- Manchmal finden Sie **eine Zeile, wo Sie zwei erwarten würden**. Schreibt die
+  Anwendung eine Beschriftung, die Wort für Wort dem entspricht, was der Editor
+  in dieser Sprache ohnehin sagt, sind beide ein Eintrag: Sie übersetzen ihn
+  einmal, und beide verwenden Ihre Fassung. Die Spalte `kind` nennt dann beide
+  Verwendungen.
 - Klicken Sie am Ende auf **Sitzung beenden**, damit ein anderer Administrator
   bearbeiten kann.

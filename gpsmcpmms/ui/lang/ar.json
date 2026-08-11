@@ -112,7 +112,6 @@
     "No translation exists yet": "لا توجد ترجمة بعد",
     "OK": "حسنًا",
     "Password": "كلمة المرور",
-    "Passwort": "كلمة المرور",
     "Passwort des geräteeigenen WLANs, im Klartext lesbar, damit es an zu verbindende Geräte weitergegeben werden kann. Eine Änderung trennt alle verbundenen Geräte.": "كلمة مرور شبكة Wi-Fi الخاصة بالجهاز، معروضة بنص ظاهر ليمكن تسليمها للأجهزة التي ستتصل. وأي تغيير يفصل كل الأجهزة المتصلة.",
     "Passwort für die Anmeldung des Freisprechers. Als geschützter Parameter ist es erst nach der Anmeldung sichtbar, dann aber im Klartext, um die Einrichtung am Gerät zu ermöglichen.": "كلمة مرور تسجيل مكبر الصوت. وبوصفها معلمًا محميًا لا تظهر إلا بعد تسجيل الدخول، وعندئذٍ بنص ظاهر ليتسنى إعداد الجهاز.",
     "Path does not exist": "المسار غير موجود",
