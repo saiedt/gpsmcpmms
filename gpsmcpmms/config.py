@@ -1323,22 +1323,39 @@ class ConfigManager:
         # is a decision rather than a side effect.
         known = set(self._translatable_keys_sorted())
 
-        uploaded = {}
+        # Two rows can offer the same key. The leading column of a row written
+        # in the other protected language holds that row's translation -- and a
+        # translation may itself be a key: "Passwort" is the appliance's label
+        # and translates to "Password", which the library declares in its own
+        # right. Taking the first match made both rows the same key; the second
+        # overwrote the first, and the German one could never be translated at
+        # all, in any language, without a word of complaint.
+        #
+        # So a key is claimed once. Rows that name exactly one key claim theirs
+        # first, whatever their position in the file; a row with a second
+        # candidate then falls back to the one still free.
+        pending = []
         for row in rows[1:]:
             if len(row) <= tgt_idx:
                 continue
-            key = ""
-            for idx in candidates:
-                if idx >= len(row):
-                    continue
-                cell = row[idx].strip()
-                if cell in known:
-                    key = cell
-                    break
-                if not key:
-                    key = cell        # unknown, but reportable as such
+            cells = [row[idx].strip() for idx in candidates if idx < len(row)]
+            found = [c for c in cells if c in known]
+            # unknown, but reportable as such
+            fallback = next((c for c in cells if c), "")
+            pending.append((found, fallback, row[tgt_idx].strip()))
+
+        claimed = {found[0] for found, _, _ in pending if len(found) == 1}
+        uploaded = {}
+        for found, fallback, value in pending:
+            if len(found) == 1:
+                key = found[0]
+            elif found:
+                key = next((k for k in found if k not in claimed), found[0])
+                claimed.add(key)
+            else:
+                key = fallback
             if key:
-                uploaded[key] = row[tgt_idx].strip()
+                uploaded[key] = value
 
         with self._lock:
             new_dict = {k: v for k, v in self._lang_cache.get(target, {}).items()
