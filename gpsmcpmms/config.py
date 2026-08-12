@@ -470,6 +470,62 @@ class ConfigManager:
             if isinstance(key, str) and key.strip():
                 self._note_xlation_key(key.strip(), kind, lang)
 
+    def note_original_keys(self, lang, originals, kind=None):
+        """Registers keys whose wording did not originate in DECL_LANG.
+
+        `originals` maps each key to how it reads in `lang`: the key itself is
+        a DECL_LANG string, the value is the wording it was translated from.
+
+        This is the way in for strings a module receives from somewhere else --
+        the categories of a remote catalogue, the fields of a foreign schema.
+        Such a string arrives in whatever language its source speaks, and
+        registering it as it stands would make a key in that language: the
+        completeness count would call it translated for the wrong language, a
+        reader of DECL_LANG would see a word from another one, and no template
+        column would say which is which. A module therefore decides, once and
+        at development time, what each of them is called in DECL_LANG, and
+        hands the original over as its first translation.
+
+        Two things follow from "first", and both matter:
+
+        * The original is a starting point, never a correction. Where a
+          translation already stands, it stays -- otherwise every restart would
+          flatten the work of whoever improved on the wording the source
+          happened to use.
+        * A language nobody has a dictionary for is not created here. Seeding
+          into it would make it a supported language on the strength of a
+          handful of entries, and the device would offer it. The key is
+          registered either way; only the original goes unrecorded.
+        """
+        if kind is not None and kind not in self.XLATION_KINDS:
+            raise ValueError(f"note_original_keys(): unknown kind {kind!r}; "
+                             f"expected one of {sorted(self.XLATION_KINDS)}.")
+        lang = lang.strip().split("-")[0] if isinstance(lang, str) else ""
+        if lang == self.DECL_LANG:
+            raise ValueError(
+                    f"note_original_keys(): {lang!r} is the language the keys "
+                    f"are already in; there is nothing to record.")
+        if not isinstance(originals, dict):
+            raise ValueError("note_original_keys(): 'originals' must map each "
+                             "key to its wording in the other language.")
+
+        for key in originals:
+            if isinstance(key, str) and key.strip():
+                self._note_xlation_key(key.strip(), kind, self.DECL_LANG)
+
+        with self._lock:
+            book = self._lang_cache.get(lang)
+            if book is None:
+                return              # no dictionary, no place to put it
+            for key, original in originals.items():
+                if not (isinstance(key, str) and key.strip()):
+                    continue
+                if not (isinstance(original, str) and original.strip()):
+                    continue
+                if isinstance(book.get(key.strip()), str) and book[key.strip()]:
+                    continue        # somebody already said it better
+                book[key.strip()] = original.strip()
+
     def _load_language_options(self):
         """The allow-list, seeded from LANGUAGE_OPTIONS on first start.
 

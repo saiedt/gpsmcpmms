@@ -128,6 +128,7 @@ Other API methods:
 | `protected_params_ready()` | Like `config_ready`, restricted to `protected` parameters. |
 | `handle_value_event(value, alt_target_paths)` | Deliver a backend-captured value to a waiting editor; `True` if one took it (see 4.9.3). |
 | `note_xlation_keys(*keys, kind=None, module_id=None)` | Register display strings a module only uses at runtime, so they reach the translation templates. `kind` says what they are — pass `"speech"` for anything read aloud; `module_id` says whose they are, and so which language they are written in. |
+| `note_original_keys(lang, originals, kind=None)` | Register runtime strings whose wording came from somewhere else — a remote catalogue, a foreign schema. The keys are `DECL_LANG`; `originals` maps each to how it read in `lang`, which becomes its first translation. See [Strings that arrive in another language](#strings-that-arrive-in-another-language). |
 | `translate(key, lang)` | The `lang` rendering of such a string, falling back to the key itself. Accepts `de` or `de-DE`. |
 | `switch_to_app_logger(logger)` | Inject the application logger (once per run). |
 | `discard_module(module_id)` | The module has no parameters any more: the declaration is dropped and everything persisted for it is deleted. See [Giving up a module's parameters](#giving-up-a-modules-parameters). |
@@ -470,6 +471,45 @@ a human or an AI):
    really have fallen out of the software are listed under `/api/lang/info` for
    the admin, where removing them is a decision rather than a side effect.
 3. A **report CSV** is returned with a per-row status and translated/total counts.
+
+### Strings that arrive in another language
+
+Not every display string is written by the host. A module may take them from
+elsewhere — the categories of a remote catalogue, the fields of a foreign
+schema — and such a string arrives in whatever language its source speaks.
+
+Registering it as it stands would make a key in that language, and three things
+would go wrong at once: the completeness count would call it translated for a
+language it is merely *written* in, a reader of `DECL_LANG` would be shown a
+word from another language, and nothing in the template would say which row is
+which. So the module decides, once and at development time, what each of these
+strings is called in `DECL_LANG`, and hands the original wording over as its
+first translation:
+
+```python
+config_mgr.note_original_keys("de", {
+    "Companionship":      "Begleitung",
+    "Transport services": "Fahrdienste",
+}, kind="speech")
+```
+
+The keys are now ordinary `DECL_LANG` keys — they appear in every template, get
+translated like anything else, and the German reading is there from the start.
+
+*First* translation is meant literally. Where a translation already stands it
+is left alone, or every restart would flatten the work of whoever improved on
+the wording the source happened to use. And a language no dictionary exists for
+is not created here: seeding into it would make it a supported language on the
+strength of a handful of entries, and a host that offers its users exactly the
+supported languages would start offering that one. The key is registered either
+way; only the original goes unrecorded.
+
+Deciding the `DECL_LANG` wording at development time also means the set of these
+keys is **fixed by the release**, not by whatever the source happens to serve
+today. A module is expected to keep that mapping in a file it ships. Something
+the source names later has no key, and the host has to have an answer for it
+that does not involve inventing one — the H4H appliance falls back to an
+announcement that names no service at all.
 
 ---
 
