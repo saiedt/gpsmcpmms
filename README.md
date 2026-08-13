@@ -527,6 +527,27 @@ the source names later has no key, and the host needs an answer for it that does
 not involve inventing one: the H4H appliance falls back to an announcement that
 names no service at all.
 
+### Keys that turn up late
+
+`start_editor()` takes the key set as it stands, and anything registered after
+that is reported once, by name:
+
+```
+Translation key 'Voice sample' appeared after the editor started; it was in no
+template cut before now.
+```
+
+Which is the whole problem in one line. A key that only exists once something
+has been rendered was absent from every template downloaded before that, and
+from the count that told somebody their languages were complete — so a set of
+translations goes out believing itself finished, and the gap shows up on a
+device.
+
+Reported rather than refused: a string that first exists when a provider runs is
+legitimate, and a host cannot always know it earlier. But whoever builds a
+release image should be able to see that the key set is not the one they froze,
+and on a host that declares everything up front the line never appears at all.
+
 ---
 
 ## REST API (summary)

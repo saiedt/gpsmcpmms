@@ -277,6 +277,9 @@ class ConfigManager:
         # read-only editor is otherwise an unexplained state on the screen
         self._session_owner = None
         self._editor_started = False
+        # The key set as it stood when the editor started, or None while it has
+        # not. See _note_xlation_key() for what it is compared against.
+        self._keys_at_start = None
         self._flask_app = None
 
         # long-polling requests waiting for backend-captured values,
@@ -1141,11 +1144,29 @@ class ConfigManager:
         # DECL_LANG one and hands the original over through
         # add_original_xlations() -- see there for why that is the only way in.
         with self._lock:
+            late = (self._keys_at_start is not None and
+                    xlation_key not in self._active_xlation_keys)
             self._active_xlation_keys.add(xlation_key)
             if kind:
                 # a string can be several things at once: the name of a
                 # service type is shown in a list *and* read aloud
                 self._xlation_kinds.setdefault(xlation_key, set()).add(kind)
+        if late:
+            # A key that appears only once the editor is running was not in the
+            # template anybody cut before that, and not in the count that told
+            # them the languages were complete. Which is how a set of
+            # translations goes out believing itself finished.
+            #
+            # Reported and not refused: a string that first exists when
+            # something is rendered is legitimate, and a host cannot always
+            # know it earlier. But whoever builds a release image should see in
+            # the log that the key set is not the one they froze -- once per
+            # key, and on a device that declares everything up front, never.
+            self._logger.info(
+                    f"Translation key {xlation_key!r} appeared after the editor "
+                    f"started; it was in no template cut before now. Register "
+                    f"it at startup (note_xlation_keys) if it is meant to be "
+                    f"translated.")
 
     def _orphan_keys_of(self, lang_dict):
         # a key is orphaned when no active registration uses it (anymore)
@@ -1619,6 +1640,10 @@ class ConfigManager:
             if self._editor_started:
                 return
             self._editor_started = True
+            # Everything the software has declared of itself by now. What turns
+            # up after this point is reported, once per key -- see
+            # _note_xlation_key().
+            self._keys_at_start = set(self._active_xlation_keys)
 
         self._stage_web_assets()
 
