@@ -15,6 +15,14 @@ configuration parameters — with types, constraints and UI metadata — and the
 It is designed for a zero-maintenance appliance on a trusted LAN, but the core is
 generic.
 
+This README is the reference: what exists and how it behaves. Three guides sit
+beside it, each for a different pair of hands:
+
+| Guide | For |
+|-------|-----|
+| [Building an application](docs/developer-guide.md) | Developers — practices worth having, and the release-making pass at the end. |
+| [Translation guide](docs/translation-guide.en.md) ([de](docs/translation-guide.de.md)) | Whoever fills in a language, with or without an AI assistant. |
+
 ---
 
 ## Quick start
