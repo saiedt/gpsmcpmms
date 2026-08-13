@@ -104,7 +104,7 @@ A module describes itself with two dicts:
 ```python
 config_mgr.register_params(
     module_id, module_label, param_dict, callback,
-    type_dict=None, module_tooltip=None, func_dict=None, decl_lang=None)
+    type_dict=None, module_tooltip=None, func_dict=None)
 ```
 
 - Called **once per run** per module (register the same schema every run; only
@@ -113,8 +113,6 @@ config_mgr.register_params(
   again whenever the editor commits a change to that module.
 - `func_dict` maps function names referenced in Declarations (dynamic enums, see
   [Advanced features](#advanced-features)) to callables.
-- `decl_lang` is the language this module's display strings are written in;
-  it defaults to `DECL_LANG`. See [Multi-linguality](#multi-linguality).
 
 **Value priority** (highest wins): `fixed_val` → saved user input → `default_val`
 → *no value* (`None`).
@@ -127,7 +125,7 @@ Other API methods:
 | `config_ready(path=None)` | `True` if no *relevant* leaf under the match is still unset. `None`/`""`/`"*"` = whole tree. Skips empty min-0 lists and fields whose relevance condition is false. |
 | `protected_params_ready()` | Like `config_ready`, restricted to `protected` parameters. |
 | `handle_value_event(value, alt_target_paths)` | Deliver a backend-captured value to a waiting editor; `True` if one took it (see 4.9.3). |
-| `note_xlation_keys(*keys, kind=None, module_id=None)` | Register display strings a module only uses at runtime, so they reach the translation templates. `kind` says what they are — pass `"speech"` for anything read aloud; `module_id` says whose they are, and so which language they are written in. |
+| `note_xlation_keys(*keys, kind=None)` | Register display strings a module only uses at runtime, so they reach the translation templates. `kind` says what they are — pass `"speech"` for anything read aloud, which nothing else could tell a translator. |
 | `add_original_xlations(xlation_lang, xlations)` | Supply translations for keys already noted, taken from where their wording came: `xlations` maps each key to its reading in `xlation_lang`. Never overwrites, never invents a language, refuses unregistered keys. See [Strings that arrive in another language](#strings-that-arrive-in-another-language). |
 | `translate(key, lang)` | The `lang` rendering of such a string, falling back to the key itself. Accepts `de` or `de-DE`. |
 | `switch_to_app_logger(logger)` | Inject the application logger (once per run). |
@@ -360,23 +358,20 @@ translated and still read. Up to **seven** languages may coexist; `en` and `de`
 cannot be replaced to make room. Corrupt dictionary files are quarantined and
 regenerated at startup.
 
-**Which language the keys are in** is not one answer for the whole tree. This
-library writes its own in `DECL_LANG` — English, so that adopting it does not
-oblige anyone to write German labels — and a module says what *its* strings are
-written in with `decl_lang` on `register_params()`:
+**Every key in the tree is written in `DECL_LANG`** — English, so that adopting
+this library does not oblige anyone to write German labels and translate them
+into their own language. That holds for the host's keys as much as for this
+library's, and it is what makes the fallback safe: an untranslated string reads
+in English, never in a third language the reader has no reason to know.
 
-```python
-config_mgr.register_params(…, decl_lang="de")     # this module's texts are German
-```
-
-That is not cosmetic. A key needs no translation into the language it is already
-written in, so `decl_lang` is what makes a German label count as done for German
-instead of being reported missing for ever. It also decides the fallback: the
-appliance this grew from keeps German keys precisely so that a missing German
-translation still leaves its users with German rather than English. Both facts
-reach a translator without being spelled out: the template leads with the
-protected languages, both filled, so a row written in German arrives with its
-English beside it and vice versa.
+A module could once declare its own strings in a language of its own. It cost
+more than it looked: a second source column in every template, a key set no
+longer comparable as strings, a completeness count that had to ask each key
+which language it was written in, and a fallback that could put German in front
+of a Turkish reader. Where a module's wording genuinely arrives in another
+language — a remote catalogue, a foreign schema — it settles on a `DECL_LANG`
+wording and hands the original over as a translation; see
+[Strings that arrive in another language](#strings-that-arrive-in-another-language).
 
 **Two languages, one string.** Two keys in two languages cannot be compared —
 but they can once both stand in the same language, and the dictionaries hold
@@ -432,9 +427,9 @@ not offered — it costs nothing and is ready the day somebody allows it. Discar
 deployment's translations at startup because a rule changed later would destroy work
 nobody can get back.
 
-A key counts as done for its own `decl_lang` without any entry: it is already in
-that language. Otherwise **an absent entry means untranslated and any entry
-counts as translated** — including one that reads exactly like the key, which is
+`DECL_LANG` is complete by construction, with or without a dictionary: the keys
+are already written in it. For every other language **an absent entry means
+untranslated and any entry counts as translated** — including one that reads exactly like the key, which is
 how a translator records that a string stays as it is. Some words are the same in
 two languages ("OK" is Polish for OK) and some strings are not sentences at all,
 like the placeholder showing the shape of a phone number; without this they could

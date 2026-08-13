@@ -56,22 +56,19 @@ class ConfigManager:
     #
     # English, because this is a public library: a German key set would oblige
     # anyone adopting it to write German labels and translate them into their
-    # own language. A host is free to write its keys in another language -- the
-    # appliance this grew from writes German ones, so that a missing German
-    # translation still leaves its users with German -- and says so with
-    # `decl_lang` on register_params().
+    # own language. Every key in the tree is written in it, this library's and
+    # every host's alike -- a module could once declare its own in another
+    # language, and the cost was a second source column in every template, a
+    # key set no longer comparable as strings, and a fallback that could put a
+    # word of a third language on the screen. What a module receives in a
+    # foreign language it settles into DECL_LANG and hands the original over
+    # through add_original_xlations().
     DECL_LANG = "en"
-    # The template's first column holds the keys, whatever language each is
-    # written in. It was called "de" while that was the only possibility; a
-    # file still carrying that header uploads unchanged, because a header the
-    # upload does not recognise falls back to the first column.
+    # The template's first column holds the keys. It was called "de" when that
+    # was the only possibility, then "key"; a file still carrying either header
+    # uploads unchanged, because a header the upload does not recognise falls
+    # back to the first column.
     KEY_COLUMN = "key"
-    # Which languages may not be dropped to make room for another is not a list
-    # this library can write down: it is DECL_LANG, plus whichever languages the
-    # host writes its own keys in (see `decl_lang`). Dropping one of those would
-    # take away the dictionary that renders *this* library's strings in it -- so
-    # a deployment writing German keys would lose the German editor. See
-    # protected_langs().
     # What a display string is, as far as it changes how it gets translated --
     # not where it came from. A label has to stay short because it sits beside
     # a field; a tooltip may be a whole sentence; a placeholder is usually a
@@ -279,7 +276,6 @@ class ConfigManager:
         self._func_registry: dict = {}
         # the language each module writes its display strings in; a tree may
         # hold modules that do not agree, which is why it is per module
-        self._module_langs: dict = {}
 
         # exclusive editing session of the config-editor (spec 4.8)
         self._session_token = None
@@ -309,11 +305,8 @@ class ConfigManager:
                              + "protected parameters."
                 }
             }}
-        # this library's own module, so its strings are in DECL_LANG like the
-        # rest of them
-        self._module_langs[self.OWN_MODULE_ID] = self.DECL_LANG
-        self._harvest_xlation_keys(own_decl, lang=self.DECL_LANG)
-        self._harvest_xlation_keys(own_types, lang=self.DECL_LANG)
+        self._harvest_xlation_keys(own_decl)
+        self._harvest_xlation_keys(own_types)
         my_config = CvvNode.init_module(self, self.OWN_MODULE_ID,
                                         own_decl, own_types)
         if not isinstance(my_config, dict):
@@ -372,7 +365,7 @@ class ConfigManager:
 
     def register_params(self, module_id, module_label, param_dict,
                         callback, type_dict=None, module_tooltip=None,
-                        func_dict=None, decl_lang=None):
+                        func_dict=None):
         if not (module_id and isinstance(module_id, str) and
                 not module_id in self._callback_registry
         ):
@@ -389,21 +382,14 @@ class ConfigManager:
         ):
             raise ValueError("register_params(): 'func_dict' must map "
                              "function names to callables.")
-        # In which language this module's display strings are written. Only its
-        # own -- a tree may hold modules written in different ones, and this
-        # library's own strings are always DECL_LANG.
-        lang = (decl_lang or self.DECL_LANG).strip().split("-")[0]
-        self._module_langs[module_id] = lang
         self._callback_registry[module_id] = callback
         self._func_registry[module_id] = func_dict or {}
         if isinstance(module_label, str) and module_label.strip():
-            self._note_xlation_key(module_label.strip(), "label", lang)
+            self._note_xlation_key(module_label.strip(), "label")
         if isinstance(module_tooltip, str) and module_tooltip.strip():
-            self._note_xlation_key(module_tooltip.strip(), "tooltip", lang)
-        self._harvest_xlation_keys(param_dict, self._func_registry[module_id],
-                                  lang)
-        self._harvest_xlation_keys(type_dict, self._func_registry[module_id],
-                                  lang)
+            self._note_xlation_key(module_tooltip.strip(), "tooltip")
+        self._harvest_xlation_keys(param_dict, self._func_registry[module_id])
+        self._harvest_xlation_keys(type_dict, self._func_registry[module_id])
         self._check_values_for(param_dict, self._func_registry[module_id])
         self._check_values_for(type_dict, self._func_registry[module_id])
         type_registry = type_dict if isinstance(type_dict, dict) else {}
@@ -455,7 +441,7 @@ class ConfigManager:
                               "and everything stored for them.")
         return removed
 
-    def note_xlation_keys(self, *keys, kind=None, module_id=None):
+    def note_xlation_keys(self, *keys, kind=None):
         """
         Registers display strings that do not originate from a Declaration --
         typically texts a module speaks or shows at runtime. Without this they
@@ -469,18 +455,16 @@ class ConfigManager:
         the same way. A Declaration says it by itself; only a runtime string
         has to be told.
 
-        `module_id` says whose strings these are, and with that which language
-        they are written in -- the one that module passed as `decl_lang`. Left
-        out, they count as DECL_LANG: right for a host writing in the same
-        language as this library, wrong for one that does not.
+        The strings are DECL_LANG, like every key. A module whose wording
+        arrives in another language settles on a DECL_LANG one, notes that
+        here, and hands the original over through add_original_xlations().
         """
         if kind is not None and kind not in self.XLATION_KINDS:
             raise ValueError(f"note_xlation_keys(): unknown kind {kind!r}; "
                              f"expected one of {sorted(self.XLATION_KINDS)}.")
-        lang = self._module_langs.get(module_id, self.DECL_LANG)
         for key in keys:
             if isinstance(key, str) and key.strip():
-                self._note_xlation_key(key.strip(), kind, lang)
+                self._note_xlation_key(key.strip(), kind)
 
     def add_original_xlations(self, xlation_lang, xlations):
         """Supplies translations for already noted keys, from where they came.
@@ -648,22 +632,17 @@ class ConfigManager:
         return dict(self._language_options)
 
     def protected_langs(self):
-        """The languages that cannot be replaced, DECL_LANG first.
+        """The languages that cannot be discarded: DECL_LANG, and nothing else.
 
-        DECL_LANG because every dictionary is written against it, and each
-        language a module declares its own keys in because that is a language
-        this deployment addresses somebody in: its dictionary is where the
-        library's own strings are rendered for them. For a host writing English
-        keys the answer is just DECL_LANG, which is as it should be -- nothing
-        else is privileged, and no policy of one project is baked in here.
-
-        Deliberately without the lock: this is called from inside locked
-        sections and self._lock is not reentrant, so taking it here deadlocked
-        the upload. Nothing is lost by reading unlocked -- _module_langs only
-        ever gains entries, and only while modules register.
+        Every key is written in it and every dictionary is written against it,
+        so a deployment without it has no source to translate from. It is a
+        tuple rather than a single code because callers ask "is this language
+        protected", and because for a while the answer was longer: a module
+        could declare its keys in a language of its own, and that language had
+        to be protected too. Hosts settle on DECL_LANG now, so one entry is the
+        whole answer.
         """
-        others = sorted(set(self._module_langs.values()) - {self.DECL_LANG})
-        return (self.DECL_LANG, *others)
+        return (self.DECL_LANG,)
 
     def _language_allowed(self, lang):
         # Both gates narrow; neither overrules the other. The allow-list is
@@ -731,12 +710,9 @@ class ConfigManager:
         and stays. Without that, "OK" in Polish was inexpressible and kept its
         language incomplete for ever.
 
-        A key needs no translation into the language it is already written in,
-        and that is not one language for the whole tree: this library writes
-        English keys, a host may write its own in German. So a key counts as
-        done for its *own* declaration language -- otherwise every German label
-        of the appliance would be reported as missing from German, for ever,
-        while the device displays it perfectly.
+        DECL_LANG is complete by construction, with or without a dictionary:
+        the keys are already written in it, and a file repeating each of them
+        after itself would be ballast that every change had to maintain twice.
         """
         with self._lock:
             active = set(self._active_xlation_keys)
@@ -744,21 +720,26 @@ class ConfigManager:
                 active &= {k.strip() for k in keys
                            if isinstance(k, str) and k.strip()}
             code = lang.strip().split("-")[0] if isinstance(lang, str) else ""
-            translated = self._lang_cache.get(lang, {})
+            if code == self.DECL_LANG:
+                return len(active), len(active)
+            # under the code, not the locale a caller may be holding:
+            # dictionaries are keyed by language, and asking for "de-DE"
+            # otherwise answered that German had nothing translated at all
+            translated = self._lang_cache.get(code, {})
             # an empty entry is no translation either -- the upload never
             # writes one, but a hand-edited file can
             done = sum(1 for k in active
-                       if self._xlation_langs.get(k, self.DECL_LANG) == code or
-                       (isinstance(translated.get(k), str) and translated[k]))
+                       if isinstance(translated.get(k), str) and translated[k])
         return done, len(active)
 
     def translate(self, key, lang):
         """
         The `lang` rendering of a display string, falling back to the string
         itself when the language is unknown or the entry is still untranslated.
-        A key is written in the language its module declares, which need not be
-        this library's. The key is noted as active on the way, so a string only
-        ever spoken at runtime still shows up in the translation templates.
+        Every key is a DECL_LANG string, so the fallback is always readable --
+        never a word from a third language. The key is noted as active on the
+        way, so a string only ever spoken at runtime still shows up in the
+        translation templates.
         """
         if not (isinstance(key, str) and key.strip()):
             return key
@@ -767,15 +748,10 @@ class ConfigManager:
         if not (isinstance(lang, str) and lang.strip()):
             return key
         lang = lang.strip()
-        # looked up under the key this string shares with another, but falling
-        # back to the caller's own wording: an alias exists because some
-        # dictionary rendered the two alike, and that dictionary may since have
-        # lost the entry. Then the label reads as its module wrote it.
-        canonical = self._xlation_aliases.get(key, key)
-        translated = self._translation_of(lang, canonical)
+        translated = self._translation_of(lang, key)
         if not translated and "-" in lang:
             # dictionaries are keyed by language, callers may hold a locale
-            translated = self._translation_of(lang.split("-")[0], canonical)
+            translated = self._translation_of(lang.split("-")[0], key)
         return translated or key
 
     def handle_value_event(self, value, alt_target_paths):
@@ -988,12 +964,6 @@ class ConfigManager:
         # what each display string is, so that a translator can see it: the
         # same words are handled differently depending on where they appear
         self._xlation_kinds = {key: {"ui"} for key in self.OWN_UI_KEYS}
-        # and which language each was written in -- this library's own are in
-        # DECL_LANG, a host's are in whatever it declares
-        self._xlation_langs = {key: self.DECL_LANG for key in self.OWN_UI_KEYS}
-        # a display string that a dictionary already offers under another key:
-        # {the repeat: the key it stands for}. See _synonym_of().
-        self._xlation_aliases = {}
         self._lang_cache = {}
         self._lang_dir = os.path.join(self.ui_dir, "lang")
         os.makedirs(self._lang_dir, exist_ok=True)
@@ -1061,8 +1031,7 @@ class ConfigManager:
         # DECL_LANG, and every language reports incomplete, and neither is
         # obvious from looking at it. Said once at startup, it costs a line;
         # unsaid, it costs somebody an afternoon.
-        own = {key for key, lang in self._xlation_langs.items()
-               if lang == self.DECL_LANG}
+        own = set(self.OWN_UI_KEYS)
         for lang, entries in sorted(self._lang_cache.items()):
             if lang == self.DECL_LANG or not entries or not own:
                 continue
@@ -1110,7 +1079,7 @@ class ConfigManager:
                     "used to mean 'untranslated'. An entry equal to the "
                     "German now means the opposite, and is kept.")
 
-    def _harvest_xlation_keys(self, decl_data, funcs=None, lang=None):
+    def _harvest_xlation_keys(self, decl_data, funcs=None):
         """
         Collects all display strings -- labels, tooltips, placeholders,
         acquire-button labels, hints and test messages, including those of enum
@@ -1120,8 +1089,7 @@ class ConfigManager:
         `funcs` is the registering module's func_dict, needed to tell the two
         kinds of hint apart: a hint that names a provider is a function name,
         not a display string, and translating it would put "get_lang_report" in
-        front of every translator. `lang` is the language the module writes its
-        strings in.
+        front of every translator.
         """
         if not isinstance(decl_data, dict):
             return
@@ -1132,10 +1100,9 @@ class ConfigManager:
                     isinstance(v, str) and v.strip()):
                 if k == "hint" and funcs and v.strip() in funcs:
                     continue
-                self._note_xlation_key(v.strip(),
-                                       self.DECL_KEY_KINDS.get(k), lang)
+                self._note_xlation_key(v.strip(), self.DECL_KEY_KINDS.get(k))
             elif isinstance(v, dict):
-                self._harvest_xlation_keys(v, funcs, lang)
+                self._harvest_xlation_keys(v, funcs)
 
     def _check_values_for(self, decl_data, funcs):
         """
@@ -1171,92 +1138,22 @@ class ConfigManager:
                         f"'{key}' has to take the value of "
                         f"'{value['values_for']}' as its argument.") from None
 
-    def _synonym_of(self, key, lang):
-        """The key a `lang` string already has, when one of them is the same
-        string under another name. Called with self._lock held.
-
-        Keys in two languages cannot be compared as strings -- but they can
-        once both stand in the same language, and the dictionaries hold
-        exactly that: the `lang` rendering of every key declared elsewhere. A
-        host that declares "Passwort" in German is writing the very string
-        de.json offers for this library's "Password", and the model everything
-        here rests on says that identical display strings are one key. So they
-        become one, and the German label inherits every translation "Password"
-        already has -- in the six languages on hand and in the seventh nobody
-        has started yet.
-
-        Only what the dictionaries can already project is found. Without a
-        `lang` dictionary there is nothing to compare in, and the two stay
-        apart; that is the honest answer rather than a missed one, and the
-        template then simply offers both.
-        """
-        book = self._lang_cache.get(lang) or {}
-        if not book:
-            return None
-        matches = [other for other, other_lang in self._xlation_langs.items()
-                   if other_lang != lang and other != key and
-                   isinstance(book.get(other), str) and
-                   book[other].strip() == key]
-        if not matches:
-            return None
-        # DECL_LANG anchors, whatever the order of registration: this library
-        # is the one part of the tree every host shares, so its wording is the
-        # one worth keeping when two of them turn out to be the same string.
-        for match in sorted(matches):
-            if self._xlation_langs.get(match) == self.DECL_LANG:
-                return match
-        return sorted(matches)[0]
-
-    def _rescan_synonyms(self, lang):
-        """A dictionary that has just arrived settles what an earlier one
-        could not. Called with self._lock held.
-
-        Detection at registration needs the module's own language already
-        translated. Where that dictionary comes later -- uploaded rather than
-        shipped -- the two keys start out apart, and an upload is the only
-        thing that can change the answer: nothing else alters what the
-        dictionaries are able to compare. So every key written in the language
-        just uploaded gets asked once more.
-        """
-        for key in sorted(k for k, l in self._xlation_langs.items()
-                          if l == lang and k not in self._xlation_aliases):
-            synonym = self._synonym_of(key, lang)
-            if not synonym:
-                continue
-            self._xlation_aliases[key] = synonym
-            self._active_xlation_keys.discard(key)
-            self._xlation_kinds.setdefault(synonym, set()).update(
-                    self._xlation_kinds.get(key, ()))
-            self._logger.info(
-                f"Translation key {key!r} ({lang}) is what {synonym!r} already "
-                "says; the uploaded dictionary makes them one key.")
-
-    def _note_xlation_key(self, xlation_key, kind=None, lang=None):
+    def _note_xlation_key(self, xlation_key, kind=None):
         # Nothing is written into the dictionaries here. A key they do not
         # carry is a key nobody has translated -- which is all the template
-        # needs to know, and it leaves "the entry reads like the German" free
-        # to mean what a translator would want it to mean.
+        # needs to know, and it leaves "the entry reads like the key" free to
+        # mean what a translator would want it to mean.
+        #
+        # Every key is a DECL_LANG string; there is no language to record. A
+        # module that receives its wording in another language settles on a
+        # DECL_LANG one and hands the original over through
+        # add_original_xlations() -- see there for why that is the only way in.
         with self._lock:
-            if lang and xlation_key not in self._xlation_langs:
-                # only on the way in: at runtime translate() passes no language
-                # and the answer is already in the map
-                synonym = self._synonym_of(xlation_key, lang)
-                if synonym:
-                    self._xlation_aliases[xlation_key] = synonym
-                    self._logger.info(
-                        f"Translation key {xlation_key!r} ({lang}) is what "
-                        f"{synonym!r} already says; taken as one key, with the "
-                        "translations it has.")
-            xlation_key = self._xlation_aliases.get(xlation_key, xlation_key)
             self._active_xlation_keys.add(xlation_key)
             if kind:
                 # a string can be several things at once: the name of a
                 # service type is shown in a list *and* read aloud
                 self._xlation_kinds.setdefault(xlation_key, set()).add(kind)
-            if lang:
-                # first declarer wins: the same words registered twice are one
-                # key, and it cannot be written in two languages at once
-                self._xlation_langs.setdefault(xlation_key, lang)
 
     def _orphan_keys_of(self, lang_dict):
         # a key is orphaned when no active registration uses it (anymore)
@@ -1443,10 +1340,10 @@ class ConfigManager:
                             quoting=csv.QUOTE_ALL)
         writer.writerow(columns)
         for key in self._translatable_keys_sorted():
-            src = self._xlation_langs.get(key, self.DECL_LANG)
-            # in the column of its own language a key stands for itself
-            row = [key if lang == src else self._translation_of(lang, key)
-                   for lang in leading]
+            # in the column of the language it is written in, a key stands for
+            # itself
+            row = [key if lang == self.DECL_LANG
+                   else self._translation_of(lang, key) for lang in leading]
             row += [self._kinds_of(key)]
             row += [self._translation_of(r, key) for r in extra]
             row.append(self._translation_of(target, key))
@@ -1488,10 +1385,9 @@ class ConfigManager:
             return None, "target_column_missing", None
         tgt_idx = header.index(target)
         # Which cell of a row is the key it edits. Not a fixed column: a row is
-        # written in one of the protected languages and translated in the other,
-        # so each candidate is tried against the keys we know and the one that
-        # is a key wins. That also keeps a template downloaded earlier usable,
-        # whatever its first column was called.
+        # written in DECL_LANG, so that is where its key stands. Tried rather
+        # than assumed, and with the older header names as further candidates,
+        # so a template downloaded before any of this still uploads.
         candidates = [header.index(lang) for lang in self.protected_langs()
                       if lang in header and header.index(lang) != tgt_idx]
         if self.KEY_COLUMN in header:
@@ -1520,39 +1416,17 @@ class ConfigManager:
         # is a decision rather than a side effect.
         known = set(self._translatable_keys_sorted())
 
-        # Two rows can offer the same key. The leading column of a row written
-        # in the other protected language holds that row's translation -- and a
-        # translation may itself be a key: "Passwort" is the appliance's label
-        # and translates to "Password", which the library declares in its own
-        # right. Taking the first match made both rows the same key; the second
-        # overwrote the first, and the German one could never be translated at
-        # all, in any language, without a word of complaint.
-        #
-        # So a key is claimed once. Rows that name exactly one key claim theirs
-        # first, whatever their position in the file; a row with a second
-        # candidate then falls back to the one still free.
-        pending = []
+        uploaded = {}
         for row in rows[1:]:
             if len(row) <= tgt_idx:
                 continue
             cells = [row[idx].strip() for idx in candidates if idx < len(row)]
-            found = [c for c in cells if c in known]
-            # unknown, but reportable as such
-            fallback = next((c for c in cells if c), "")
-            pending.append((found, fallback, row[tgt_idx].strip()))
-
-        claimed = {found[0] for found, _, _ in pending if len(found) == 1}
-        uploaded = {}
-        for found, fallback, value in pending:
-            if len(found) == 1:
-                key = found[0]
-            elif found:
-                key = next((k for k in found if k not in claimed), found[0])
-                claimed.add(key)
-            else:
-                key = fallback
+            # the first cell that is a key wins; failing that the first
+            # non-empty one, which the report can then name as unknown
+            key = next((c for c in cells if c in known),
+                       next((c for c in cells if c), ""))
             if key:
-                uploaded[key] = value
+                uploaded[key] = row[tgt_idx].strip()
 
         with self._lock:
             new_dict = {k: v for k, v in self._lang_cache.get(target, {}).items()
@@ -1575,12 +1449,6 @@ class ConfigManager:
                                                remove if over_limit else None)
         if failure:
             return None, failure, None
-        # the second chance: this file may be the first rendering of the
-        # library's own strings in a host's language, and with it two keys that
-        # stood apart turn out to be one
-        with self._lock:
-            self._rescan_synonyms(target)
-
         report = self._lang_report_csv(target, known, uploaded, new_dict)
         translated = sum(1 for k in known if k in new_dict)
         return report, translated, len(known)
@@ -1955,10 +1823,6 @@ class ConfigManager:
                 # and a device that offered fifty of them once put fifty rows
                 # in front of every translator, for good: harvested keys stay
                 # active as long as the provider still offers them.
-                # the provider belongs to a module, and so do the words it
-                # returns: they are written in that module's language
-                opt_lang = self._module_langs.get(path.split(".", 1)[0],
-                                                  self.DECL_LANG)
                 for option in result.values():
                     if not isinstance(option, dict):
                         continue
@@ -1966,10 +1830,9 @@ class ConfigManager:
                         # the label is an identifier; a tooltip beside it is
                         # still prose and still wants translating
                         self._harvest_xlation_keys(
-                                {"tooltip": option.get("tooltip")},
-                                lang=opt_lang)
+                                {"tooltip": option.get("tooltip")})
                     else:
-                        self._harvest_xlation_keys(option, lang=opt_lang)
+                        self._harvest_xlation_keys(option)
                 return jsonify({"values": result})
             return jsonify({"error": str(result)})
 
