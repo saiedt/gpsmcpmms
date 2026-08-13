@@ -15,11 +15,13 @@ from gpsmcpmms.config import ConfigManager
 
 LANG_DIR = os.path.join(os.path.dirname(gpsmcpmms.__file__), "ui", "lang")
 
-# The strings this library writes itself, in DECL_LANG. Read off the singleton
-# rather than listed here, so that a display string added to the editor cannot
-# be forgotten: it lands in this set by being registered at all.
-LIB_KEYS = {key for key, lang in config_mgr._xlation_langs.items()
-            if lang == ConfigManager.DECL_LANG}
+# The strings this library writes itself. Read off the singleton rather than
+# listed here, so that a display string added to the editor cannot be forgotten:
+# it lands in this set by being registered at all. No host has registered
+# anything at this point, so what stands there is the library's own -- the
+# editor's chrome *and* its three own parameters, which OWN_UI_KEYS alone would
+# have missed.
+LIB_KEYS = set(config_mgr._active_xlation_keys)
 
 
 def _shipped():
@@ -37,28 +39,40 @@ def test_the_library_knows_its_own_strings():
 
 
 def test_every_language_renders_the_whole_editor():
-    # Not "every dictionary holds the same keys": DECL_LANG needs no dictionary
-    # for its own strings, and a dictionary is free to carry a host's keys too
-    # -- the appliance this grew from ships its German ones here. What has to
-    # hold is that no language is missing part of the editor.
+    # Half the release gate: a shipped dictionary that is short of a string
+    # leaves that part of the editor reading in DECL_LANG, on every device the
+    # release reaches.
     dicts = _shipped()
     assert dicts, "no dictionaries ship with the package"
     for lang, d in dicts.items():
-        if lang == ConfigManager.DECL_LANG:
-            continue
         missing = sorted(LIB_KEYS - set(d))
         assert not missing, (
             f"'{lang}' cannot render the editor: {len(missing)} strings "
             f"missing, e.g. {missing[:3]}")
 
 
-def test_the_reference_language_ships_no_translation_of_itself():
-    # An entry mapping one of its own keys would be a translation from English
-    # into English -- harmless but meaningless, and a sign that a flip of the
-    # source language was only half done.
-    d = _shipped().get(ConfigManager.DECL_LANG, {})
-    own = sorted(LIB_KEYS & set(d))
-    assert not own, f"'{ConfigManager.DECL_LANG}' translates itself: {own[:3]}"
+def test_no_dictionary_carries_anything_but_this_library():
+    # The other half, and the one that had to be learnt. These files are the
+    # starting kit of every fresh deployment, so whatever stands in them is
+    # handed to strangers: a while ago they carried the whole H4H appliance,
+    # including the service catalogue of somebody's business, and any adopter
+    # would have found "Begleitung -> Companionship" in their dictionaries.
+    #
+    # A host's translations belong to the host's own image. This library ships
+    # its own strings and nothing else.
+    for lang, d in _shipped().items():
+        foreign = sorted(set(d) - LIB_KEYS - set(ConfigManager.RESERVED_LANG_KEYS))
+        assert not foreign, (
+            f"'{lang}' carries {len(foreign)} keys this library never "
+            f"registers, e.g. {foreign[:3]}")
+
+
+def test_the_reference_language_ships_no_dictionary_at_all():
+    # The keys are already written in it. A file repeating each of them after
+    # itself would be ballast that every change had to maintain twice, and the
+    # completeness count says so too: DECL_LANG is complete by construction.
+    assert ConfigManager.DECL_LANG not in _shipped(), (
+        f"'{ConfigManager.DECL_LANG}' ships a translation of itself")
 
 
 def test_no_entry_is_left_empty():

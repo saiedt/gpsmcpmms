@@ -1,5 +1,6 @@
 {
     "Add new translation": "افزودن ترجمه‌ی جدید",
+    "Administrator password for unlocking protected parameters.": "رمز دسترسی به پارامترهای تحت‌حفاظت.",
     "Apply": "به‌کارگیری",
     "Apply failed": "به‌‌کارگیری به مشکل خورد",
     "As of": "به‌تاریخ",
@@ -8,6 +9,7 @@
     "Check failed": "نتیجه‌ی چک‌کردن منفی شد",
     "Choose file": "انتخاب فایل",
     "Choose the language to be replaced": "انتخاب کنید چه زبانی جایگزین می‌شود",
+    "Configuration service": "سرویس پیکربندی",
     "Connection to the device lost": "ارتباط با دستگاه قطع شد",
     "Does not exist yet, can be created": "هنوز موجود نیست، می‌تواند ایجاد شود",
     "Download CSV": "دریافت CSV",
@@ -62,11 +64,13 @@
     "Translating the source keys, with up to 3 languages as further context (please choose):": "ترجمه‌ی عبارات کلیدی از زبان اصلی، با حداکثر ۳ زبان کمکی دیگر (لطفاً انتخاب کنید):",
     "Translation file: start by": "فایل ترجمه: ابتدا",
     "Translation processed": "ترجمه پردازش شد",
+    "UI password": "رمز ویرایشگر",
     "Undo": "واگرد",
     "Upload the selected CSV": "بارگذاری فایل انتخاب‌شده",
     "Value already taken": "این داده تکراری‌ست",
     "Value applied": "داده واصل شد",
     "finally": "سرانجام",
+    "lang_format": 2,
     "no response to ping": "پینگ بی‌جواب ماند",
     "then": "سپس",
     "translated": "ترجمه‌شده"
