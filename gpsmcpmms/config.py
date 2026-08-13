@@ -106,9 +106,12 @@ class ConfigManager:
     # file is what a deployment should do: editing this constant means editing
     # a package inside a virtual environment, where the change is also lost on
     # the next upgrade. The second handle is set_language_validator(), with
-    # which a host application overrides the policy entirely -- the H4H
-    # appliance uses it to refuse languages its speech service has no voice
-    # for, which is knowledge this library has no business holding.
+    # which a host application narrows the list further -- the H4H appliance
+    # uses it to refuse languages its speech service has no voice for, which
+    # is knowledge this library has no business holding. Narrows, not
+    # replaces: the list belongs to whoever installs the device and the
+    # validator to whoever wrote the host, and neither gets to hand back what
+    # the other struck out.
     # The list below is not invented: it is what Google Cloud Text-to-Speech
     # answered on 2026-08-02 when asked which languages it has voices for --
     # a serviceable starting point, since a host that speaks will not get far
@@ -663,32 +666,53 @@ class ConfigManager:
         return (self.DECL_LANG, *others)
 
     def _language_allowed(self, lang):
+        # Both gates narrow; neither overrules the other. The allow-list is
+        # what the deployment says may be offered here, the validator what the
+        # host knows about the languages it can actually serve -- two parties,
+        # two concerns. The validator used to replace the list, which quietly
+        # made the list dead weight for every host that installs one: an
+        # operator could strike a language out and still be handed it back.
         if lang in self.protected_langs():
             return True
-        if self._language_validator is not None:
-            try:
-                return bool(self._language_validator(lang))
-            except Exception as exc:
-                self._logger.error(
-                        f"The host's language validator raised on '{lang}': "
-                        f"{exc}. Treating the language as acceptable.")
-                return True
-        return lang in self._language_options
+        if lang not in self._language_options:
+            return False
+        if self._language_validator is None:
+            return True
+        try:
+            return bool(self._language_validator(lang))
+        except Exception as exc:
+            self._logger.error(
+                    f"The host's language validator raised on '{lang}': "
+                    f"{exc}. Treating the language as acceptable.")
+            return True
 
     def supported_languages(self):
         """
-        The languages a translation dictionary exists for, DECL_LANG always among
-        them.
+        The languages this deployment can be read in: those a dictionary exists
+        for *and* the allow-list names. DECL_LANG is always among them, with or
+        without a dictionary -- it needs none, the keys are already in it.
 
         A host application that addresses its users in one of these -- the
         H4H appliance reads its announcements aloud -- has to offer exactly
         this set and no more. Offer a language the dictionaries do not cover
-        and translate() falls back to the German key without saying so: the
-        text would be spoken in German by a foreign voice, and nothing in the
-        log would explain it.
+        and translate() falls back to the key without saying so: the text would
+        be read in the wrong language by a voice from the right one, and
+        nothing in the log would explain it.
+
+        The allow-list has to be part of the answer, not just of what an upload
+        may add. A release ships dictionaries for its own strings, and a fresh
+        deployment starts from those; without this, every language the package
+        happens to carry would turn up in the editor's language menu, covered
+        for this library's own chrome and untranslated for everything the host
+        declares. Whoever narrows the list expects that to be the last word on
+        which languages exist here -- and a dictionary standing by for a
+        language nobody allows costs nothing and is ready the day somebody
+        does.
         """
         with self._lock:
-            return sorted(self._lang_cache)
+            present = set(self._lang_cache)
+            allowed = set(self._language_options)
+        return sorted((present & allowed) | set(self.protected_langs()))
 
     def translation_status(self, lang, keys=None):
         """

@@ -395,21 +395,30 @@ honest answer, not a missed one. The reading is logged by both keys, and the
 host's own wording remains its fallback, so a dictionary that later loses the
 entry leaves the label reading as its module wrote it.
 
-**Which languages may be added** is governed by two handles, in this order:
+**Which languages exist here** is governed by two handles, and a language has to
+pass **both**:
 
-1. **A validator the host registers** — `set_language_validator(fn)`, where
+1. **An allow-list**, `{code: endonym}`, seeded once from
+   `ConfigManager.LANGUAGE_OPTIONS` into **`ui_dir/languages.json`** and never
+   overwritten again. This is the deployment's upper bound: whatever the release
+   happens to ship dictionaries for, only what stands here is offered.
+2. **A validator the host registers** — `set_language_validator(fn)`, where
    `fn(code)` returns whether that language is acceptable. Use this when the host
    knows something the library cannot. An appliance that reads its texts aloud has
    no use for a language its speech service has no voice for: without the check,
    somebody translates several hundred strings and discovers only afterwards that
    none of them can be spoken. That knowledge belongs to the host — the library has
    no business knowing which speech service exists.
-   A validator that raises counts as consent, and `de` is accepted regardless.
-   Refusing to let a device be configured because a check was itself unavailable is
-   the worse failure.
-2. **Otherwise an allow-list**, `{code: endonym}`, seeded once from
-   `ConfigManager.LANGUAGE_OPTIONS` into **`ui_dir/languages.json`** and never
-   overwritten again.
+   A validator that raises counts as consent, and the protected languages are
+   accepted regardless. Refusing to let a device be configured because a check was
+   itself unavailable is the worse failure.
+
+The two narrow, and neither overrules the other: the list belongs to whoever
+installs the device, the validator to whoever wrote the host. A validator used to
+replace the list, which made the list dead weight for every host that installs one
+— an operator could strike a language out and be handed it straight back, and on an
+appliance whose validator says yes whenever its speech service is unreachable, that
+is every language.
 
 > **Edit the file, not the constant.** Under a virtualenv the constant lives in
 > `.venv/lib/python3.x/site-packages/gpsmcpmms/config.py` — awkward to reach, and
@@ -417,10 +426,11 @@ entry leaves the label reading as its module wrote it.
 > is yours, survives upgrades, and is read at every start. An unreadable file falls
 > back to the shipped list rather than to none.
 
-Both handles govern **adding** a language, not loading one: dictionaries already on
-disk are read whatever the current policy says. Discarding a deployment's
-translations at startup because a rule changed later would destroy work nobody can
-get back.
+Both handles govern which languages are **offered**, not which dictionaries are
+loaded: a dictionary on disk for a language nobody allows is read, kept and simply
+not offered — it costs nothing and is ready the day somebody allows it. Discarding a
+deployment's translations at startup because a rule changed later would destroy work
+nobody can get back.
 
 A key counts as done for its own `decl_lang` without any entry: it is already in
 that language. Otherwise **an absent entry means untranslated and any entry
