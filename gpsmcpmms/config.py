@@ -110,17 +110,26 @@ class ConfigManager:
     # appliance uses it to refuse languages its speech service has no voice
     # for, which is knowledge this library has no business holding.
     # The list below is not invented: it is what Google Cloud Text-to-Speech
-    # answered on 2026-08-02 when asked which languages it has voices for.
-    # Persian is absent on purpose -- the service refuses fa-IR outright
-    # ("Voice '' does not exist"), however often documentation claims
-    # otherwise, and a language nothing can speak has no place in the default
-    # of a library whose hosts read text aloud.
+    # answered on 2026-08-02 when asked which languages it has voices for --
+    # a serviceable starting point, since a host that speaks will not get far
+    # with a language nothing can pronounce.
+    #
+    # It is a starting point and not the rule, and the difference showed the
+    # first time somebody wanted Persian. This list answers "which language
+    # may the editor be *read* in", and reading needs no voice. Speaking is a
+    # separate question, asked separately: the H4H appliance offers its
+    # announcements in the languages it has recordings for, and narrows this
+    # list through set_language_validator(). Persian was left out here because
+    # the speech service refuses fa-IR outright ("Voice '' does not exist"),
+    # however often documentation claims otherwise -- which was a reason for
+    # that host to refuse it, never a reason for this library to.
     LANGUAGE_OPTIONS = {
         "af": "Afrikaans", "am": "አማርኛ", "ar": "العربية", "bg": "Български",
         "bn": "বাংলা", "ca": "Català", "cmn": "普通话", "cs": "Čeština",
         "da": "Dansk", "de": "Deutsch", "el": "Ελληνικά", "en": "English",
-        "es": "Español", "et": "Eesti", "eu": "Euskara", "fi": "Suomi",
-        "fil": "Filipino", "fr": "Français", "gl": "Galego", "gu": "ગુજરાતી",
+        "es": "Español", "et": "Eesti", "eu": "Euskara", "fa": "فارسی",
+        "fi": "Suomi", "fil": "Filipino", "fr": "Français", "gl": "Galego",
+        "gu": "ગુજરાતી",
         "he": "עברית", "hi": "हिन्दी", "hr": "Hrvatski", "hu": "Magyar",
         "id": "Bahasa Indonesia", "is": "Íslenska", "it": "Italiano",
         "ja": "日本語", "kn": "ಕನ್ನಡ", "ko": "한국어", "lt": "Lietuvių",
@@ -470,61 +479,82 @@ class ConfigManager:
             if isinstance(key, str) and key.strip():
                 self._note_xlation_key(key.strip(), kind, lang)
 
-    def note_original_keys(self, lang, originals, kind=None):
-        """Registers keys whose wording did not originate in DECL_LANG.
+    def add_original_xlations(self, xlation_lang, xlations):
+        """Supplies translations for already noted keys, from where they came.
 
-        `originals` maps each key to how it reads in `lang`: the key itself is
-        a DECL_LANG string, the value is the wording it was translated from.
+        `xlations` maps each key to its reading in `xlation_lang`. The keys must
+        already be registered -- through a Declaration or note_xlation_keys();
+        this call adds nothing to the key set, only to a dictionary.
 
-        This is the way in for strings a module receives from somewhere else --
-        the categories of a remote catalogue, the fields of a foreign schema.
-        Such a string arrives in whatever language its source speaks, and
-        registering it as it stands would make a key in that language: the
-        completeness count would call it translated for the wrong language, a
-        reader of DECL_LANG would see a word from another one, and no template
-        column would say which is which. A module therefore decides, once and
-        at development time, what each of them is called in DECL_LANG, and
-        hands the original over as its first translation.
+        The case it is for: a key that is itself a translation. A module may
+        take its display strings from somewhere else -- the categories of a
+        remote catalogue, the fields of a foreign schema -- and such a string
+        arrives in whatever language its source speaks. Registering it as it
+        stands would make a key in that language, which is the one thing this
+        library cannot represent: the completeness count would call it
+        translated for a language it is merely written in, a reader of
+        DECL_LANG would be shown a word from another one, and nothing in a
+        template would say which row is which. So the module settles on a
+        DECL_LANG wording and notes that as the key -- and then the original is
+        the better translation than anything derived back out of it, because it
+        is what somebody actually wrote.
 
-        Two things follow from "first", and both matter:
+        Three rules, and each of them is there for a reason:
 
-        * The original is a starting point, never a correction. Where a
-          translation already stands, it stays -- otherwise every restart would
-          flatten the work of whoever improved on the wording the source
-          happened to use.
-        * A language nobody has a dictionary for is not created here. Seeding
-          into it would make it a supported language on the strength of a
-          handful of entries, and the device would offer it. The key is
-          registered either way; only the original goes unrecorded.
+        * **An existing translation is never touched.** These are starting
+          points, not corrections; otherwise every restart would flatten the
+          work of whoever improved on the wording the source happened to use.
+        * **A language nothing has a dictionary for is not created here.** One
+          would otherwise become a supported language on the strength of a
+          handful of entries, and a host offering its users exactly the
+          supported languages would start offering it.
+        * **Keys nobody registered are refused.** An entry for a key the
+          software does not use is an orphan the moment it is written, and it
+          would then be offered to a translator as work.
         """
-        if kind is not None and kind not in self.XLATION_KINDS:
-            raise ValueError(f"note_original_keys(): unknown kind {kind!r}; "
-                             f"expected one of {sorted(self.XLATION_KINDS)}.")
-        lang = lang.strip().split("-")[0] if isinstance(lang, str) else ""
+        lang = (xlation_lang.strip().split("-")[0]
+                if isinstance(xlation_lang, str) else "")
+        if not lang:
+            raise ValueError("add_original_xlations(): 'xlation_lang' must "
+                             "name the language these readings are in.")
         if lang == self.DECL_LANG:
             raise ValueError(
-                    f"note_original_keys(): {lang!r} is the language the keys "
-                    f"are already in; there is nothing to record.")
-        if not isinstance(originals, dict):
-            raise ValueError("note_original_keys(): 'originals' must map each "
-                             "key to its wording in the other language.")
-
-        for key in originals:
-            if isinstance(key, str) and key.strip():
-                self._note_xlation_key(key.strip(), kind, self.DECL_LANG)
+                    f"add_original_xlations(): {lang!r} is the language the "
+                    f"keys are already written in; there is nothing to add.")
+        if not isinstance(xlations, dict):
+            raise ValueError("add_original_xlations(): 'xlations' must map each "
+                             "key to its reading in that language.")
 
         with self._lock:
             book = self._lang_cache.get(lang)
             if book is None:
-                return              # no dictionary, no place to put it
-            for key, original in originals.items():
+                self._logger.info(
+                        f"No dictionary for '{lang}': {len(xlations)} original "
+                        f"reading(s) not recorded. A language is not created by "
+                        f"supplying readings for it.")
+                return
+            added = unknown = 0
+            for key, reading in xlations.items():
                 if not (isinstance(key, str) and key.strip()):
                     continue
-                if not (isinstance(original, str) and original.strip()):
+                key = key.strip()
+                if key not in self._active_xlation_keys:
+                    unknown += 1
                     continue
-                if isinstance(book.get(key.strip()), str) and book[key.strip()]:
-                    continue        # somebody already said it better
-                book[key.strip()] = original.strip()
+                if not (isinstance(reading, str) and reading.strip()):
+                    continue
+                if isinstance(book.get(key), str) and book[key]:
+                    continue            # somebody already said it better
+                book[key] = reading.strip()
+                added += 1
+        if unknown:
+            self._logger.warning(
+                    f"{unknown} original reading(s) for '{lang}' name keys that "
+                    f"are not registered; they were refused. Note the keys "
+                    f"before supplying their readings.")
+        if added:
+            self._logger.debug(
+                    f"{added} original reading(s) recorded for '{lang}'.")
 
     def _load_language_options(self):
         """The allow-list, seeded from LANGUAGE_OPTIONS on first start.
@@ -946,26 +976,33 @@ class ConfigManager:
         self._language_validator = None
         self._language_options = self._load_language_options()
 
-        # seed the translation dictionaries shipped with the release (e.g.
-        # en.json, fa.json) into ui_dir/lang/ if the operator has none there
-        # yet; existing files are never overwritten, so local edits survive.
-        # A deployment that does not want the packaged translations may set
-        # GPSMCPMMS_NO_LANG_SEED=1 to skip this.
+        # Seed the translation dictionaries shipped with the release into
+        # ui_dir/lang/ -- but only into an empty directory. A deployment that
+        # does not want the packaged translations may set
+        # GPSMCPMMS_NO_LANG_SEED=1 to skip this entirely.
+        #
+        # All or nothing, and not file by file: a deployment that has its own
+        # dictionaries has decided which languages it speaks. Seeding the
+        # missing ones into it would add whichever languages the package
+        # happens to ship -- covering this library's own strings and nothing
+        # of the host's, so the new language would appear as supported, be
+        # offered to users, and read half in a language they did not ask for.
+        # Which is what happened the moment a release shipped one more
+        # dictionary than the devices in the field had.
         packaged_lang = os.path.join(
                 os.path.dirname(os.path.abspath(__file__)), "ui", "lang")
         if (os.path.isdir(packaged_lang) and
-                not os.environ.get("GPSMCPMMS_NO_LANG_SEED")):
+                not os.environ.get("GPSMCPMMS_NO_LANG_SEED") and
+                not any(f.endswith(".json")
+                        for f in os.listdir(self._lang_dir))):
             for file_name in os.listdir(packaged_lang):
                 if not file_name.endswith(".json"):
                     continue
-                dest = os.path.join(self._lang_dir, file_name)
-                if not os.path.exists(dest):
-                    try:
-                        shutil.copyfile(
-                            os.path.join(packaged_lang, file_name), dest)
-                    except OSError as exc:
-                        self._logger.error(
-                            f"Seeding '{file_name}' failed: {exc}")
+                try:
+                    shutil.copyfile(os.path.join(packaged_lang, file_name),
+                                    os.path.join(self._lang_dir, file_name))
+                except OSError as exc:
+                    self._logger.error(f"Seeding '{file_name}' failed: {exc}")
 
         for file_name in sorted(os.listdir(self._lang_dir)):
             if not file_name.endswith(".json"):
