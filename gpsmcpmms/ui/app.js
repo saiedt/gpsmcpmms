@@ -32,7 +32,6 @@ const S = {
           (navigator.language || "").split("-")[0] || "en",
     languages: ["de"],
     langNames: {},           // code -> name, from ui_dir/languages.json
-    maxLanguages: 7,         // how many dictionaries may coexist
     langPanel: null,         // null | "new" | "edit"
     langForm: {},            // what the open panel has been told so far
     edit: {},                // moduleId -> working value (deep copy)
@@ -1321,13 +1320,6 @@ async function uploadTranslation(file, remove, code, name) {
 
     const resp = await fetch("/api/lang/upload",
         {method: "POST", headers: authHeaders(), body: fd});
-    if (resp.status === 409) {                 // an 8th language needs room
-        const body = await resp.json();
-        const pick = await modal(xl("Choose the language to be replaced"),
-                                 {select: body.removable});
-        if (pick === null) return;
-        return uploadTranslation(file, pick);
-    }
     if (!resp.ok) {
         let err = resp.status;
         try { err = (await resp.json()).error || err; } catch (e) { /**/ }
@@ -1401,16 +1393,7 @@ function renderLangPanel(mode) {
             el("span", {}, xl("New language") + ":"), pick, code, name);
     }
 
-    // row 1b -- only when every slot is taken. Asked here, before any work,
-    // rather than after an upload arrives with the translation already done.
-    let row1b = null, replaceOf = () => null;
-    if (mode === "new" && S.languages.length >= (S.maxLanguages || 7)) {
-        const sel = el("select", {},
-            ...active.map(l => el("option", {value: l}, langName(l))));
-        replaceOf = () => sel.value;
-        row1b = el("div", {class: "lang-panel-row"},
-            el("span", {}, xl("To be replaced") + ":"), sel);
-    }
+    const row1b = null, replaceOf = () => null;
 
     // row 2 -- context languages: everything active except German, and except
     // the one being worked on
@@ -1545,7 +1528,6 @@ async function loadLangList() {
     const r = await api("/api/lang/info");
     if (r.data && r.data.languages) S.languages = r.data.languages;
     if (r.data && r.data.options) S.langNames = r.data.options;
-    if (r.data && r.data.max_languages) S.maxLanguages = r.data.max_languages;
     // Der Browser darf eine Sprache nennen, für die es hier kein Wörterbuch
     // gibt. Angezeigt würden dann die Schlüssel selbst -- lesbar, aber die
     // Auswahlliste stünde auf etwas, was nicht darin vorkommt.

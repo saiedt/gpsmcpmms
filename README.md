@@ -720,9 +720,14 @@ gives them up at the moment the application hands it the list:
 
 ```python
 # in the speech module, at the moment the application registers its sentences
-if len(self.voiced_languages()) >= config_mgr.MAX_LANGUAGES:
+if not set(config_mgr.supported_languages()) - set(self.voiced_languages()):
     config_mgr.discard_module("5tts")      # …and the API key with it
 ```
+
+Measured against the languages this deployment has, never against a number. The
+appliance compared with a ceiling of seven once, and that was right only for a
+deployment carrying exactly seven: one shipping five would have recorded all
+five and kept its API key for ever, because five is less than seven.
 
 The call returns `True` if there was anything to remove, and invalidates the
 editor session, since the schema it is showing has just changed. Registering the

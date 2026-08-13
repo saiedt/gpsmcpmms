@@ -46,15 +46,11 @@ Nun erscheinen zwei Schaltflächen: **Neue Übersetzung hinzufügen** und
 4. Klicken Sie auf **CSV herunterladen**. Eine Datei namens `<code>.csv`
    (z. B. `fr.csv`) wird auf Ihrem Rechner gespeichert.
 
-> Bestehen bereits sieben Sprachen, fragt die achte, welche dafür entfallen
-> soll — *Zu ersetzende Sprache wählen*. Englisch und Deutsch lassen sich nicht
-> entfernen.
-
 Die Datei ist eine UTF-8-Textdatei. Ihre Spalten sind:
 
 | Spalte          | Bedeutung                                                              |
 |-----------------|-----------------------------------------------------------------------|
-| `en`, `de`      | Derselbe Text in beiden Sprachen, gleich in welcher er zuerst geschrieben wurde. Übersetzen Sie aus einer von beiden — **nicht verändern.** |
+| `en` (erste)    | Der zu übersetzende Text, so wie die Software ihn schreibt. **Nicht verändern.** |
 | `kind`          | Was der Text ist und wo er erscheint (siehe unten). **Nicht verändern.** |
 | Referenz(en)    | Bestehende Übersetzungen, nur zur Ansicht. **Nicht verändern.**        |
 | `<code>` (letzte) | Die Zielsprache — **diese Spalte füllen Sie aus.**                  |

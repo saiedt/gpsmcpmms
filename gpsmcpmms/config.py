@@ -44,9 +44,6 @@ class ConfigManager:
     # param); it is handled by config_mgr itself and is therefore never
     # rendered as an editable module in the config-editor
     OWN_MODULE_ID = "config"
-    # translation dictionaries: at most this many languages in parallel; a
-    # further one requires the admin to pick an existing language to remove
-    MAX_LANGUAGES = 7
     # how many existing languages may be included as reference columns in a
     # downloaded translation template (context for the translator/AI)
     MAX_TEMPLATE_REFS = 3
@@ -197,18 +194,13 @@ class ConfigManager:
         # never said whether you were about to add or to improve, and the
         # panel looked identical either way.
         "Add new translation", "Edit existing translation",
-        "New language", "Language code", "Language name", "To be replaced",
-        "Editing",
+        "New language", "Language code", "Language name", "Editing",
         "Translating the source keys, with up to 3 languages as further "
             "context (please choose):",
         "Translation file: start by", "then", "finally",
         "Download CSV", "Select completed CSV",
         "Upload the selected CSV",
-        "No translation exists yet",
-        # still reachable: the panel asks in row 1b before any work is done,
-        # but a CSV arriving another way can still run into a full set
-        "Choose the language to be replaced",
-        "translated", "Translation processed", "Invalid file",
+        "No translation exists yet", "translated", "Translation processed", "Invalid file",
         "Value already taken",
         "Choose file", "File type not allowed",
         "File name not allowed", "File too large",
@@ -1207,13 +1199,6 @@ class ConfigManager:
             return "language_not_allowed"
 
         with self._lock:
-            if replace is not None and (
-                    replace in self.protected_langs() or replace == lang or
-                    replace not in self._lang_cache):
-                return "invalid_replace"
-            if (lang not in self._lang_cache and replace is None and
-                    len(self._lang_cache) >= self.MAX_LANGUAGES):
-                return "too_many_languages"
 
             lang_dict = {k: v for k, v in lang_dict.items()
                          if k not in self.RESERVED_LANG_KEYS}
@@ -1397,15 +1382,6 @@ class ConfigManager:
         if not self._language_allowed(target):
             return None, "language_not_allowed", None
 
-        with self._lock:
-            is_new = target not in self._lang_cache
-            over_limit = is_new and len(self._lang_cache) >= self.MAX_LANGUAGES
-            removable = sorted(l for l in self._lang_cache
-                               if l not in self.protected_langs())
-        if over_limit and not (isinstance(remove, str) and remove in removable):
-            return None, {"error": "too_many_languages",
-                          "removable": removable}, None
-
         # The same set the template was cut from -- not merely what this run
         # has got round to registering. "Not active right now" is not the same
         # as "no longer used": the H4H service names enter the active set only
@@ -1445,8 +1421,7 @@ class ConfigManager:
             else:
                 new_dict.pop(key, None)
 
-        failure = self._store_translation_dict(target, new_dict,
-                                               remove if over_limit else None)
+        failure = self._store_translation_dict(target, new_dict)
         if failure:
             return None, failure, None
         report = self._lang_report_csv(target, known, uploaded, new_dict)
@@ -2043,10 +2018,7 @@ class ConfigManager:
                 self._touch_session()
             with self._lock:
                 info = {"languages": sorted(self._lang_cache),
-                        "options": self.language_options(),
-                        # the editor asks which language to replace *before*
-                        # the work is done, so it has to know the ceiling
-                        "max_languages": self.MAX_LANGUAGES}
+                        "options": self.language_options()}
                 if editable and self._session_admin:
                     info["orphans"] = {
                         lang: self._orphan_keys_of(lang_dict)

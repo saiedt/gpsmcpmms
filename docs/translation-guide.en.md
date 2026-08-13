@@ -42,15 +42,11 @@ translation**.
 4. Click **Download CSV**. A file named `<code>.csv` (for example `fr.csv`) is
    saved to your computer.
 
-> If seven languages already exist, adding an eighth asks which one to drop
-> first — *Choose the language to be replaced*. English and German cannot be
-> dropped.
-
 The file is a UTF-8 text file. Its columns are:
 
 | Column        | Meaning                                                          |
 |---------------|------------------------------------------------------------------|
-| `en`, `de`    | The same text in both, whichever it was written in first. Translate from either — **do not change them.** |
+| `en` (first)  | The text to translate, as the software writes it. **Do not change it.** |
 | `kind`        | What the text is and where it appears (see below). **Do not change it.** |
 | reference(s)  | Existing translations, shown only for reference. **Do not change them.** |
 | `<code>` (last) | The target language — **this is the column you fill in.**       |
