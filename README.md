@@ -159,7 +159,7 @@ A Declaration is a dict with any of these keys (`type` is mandatory):
 | `hidden` | Hide from the editor. |
 | `protected` | Hidden until the admin unlocks with the password. |
 | `backend_provided` | Value is captured by backend logic (e.g. an NFC reader), read-only in the editor. Requires `acquire_button`; may combine with `init_only`. |
-| `hint` | A statement about how things stand, shown **above** the field. Either literal text, or the name of a `func_dict` entry making it dynamic — see [Hints](#hints). Not a tooltip: a tooltip explains and never expires, a hint reports and can stop being true. |
+| `hint` | A statement about how things stand, shown **above** the field. Either literal text, or the name of a `func_dict` entry making it dynamic — see *Hints* under [Advanced features](#advanced-features). Not a tooltip: a tooltip explains and never expires, a hint reports and can stop being true. |
 
 **Primitive types**
 
@@ -168,7 +168,7 @@ A Declaration is a dict with any of these keys (`type` is mandatory):
 | `boolean` | `True` / `False` |
 | `int`, `float` | numbers; accept `bound_to` and `s2g_scale` |
 | `string` | text; accepts `bound_to` (a regex) |
-| `file` | the bare **name** of a file in a directory the host names with `file_dir`; see [Files](#files) |
+| `file` | the bare **name** of a file in a directory the host names with `file_dir`; see *Files* under [Advanced features](#advanced-features) |
 | `password` | text, masked in the editor |
 | `url` | a URL string |
 | `path` | a file/folder path, checked against the device's file system (see below) |
