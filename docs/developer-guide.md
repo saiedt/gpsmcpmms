@@ -110,15 +110,6 @@ that walks declarations — a bulk rename, a source-language flip — draw the s
 line. A default that happens to read like a label will otherwise be translated,
 and what was a device setting becomes a word.
 
-### A sibling's *selected* value, not its saved one
-
-A dynamic enum that depends on another field takes `values_for`. Without it the
-provider sees what is stored, not what the person is looking at: they change the
-language, the voice list still offers the old language's voices, and the only way
-through is to save twice — where the first save acts on a combination nobody
-intended. Here that meant recording an entire language in an arbitrary voice
-before the chosen one was reached.
-
 ### Measure against what the deployment has
 
 If a module decides something about itself — whether it is finished, whether it
@@ -253,6 +244,69 @@ No validation function, no save handler comparing fields, no code in the editor
 that knows about tokens. Everything above is enforced in the backend *and*
 rendered by the editor from the same declaration, which is the point: the two
 cannot disagree, because there is only one statement of the rule.
+
+### A worked case: trying a value before committing it
+
+Two fields where the first parameterises the second, and the second is only
+worth choosing if you can hear — or see, or dial — what it does. A speech
+service is the plainest example: a language, and the voices that speak it.
+
+```python
+"language": {"label": "Language", "type": "enum",
+             "values": "get_languages"},
+"voice":    {"label": "Voice", "type": "enum",
+             "values": "get_voices", "values_for": "language",
+             "test_func": try_voice,
+             "test_func_msg": "The chosen voice reads this field's hint "
+                              "aloud through the speaker."},
+```
+
+**`values_for`** hands the provider the sibling's *selected* value, not the
+stored one, and the editor re-asks as soon as it changes. Without it the voice
+list answers the question of before: you save the language, reload, and only
+then see the voices that speak it. That is not merely awkward — the first save
+commits a pairing nobody chose, and if saving has consequences (here: recording
+every sentence of a language) they happen in an arbitrary voice before the
+intended one is reachable.
+
+**`test_func`** receives the value in the field, not the one on disk. That is
+what makes "try it first" possible with no draft state in the backend and no
+second round of saving: the editor posts what is on screen, the module does the
+thing, and the return value is either `True` or a sentence the editor shows.
+
+**And here is the boundary, which cost us an evening.** A test function is given
+its own value and can read stored state — and nothing else. Ours read the
+*stored* language:
+
+```python
+def try_voice(value):                       # wrong
+    return speak(hint_text(stored_language), voice=value)
+```
+
+Somebody chose an Arabic voice, pressed Test, and heard German: the voice did
+not match the stored language, so it was dropped and the service picked its own.
+The button answered a question nobody asked, and said nothing about it. Worse,
+the only way to make it answer correctly was to save first — which is the one
+thing the button exists to avoid.
+
+The fix was not to pass more into the test but to stop needing it. The voice's
+own name carries its language, so the value that arrives with the call is
+sufficient:
+
+```python
+def try_voice(value):                       # right
+    language = language_of(value) or stored_language
+    return speak(hint_text(language), voice=value, language=language)
+```
+
+Derive what a test needs from the value it is given, wherever the value can
+carry it. Reaching for the stored state means testing a combination that exists
+nowhere — not in the field, not on the device — and being told so by nothing.
+
+Two smaller things worth copying: `test_func_msg` is shown before the test runs,
+because a button that makes a device speak or place a call should say so first;
+and restore whatever you touched — a test that leaves the stored voice changed
+has done more than test.
 
 ### Test the device, not the sandbox
 
