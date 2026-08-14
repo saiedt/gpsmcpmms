@@ -194,6 +194,12 @@ class ConfigManager:
         "The test routine ran without errors.",
         "The test routine could not carry out the test.",
         "Check", "Check failed",
+        # What is left to show when a provider of the hosting application
+        # raises. The exception itself goes to the log, where it belongs; the
+        # editor says only that the answer failed to arrive, because a
+        # traceback in a hint line helps nobody standing at the device.
+        "Internal error while determining the values",
+        "Internal error while establishing the hint",
         "Reachable", "no response to ping", "Name cannot be resolved",
         "File exists", "Folder exists", "Path does not exist",
         "Does not exist yet, can be created",
@@ -1843,7 +1849,7 @@ class ConfigManager:
             except Exception as exc:
                 self._logger.error(f"enum provider '{provider}' raised: "
                                    f"{exc}")
-                result = "Interner Fehler bei der Wertermittlung"
+                result = "Internal error while determining the values"
             if isinstance(result, dict):
                 # dynamically delivered labels/tooltips are display strings
                 # and hence translation keys, too -- unless the provider says
@@ -1927,7 +1933,8 @@ class ConfigManager:
                 text = func(lang)
             except Exception as exc:
                 self._logger.error(f"hint provider '{provider}' raised: {exc}")
-                return jsonify({"error": "Interner Fehler bei der Ermittlung"})
+                return jsonify(
+                        {"error": "Internal error while establishing the hint"})
             return jsonify({"text": str(text), "at": time.strftime("%H:%M")})
 
         @app.route("/api/config/file", methods=["POST"])
@@ -2070,7 +2077,12 @@ class ConfigManager:
             if editable:
                 self._touch_session()
             with self._lock:
+                # The source language belongs in the answer, not in the
+                # editor's assumptions. It was hard-coded there once, and when
+                # DECL_LANG moved the editor kept offering the source as a
+                # translation target while hiding a language that needed one.
                 info = {"languages": sorted(self._lang_cache),
+                        "source": self.DECL_LANG,
                         "options": self.language_options()}
                 if editable and self._session_admin:
                     info["orphans"] = {

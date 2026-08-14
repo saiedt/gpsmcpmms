@@ -24,14 +24,18 @@ const S = {
     protectedOmitted: false,
     cvv: {},                 // parsed /api/cvv_data dump
     xl: {},                  // active translation dictionary
-    // Was jemand zuletzt gewählt hat, sonst die Sprache seines Browsers, sonst
-    // die der Quellschlüssel. Fest "de" stand hier, solange die Schlüssel
-    // deutsch waren; jetzt wäre das eine Sprache, die dem Gerät niemand gesagt
-    // hat -- und für einen deutschen Zugang kommt sie ohnehin heraus. Ob es ein
-    // Wörterbuch dafür gibt, entscheidet loadLangList().
+    // What somebody chose last, failing that the language of their browser,
+    // failing that the one the source keys are written in. A fixed "de" stood
+    // here while the keys were German; today that would name a language
+    // nobody told the device about -- and for a German visitor it falls out
+    // anyway. Whether a dictionary exists for it is loadLangList()'s verdict.
     lang: localStorage.getItem("gpsmcpmms_lang") ||
           (navigator.language || "").split("-")[0] || "en",
-    languages: ["de"],
+    // Until /api/lang/info answers, assume only the source language exists:
+    // it is the one language that is always there, being every key's own
+    // wording. The server names it in `source` -- never guess it here again.
+    sourceLang: "en",
+    languages: ["en"],
     langNames: {},           // code -> name, from ui_dir/languages.json
     langPanel: null,         // null | "new" | "edit"
     langForm: {},            // what the open panel has been told so far
@@ -243,7 +247,11 @@ async function fetchEnumOptions(path, rerender, arg) {
     S.enums[path] = (r.data && r.data.values) ? {values: r.data.values, arg}
                   : {error: (r.data && r.data.error) || xl("Connection to the device lost"),
                      arg};
-    if (S.enums[path].error) msg(S.enums[path].error, "error");
+    // xl() on a string the device sent: the library's own failure messages are
+    // registered keys, and a text the hosting application invented falls
+    // through to itself. Rendering it raw left the library's own German --
+    // and later English -- standing in a Turkish editor.
+    if (S.enums[path].error) msg(xl(S.enums[path].error), "error");
     rerender();
 }
 
@@ -255,7 +263,7 @@ async function fetchEnumOptions(path, rerender, arg) {
 async function fetchHint(path, rerender) {
     S.hints[path] = {pending: true};
     const r = await api(`/api/config/hint?path=${encodeURIComponent(path)}` +
-                        `&lang=${encodeURIComponent(S.lang || "de")}`);
+                        `&lang=${encodeURIComponent(S.lang || S.sourceLang)}`);
     S.hints[path] = (r.data && typeof r.data.text === "string")
                   ? {text: r.data.text, at: r.data.at}
                   : {error: (r.data && r.data.error) ||
@@ -276,7 +284,7 @@ function hintFor(node, ctx) {
     }
     if (state.pending) return el("div", {class: "hint"}, "…");
     if (state.error)
-        return el("div", {class: "hint invalid"}, state.error);
+        return el("div", {class: "hint invalid"}, xl(state.error));
     return el("div", {class: "hint"},
         el("span", {class: "hint-text"}, state.text),
         el("span", {class: "hint-meta"}, `${xl("As of")} ${state.at}`),
@@ -391,10 +399,9 @@ function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
         let options = Array.isArray(cons.one_of) ? cons.one_of : null;
         if (options === null) {           // dynamic enum
             const state = S.enums[node.path];
-            // Neu fragen, sobald das Feld, für das die Optionen berechnet
-            // werden, ein anderes geworden ist -- und zwar im Entwurf, lange
-            // vor dem Speichern: die Stimmen einer Sprache, die noch gar
-            // nicht übernommen ist.
+            // Ask again as soon as the field the options are computed from
+            // has become another one -- in the draft, long before saving:
+            // the voices of a language nobody has applied yet.
             if (!state || state.arg !== enumArg) {
                 fetchEnumOptions(node.path, ctx.rerender, enumArg);
                 return el("select", {disabled: ""}, el("option", {}, "…"));
@@ -403,12 +410,12 @@ function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
                 return el("select", {disabled: ""}, el("option", {}, "…"));
             if (state.error)
                 return el("select", {disabled: "", class: "invalid"},
-                          el("option", {}, state.error));
+                          el("option", {}, xl(state.error)));
             options = Object.entries(state.values).map(([value, o]) =>
                 ({value, label: (o && o.label) || value,
                   tooltip: o && o.tooltip,
-                  // ein Name, den der Dienst vergeben hat, wird nicht
-                  // übersetzt -- und steht deshalb auch in keinem Wörterbuch
+                  // a name the service made up is not translated -- and so
+                  // stands in no dictionary either
                   verbatim: !!(o && o.verbatim)}));
         }
         // a file waiting to be sent is already choosable, though the device
@@ -418,16 +425,16 @@ function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
             for (const {name} of (S.pendingFiles[node.path] || []))
                 if (!options.some(o => o.value === name))
                     options.push({value: name, label: name});
-        // Die Optionen eines dynamischen Enums stehen erst zur Laufzeit fest,
-        // weshalb der Kern den gespeicherten Wert nie gegen sie prüfen konnte
-        // ("defer the exact check" in cvv_tree). Bietet der Anbieter ihn nicht
-        // mehr an -- eine deutsche Stimme etwa, nachdem die Ansagesprache auf
-        // Türkisch gewechselt ist --, dann ist er keine Wahl mehr, sondern ein
-        // Rest. Leer *aussehen* tat das Feld ohnehin schon, weil kein <option>
-        // dazu passte; hier wird es wahr, damit Speichern ihn wirklich los
-        // wird und der Zustand des Geräts dem entspricht, was zu sehen ist.
-        // Nur beim dynamischen Enum: ein statisches prüft der Kern bereits
-        // beim Laden und verwirft, was nicht mehr zur Deklaration passt.
+        // A dynamic enum's options are settled only at runtime, which is why
+        // the core could never check the stored value against them ("defer
+        // the exact check" in cvv_tree). Once the provider stops offering it
+        // -- a German voice, say, after the announcement language moved to
+        // Turkish -- it is no longer a choice but a leftover. The field
+        // already *looked* empty, because no <option> matched it; here that
+        // becomes true, so saving really is rid of it and the device's state
+        // agrees with what is on screen. Dynamic enums only: a static one the
+        // core checks at load time, discarding whatever no longer fits the
+        // declaration.
         if (Array.isArray(cons.one_of) === false && !fixed && !backend &&
                 cur !== null && cur !== undefined && cur !== "" &&
                 !options.some(o => o.value === cur)) {
@@ -534,21 +541,20 @@ function testButton(node, currentValue) {
     btn.addEventListener("click", async () => {
         const r = await api("/api/config/test",
             {json: {path: node.path, value: currentValue()}});
-        // Drei Ausgänge, nicht zwei: eine Testroutine, die "false" zurückgibt,
-        // kommt mit Status 200 zurück, und "Erfolgreich: false" widersprach
-        // sich selbst. Und auch ein "true" heißt nur, dass die Routine ohne
-        // Fehler durchlief -- ob der richtige Klingelton erklang, entscheidet
-        // allein, wer zuhört.
+        // Three outcomes, not two: a test routine that returns "false" comes
+        // back with status 200, and "Successful: false" contradicted itself.
+        // A "true" says no more than that the routine ran without error --
+        // whether the right ring tone sounded is decided by whoever listened.
         const clean = (r.status === 200) && !!r.data.result;
         const outcome = (r.status !== 200)
             ? xl("The test could not be started.")
             : (r.data.result
                 ? xl("The test routine ran without errors.")
                 : xl("The test routine could not carry out the test."));
-        // Der technische Grund steht darunter und nicht hinter einem
-        // Doppelpunkt: der Satz endet auf einen Punkt, und "... werden.: 500"
-        // liest sich wie ein Tippfehler. Übersetzt wird er nicht -- was der
-        // Server zurückgibt, steht in keiner Sprache dieses Hauses.
+        // The technical reason goes underneath rather than behind a colon:
+        // the sentence ends in a full stop, and "... carry the test out.: 500"
+        // reads like a typo. It is not translated -- what the server hands
+        // back is written in no language of this house.
         const detail = (r.status !== 200)
             ? el("p", {class: "detail"}, (r.data && r.data.error) || r.status)
             : null;
@@ -613,8 +619,8 @@ async function probeValue(node, value, rerender) {
     if (refused) S.probeBad[node.path] = text;
     else delete S.probeBad[node.path];
     msg(text, level);
-    // erst melden, dann neu zeichnen: das Neuzeichnen darf die Meldung nicht
-    // überholen, und ohne es bliebe die Markierung aus
+    // report first, then re-render: the re-render must not overtake the
+    // message, and without it the marking would never appear
     if (changed && rerender) rerender();
 }
 
@@ -622,10 +628,10 @@ function probeButton(node, currentValue, rerender) {
     const btn = el("button", {class: "small"}, xl("Check"));
     btn.addEventListener("click", async () => {
         btn.disabled = true;
-        // Dasselbe Urteil hat dieselbe Folge, ob es auf Knopfdruck kommt oder
-        // von selbst: es markiert das Feld. Ein Knopf, der nur berichtet und
-        // ein Feld, das sich davon nichts merkt, hinterließe zwei Wahrheiten
-        // über denselben Wert.
+        // The same verdict has the same consequence, whether it arrives at
+        // the press of a button or by itself: it marks the field. A button
+        // that only reports, beside a field that remembers none of it, would
+        // leave two truths about one value.
         try { await probeValue(node, currentValue(), rerender); }
         finally { btn.disabled = false; }
     });
@@ -660,15 +666,15 @@ function fieldRow(node, container, relKeys, ctx) {
         // a verdict that refuses the value marks the field on the next one
         if (PROBE_TYPES.has(cons.type)) probeValue(node, v, ctx.rerender);
     };
-    // Zurücknehmen während des Renderns: kein erneutes Rendern, sonst dreht
-    // sich das im Kreis -- dieselbe Vorsicht wie beim likely_val oben.
+    // Withdrawing during a render: no second render, or this goes round in
+    // circles -- the same caution as with likely_val above.
     const commitQuiet = (v) => {
         setIn(container, relKeys, v);
         ctx.markDirtyQuiet();
     };
-    // 'values_for' nennt ein Geschwisterfeld; sein Entwurfswert ist das
-    // Argument des Anbieters. Nicht gesetzt heißt null und nicht "kein
-    // Argument" -- der Anbieter soll den Unterschied sehen können.
+    // 'values_for' names a sibling field; its draft value is the provider's
+    // argument. Unset means null, not "no argument" -- the provider is meant
+    // to be able to tell the two apart.
     const forKey = cons.one_of_for;
     const enumArg = forKey === undefined ? undefined
         : (getIn(container, relKeys.slice(0, -1).concat(forKey)) ?? null);
@@ -694,9 +700,9 @@ function fieldRow(node, container, relKeys, ctx) {
     const repeats = !!(filled && (
         (ctx.usedEnumValues && ctx.usedEnumValues.has(cur)) ||
         takenElsewhere(ctx, absKeys).has(cur)));
-    // Vom Gerät zurückgewiesen: dieselbe Markierung wie bei einer Eingabe, die
-    // der Browser selbst zurückweist -- nur kommt das Urteil hier von dort, wo
-    // der Wert später gebraucht wird.
+    // Rejected by the device: the same marking as for input the browser
+    // rejects itself -- except that here the verdict comes from where the
+    // value will later be needed.
     const refused = S.probeBad[node.path];
     if ((repeats || refused) && input.classList) input.classList.add("invalid");
 
@@ -1136,9 +1142,9 @@ async function saveModule(mid) {
         msg(failure, "error");
         return;
     }
-    // Was das Gerät zurückgewiesen hat, geht nicht auf das Gerät. Hier und
-    // nicht beim Eintippen: dort wird markiert, damit der Tippfehler zu sehen
-    // und zu berichtigen ist -- weggenommen wird er nicht.
+    // What the device rejected does not go to the device. Here rather than
+    // while typing: there it is only marked, so the typo stays visible and
+    // correctable -- it is not taken away.
     const refused = Object.keys(S.probeBad)
                           .filter(p => p === mid || p.startsWith(mid + "."));
     if (refused.length) {
@@ -1349,7 +1355,9 @@ async function uploadTranslation(file, remove, code, name) {
    reading the whole editor in Turkish -- which is precisely backwards for the
    normal case, somebody polishing a language they do not speak. */
 function renderLangPanel(mode) {
-    const active = S.languages.filter(l => l !== "de");
+    // everything except the source language: translating it into itself is
+    // the one row nobody can fill in
+    const active = S.languages.filter(l => l !== S.sourceLang);
     const st = S.langForm || (S.langForm = {});
 
     // row 1 -- the only row that differs between the two panels
@@ -1464,7 +1472,7 @@ function renderAll() {
     const langSel = el("select", {onchange: (e) =>
                                       switchLanguage(e.target.value)},
         ...S.languages.map(l => el("option", {value: l}, langName(l))));
-    langSel.value = S.languages.includes(S.lang) ? S.lang : "de";
+    langSel.value = S.languages.includes(S.lang) ? S.lang : S.sourceLang;
     general.append(el("span", {}, xl("Language") + ":"), langSel);
     if (S.admin) {
         const toggle = (mode) => {
@@ -1544,12 +1552,14 @@ async function loadLang() {
 async function loadLangList() {
     const r = await api("/api/lang/info");
     if (r.data && r.data.languages) S.languages = r.data.languages;
+    if (r.data && r.data.source) S.sourceLang = r.data.source;
     if (r.data && r.data.options) S.langNames = r.data.options;
-    // Der Browser darf eine Sprache nennen, für die es hier kein Wörterbuch
-    // gibt. Angezeigt würden dann die Schlüssel selbst -- lesbar, aber die
-    // Auswahlliste stünde auf etwas, was nicht darin vorkommt.
+    // The browser may name a language no dictionary here covers. What would
+    // show then are the keys themselves -- readable, but the dropdown would
+    // stand on something that does not appear in it.
     if (S.languages.length && !S.languages.includes(S.lang))
-        S.lang = S.languages.includes("en") ? "en" : S.languages[0];
+        S.lang = S.languages.includes(S.sourceLang) ? S.sourceLang
+                                                    : S.languages[0];
 }
 
 /* What a language is called. A code is a last resort and a sign that somebody
@@ -1579,16 +1589,15 @@ async function reloadData(passwd) {
     S.dirty = {};
     S.listsB = {};
     S.listsA = {};
-    // Die Zurückweisungen gehören zu den Entwurfswerten, die gerade verworfen
-    // wurden: was jetzt im Formular steht, kommt vom Gerät und ist dort gültig.
+    // The rejections belong to the draft values just discarded: what stands
+    // in the form now came from the device and is valid there.
     S.probeBad = {};
-    // Die Optionen eines dynamischen Enums rechnet das Gerät aus seinem
-    // eigenen Zustand aus, und der ist gerade ein anderer geworden. Die
-    // Stimmenliste hängt an der gespeicherten Ansagesprache: ohne diese Zeile
-    // zeigte sie nach dem Speichern weiter die Stimmen der vorigen Sprache,
-    // und nur ein Neuladen der Seite brachte sie in Ordnung. Gefragt wird
-    // dabei nur nach den Feldern, die auch zu sehen sind -- ein zugeklappter
-    // Abschnitt kostet nichts.
+    // A dynamic enum's options are computed by the device out of its own
+    // state, and that state has just become another one. The voice list
+    // hangs on the stored announcement language: without this line it went
+    // on showing the previous language's voices after a save, and only a
+    // page reload put it right. Only fields that are actually on screen get
+    // asked about -- a collapsed section costs nothing.
     S.enums = {};
     // S.adopted deliberately survives: saving re-loads the tree, and a
     // proposal the admin has cleared on purpose must not come back -- which

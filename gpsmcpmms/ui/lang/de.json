@@ -24,6 +24,8 @@
     "Folder exists": "Ordner vorhanden",
     "Hub4Help Configuration Editor": "Hub4Help Konfigurationseditor",
     "Incorrect password": "Falsches Passwort",
+    "Internal error while determining the values": "Interner Fehler bei der Wertermittlung",
+    "Internal error while establishing the hint": "Interner Fehler bei der Ermittlung des Hinweises",
     "Invalid file": "Ungültige Datei",
     "Invalid input": "Ungültige Eingabe",
     "Language": "Sprache",

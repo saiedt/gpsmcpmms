@@ -24,6 +24,8 @@
     "Folder exists": "پوشه موجود است",
     "Hub4Help Configuration Editor": "ویرایشگر پیکربندی Hub4Help",
     "Incorrect password": "رمز واردشده نادرست است",
+    "Internal error while determining the values": "خطای داخلی هنگام تعیین مقادیر",
+    "Internal error while establishing the hint": "خطای داخلی هنگام تهیه‌ی راهنما",
     "Invalid file": "فایل اشتباه",
     "Invalid input": "داده‌ی اشتباه",
     "Language": "زبان",
