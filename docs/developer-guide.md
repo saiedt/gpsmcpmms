@@ -176,6 +176,84 @@ freeze could have invalidated seventy recordings across seven languages; what
 made them safe was snapshotting all seventy texts first and comparing afterwards,
 not reading the diff and hoping.
 
+### A worked case: pairing captured identifiers with a live catalogue
+
+Most of what an editor has to do is one field at a time. The interesting part
+starts where fields constrain each other, and that is worth one full example —
+because the answer is a declaration rather than code.
+
+The task: somebody has to pair physical tokens with categories. A token's
+identifier cannot be typed, it is read by hardware. The categories come from a
+remote service and change without notice. Each token stands for exactly one
+category and each category for exactly one token. Two other tokens have jobs of
+their own, and no identifier may ever appear twice anywhere. At least two pairs
+must exist before the device is ready.
+
+```python
+type_dict = {
+    "token_pair": {
+        "tag": {"label": "Token", "type": "string",
+                "backend_provided": True, "acquire_button": "Scan token"},
+        "category": {"label": "Category it stands for", "type": "enum",
+                     "values": "get_categories"},
+    },
+    "pair_list": {
+        "list_member": {"type": "token_pair"},
+        "list_keys": [["tag"], ["category"]],
+        "list_size": "2..",
+    },
+}
+
+param_dict = {
+    "tokens": {
+        "distinct_values": [["cancel_tag", "restart_tag", "pairs.*.tag"]],
+        "cancel_tag":  {"label": "Cancel token", "type": "string",
+                        "backend_provided": True,
+                        "acquire_button": "Scan token"},
+        "restart_tag": {"label": "Restart token", "type": "string",
+                        "backend_provided": True,
+                        "acquire_button": "Scan token"},
+        "pairs": {"label": "Paired tokens", "type": "pair_list"},
+    },
+}
+```
+
+That is the whole specification. What each line buys:
+
+- **`backend_provided` with `acquire_button`** makes the field read-only and puts
+  a button beside it. Pressing it leaves the editor waiting on that path; the
+  module reads its hardware and answers with `handle_value_event()`, which
+  reports whether anybody was still waiting. It works for a path inside a list
+  row, and for the row being added — the one that has no ordinal yet.
+- **`list_keys: [["tag"], ["category"]]`** — two separate one-column keys, which
+  is what makes the pairing a bijection: no token twice, no category twice. One
+  compound key `[["tag", "category"]]` would have allowed both to repeat as long
+  as the combination was new.
+- The same declaration drives the dropdown: **a category another row already
+  uses is not offered.** Only one-column keys do this, and only for an enum —
+  hiding a taken option is possible when the options are known, and impossible
+  for a value that arrives from hardware. So a captured duplicate is caught the
+  other way: the write is refused, the field marked, and *Apply* disabled.
+- **`distinct_values` on the container** covers the rest: two ordinary fields and
+  every row of the list, in one group. It is declared once, on the thing that
+  contains them all, and it has to be — a relevance-style condition reaches its
+  siblings, and a list member cannot see past its own list. Three copies of one
+  rule would also have drifted apart at the first edit.
+- For a captured participant that check runs **at capture**, which is the only
+  moment that helps: telling somebody the token was already taken *after* they
+  held it against the reader is a different, worse message.
+- **`list_size: "2.."`** keeps `config_ready()` false until two pairs exist, so
+  the device reports itself unconfigured rather than half-working.
+- The enum stores the category's **id** and shows its **label**, and the label is
+  a translation key like any other — unless the provider marks the option
+  `verbatim`, which is for identifiers the service invented and nobody should be
+  asked to translate.
+
+No validation function, no save handler comparing fields, no code in the editor
+that knows about tokens. Everything above is enforced in the backend *and*
+rendered by the editor from the same declaration, which is the point: the two
+cannot disagree, because there is only one statement of the rule.
+
 ### Test the device, not the sandbox
 
 An off-target test that builds its own empty world tests a device that does not
