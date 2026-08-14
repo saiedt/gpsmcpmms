@@ -2140,8 +2140,8 @@ class ConfigManager:
             device for the rest of the idle timeout, and the admin standing in
             front of it has no way in -- reloading only discards their own
             token. The password is the same one that reveals protected
-            parameters; it is not carried over into the new session, so seeing
-            protected values still takes the deliberate second step.
+            parameters, and the new session starts in admin mode: see below for
+            why asking for it a second time answers nothing.
             """
             if request.headers.get(self.API_HEADER) != "1":
                 abort(403)

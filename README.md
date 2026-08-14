@@ -302,9 +302,11 @@ and (by kind) `value`, `children` or `item_template`.
   live, locking the admin out of their own editor until it times out. The
   read-only banner therefore offers **Take over session**, which reclaims the
   lock on proof of the admin password and invalidates the previous token. The
-  password is not carried into the new session: seeing protected parameters
-  still takes the separate unlock. Every transition of the lock — granted,
-  refused, taken, ended, expired — is logged with the client's address.
+  new session starts **in admin mode**: only an admin can take a session over at
+  all, so handing back a read-only editor that immediately demands the same
+  password again would ask one question twice and answer neither. Every
+  transition of the lock — granted, refused, taken, ended, expired — is logged
+  with the client's address.
 - **Anti-CSRF.** Mutating requests require a custom header and a same-origin
   `Origin`; no cookies are used.
 - **Factory-password notice.** While `ui_passwd` still equals the factory default,
@@ -362,8 +364,8 @@ label:
 A display string **is** its own translation key: the `label`/`tooltip`/
 `placeholder` text as written. Dictionaries live at `ui_dir/lang/<code>.json`;
 missing keys fall back to the key itself, so a language may stay partially
-translated and still read. Up to **seven** languages may coexist; `en` and `de`
-cannot be replaced to make room. Corrupt dictionary files are quarantined and
+translated and still read. Any number of languages may coexist, and none is ever
+removed to make room for another. Corrupt dictionary files are quarantined and
 regenerated at startup.
 
 **Every key in the tree is written in `DECL_LANG`** — English, so that adopting
@@ -372,31 +374,11 @@ into their own language. That holds for the host's keys as much as for this
 library's, and it is what makes the fallback safe: an untranslated string reads
 in English, never in a third language the reader has no reason to know.
 
-A module could once declare its own strings in a language of its own. It cost
-more than it looked: a second source column in every template, a key set no
-longer comparable as strings, a completeness count that had to ask each key
-which language it was written in, and a fallback that could put German in front
-of a Turkish reader. Where a module's wording genuinely arrives in another
-language — a remote catalogue, a foreign schema — it settles on a `DECL_LANG`
-wording and hands the original over as a translation; see
+Where a module's wording genuinely arrives in another language — a remote
+catalogue, a foreign schema — it settles on a `DECL_LANG` wording and hands the
+original over as a translation; see
 [Strings that arrive in another language](#strings-that-arrive-in-another-language).
-
-**Two languages, one string.** Two keys in two languages cannot be compared —
-but they can once both stand in the same language, and the dictionaries hold
-exactly that. When a module declares `Passwort` in German and `de.json` already
-renders this library's `Password` as “Passwort”, the two are the same display
-string, and the rule this whole model rests on says the same string is one key.
-So they become one: the German label inherits every translation `Password`
-already has, in the languages on hand and in the next one nobody has started.
-The template then offers one row instead of two that mean the same thing.
-
-The check runs where the answer can change — when a module registers, and again
-when a dictionary is uploaded, because that upload may be the first rendering of
-this library's strings in the host's language. Where no such dictionary exists
-there is nothing to compare in, and the two keys simply stay apart; that is the
-honest answer, not a missed one. The reading is logged by both keys, and the
-host's own wording remains its fallback, so a dictionary that later loses the
-entry leaves the label reading as its module wrote it.
+Identical strings are one key, whoever registered them.
 
 **Which languages exist here** is governed by two handles, and a language has to
 pass **both**:
