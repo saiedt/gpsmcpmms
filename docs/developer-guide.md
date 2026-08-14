@@ -308,6 +308,78 @@ because a button that makes a device speak or place a call should say so first;
 and restore whatever you touched — a test that leaves the stored voice changed
 has done more than test.
 
+### A worked case: a fixed set of records with free contents
+
+The third shape worth showing is the one where the *set* is the software's
+decision and the *contents* are somebody else's. A status indicator is the plain
+example: which states exist is decided by the application — it is the thing that
+switches between them — while how each one looks belongs to whoever installs the
+device.
+
+```python
+type_dict = {
+    "state_conf": {
+        "rgb":        {"label": "Colour", "type": "color"},
+        "brightness": {"label": "Brightness", "type": "float",
+                       "bound_to": "0..1", "s2g_scale": "*100"},
+        "animation":  {"label": "Animation", "type": "enum", "values": {
+                           "none":   {"label": "None"},
+                           "blink":  {"label": "Blink"},
+                           "rotate": {"label": "Rotate"}},
+                       "default_val": "none"},
+        "on_time":    {"label": "Pulse duration (ms)", "type": "float",
+                       "s2g_scale": "*1000",
+                       "relevance": 'animation!="none"'},
+        "off_time":   {"label": "Pause duration (ms)", "type": "float",
+                       "s2g_scale": "*1000", "likely_val": 0.5,
+                       "relevance": 'animation=="blink"'},
+    },
+    "state": {
+        "id":    {"type": "string", "hidden": True, "init_only": True},
+        "label": {"label": "Name", "type": "string", "init_only": True},
+        "conf":  {"label": "Settings", "type": "state_conf",
+                  "test_func": show_state,
+                  "test_func_msg": "Shows this state now, so you can look "
+                                   "at it."},
+    },
+    "state_list": {"list_member": {"type": "state"}, "list_size": "2.."},
+}
+
+param_dict = {
+    "states": dict({"label": "Supported states", "type": "state_list"},
+                   # lock the list only if we actually know its contents
+                   **({"fixed_val": states} if states else {})),
+}
+```
+
+- **`fixed_val` on a list locks length and composition, not the leaves inside.**
+  Nobody adds a state, nobody removes one, and everybody may change how each
+  looks. Without that distinction you would need a second mechanism for "editable
+  within, closed without".
+- **`init_only` inside an editable record** freezes the two fields that *are* the
+  record's identity. Set once — here by the `fixed_val` above — and never again,
+  while its siblings stay open. A record can be partly frozen.
+- **`hidden`** keeps the id out of sight without keeping it out of the tree: the
+  application matches on it, and nobody needs to read a slug.
+- **`relevance` shapes the record from inside it.** A pulse duration matters
+  only when something is animated, a pause only when it blinks, and each
+  condition names its own sibling. This is not cosmetic: a field whose relevance
+  is false does not need a value, so `config_ready()` does not wait for a pause
+  duration on a state that never blinks — which is the difference between a
+  device that reports itself ready and one that never does.
+- **`test_func` sits on the dict, not on a leaf.** A colour on its own cannot be
+  judged; the thing to look at is the whole combination, lit. Put the button
+  where the answer is.
+- **`s2g_scale`** lets storage and display disagree on purpose — seconds on the
+  device, milliseconds on the screen; a fraction in the tree, a percentage in
+  front of a person.
+
+The last line of the `param_dict` is the one to copy, though. `fixed_val` is
+written **only if the states are known** — a module registering on its own,
+before the application has told it anything, must not freeze a list whose
+contents it is guessing. Lock what you know; a lock set on an assumption is
+worse than no lock, because the assumption is now permanent.
+
 ### Test the device, not the sandbox
 
 An off-target test that builds its own empty world tests a device that does not
