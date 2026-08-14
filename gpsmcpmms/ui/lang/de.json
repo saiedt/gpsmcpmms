@@ -1,6 +1,7 @@
 {
     "Add new translation": "Neue Übersetzung hinzufügen",
     "Administrator password for unlocking protected parameters.": "Administrator-Passwort zum Freischalten geschützter Parameter.",
+    "Alternatively, without an admin password: renewed access after {time}.": "Alternativ, ohne Admin-Passwort: Erneuter Zugriff nach {time} Uhr.",
     "Apply": "Anwenden",
     "Apply failed": "Übernehmen fehlgeschlagen",
     "As of": "Stand",

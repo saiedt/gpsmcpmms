@@ -20,6 +20,7 @@
 
 const S = {
     token: null, readOnly: false, admin: false, factory: false,
+    lockFreeIn: null,        // seconds until the foreign session lapses
     protectedOmitted: false,
     cvv: {},                 // parsed /api/cvv_data dump
     xl: {},                  // active translation dictionary
@@ -1503,7 +1504,8 @@ function renderAll() {
             el("button", {class: "small", onclick: () => location.reload()},
                xl("Reload")),
             el("button", {class: "small", onclick: takeOverSession},
-               xl("Take over session"))));
+               xl("Take over session")),
+            lockFreeHint()));
     if (S.factory)
         app.append(el("div", {class: "banner"},
             xl("The device is still using the factory default password"),
@@ -1516,6 +1518,21 @@ function renderAll() {
         if (!hasVisibleContent(S.cvv[mid], S.edit, [mid])) continue;
         app.append(renderModule(mid));
     }
+}
+
+/* When the lock falls by itself -- read off the browser's clock. The device
+   sends a duration rather than a time: it may have no RTC and start on the
+   value fake-hwclock left behind, so its own idea of the time can be off while
+   the clock of the machine in front of it is right. That also disposes of
+   every assumption about time zones. */
+function lockFreeHint() {
+    if (typeof S.lockFreeIn !== "number") return null;
+    const at = new Date(Date.now() + S.lockFreeIn * 1000);
+    const hhmm = String(at.getHours()).padStart(2, "0") + ":" +
+                 String(at.getMinutes()).padStart(2, "0");
+    return el("span", {class: "hint-inline"},
+              xl("Alternatively, without an admin password: renewed access "
+                 + "after {time}.").replace("{time}", hhmm));
 }
 
 /* ---------- data loading ---------- */
@@ -1552,6 +1569,7 @@ async function reloadData(passwd) {
     if (!r.data) throw new Error("no data");
     S.token = r.data.token || S.token;
     S.readOnly = r.data.read_only;
+    S.lockFreeIn = r.data.lock_free_in;
     S.admin = r.data.admin;
     S.wrongPasswd = r.data.wrong_passwd;
     S.factory = r.data.factory_default_passwd;

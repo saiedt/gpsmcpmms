@@ -65,6 +65,10 @@ hr.title-rule { border: 0; border-top: 2px solid var(--line); margin: 0 0 12px; 
   display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
 }
 .banner.readonly { border-color: var(--line); background: #e9edf1; }
+/* the way out for someone who has no password: quieter than the buttons it
+   stands beside, because it is what is left to read once neither button
+   belongs to you */
+.banner .hint-inline { color: var(--muted); font-size: 12px; }
 
 /* ---- collapsible groups (spec 4.6) ---- */
 .group { margin: 6px 0; }

@@ -169,6 +169,13 @@ class ConfigManager:
         "Exit admin mode", "Language",
         "Incorrect password",
         "Read-only mode: another session is active",
+        # Without the admin password only waiting is left, and until now
+        # nobody was told what for. {time} is the earliest the lock falls by
+        # itself -- earliest, because the holder pushes it out by carrying on
+        # working, which is why the sentence says "after" and names no
+        # deadline.
+        "Alternatively, without an admin password: renewed access "
+        "after {time}.",
         "Take over session", "Session taken over",
         "The device is still using the factory default password",
         "Invalid input", "Apply failed",
@@ -1546,6 +1553,18 @@ class ConfigManager:
                 f"{left // 60} min {left % 60} s. It is released by 'end "
                 f"session', by that idle timeout, or by restarting the app.")
 
+    def _lock_free_in(self):
+        """Seconds until the foreign session lapses on its own.
+
+        A lower bound, not a promise: every request from the holder restarts
+        the timer (_touch_session). Someone who simply closed the editor never
+        touches it again -- and that is the case this answer is meant for.
+        """
+        with self._lock:
+            if self._session_token is None:
+                return None
+            return max(0, int(self._session_expires - time.time()))
+
     def _touch_session(self):
         # each valid request restarts the inactivity timer (spec 4.8)
         timeout = self._session_timeout_seconds()
@@ -1630,7 +1649,9 @@ class ConfigManager:
         """
         Creates the flask app serving the config-editor and its REST-API;
         unless run_server is False (tests), the app is served in a daemon
-        thread on the port configured as "config.ui_port".
+        thread on the port taken from GPSMCPMMS_UI_PORT. That port is a
+        deploy-time decision, not a configurable parameter: whoever changed
+        it from the editor would be sawing off the branch they sit on.
         """
         from flask import (Flask, Response, abort, jsonify, request,
                            send_from_directory)
@@ -1733,6 +1754,13 @@ class ConfigManager:
             return jsonify({
                 "token": token if editable else None,
                 "read_only": not editable,
+                # how much longer the foreign session holds its lock -- as a
+                # duration, not a wall-clock time. The browser turns it into a
+                # time, because the browser's clock is the one to trust: a
+                # device of this kind may have no RTC and start on whatever
+                # fake-hwclock laid down, so a time computed here would be
+                # wrong until the clock has been synchronised.
+                "lock_free_in": None if editable else self._lock_free_in(),
                 "admin": admin,
                 "wrong_passwd": wrong_passwd,
                 "protected_omitted": omitted,

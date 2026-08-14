@@ -20,7 +20,17 @@ GPSMCPMMS_spec.txt
 *.dump.old
 *.dump.tmp
 leaf_update.log
-ui/lang/*.broken
+
+# What a running editor writes into its ui_dir. Normally that is
+# ~/.config/gpsmcpmms/ui, but point GPSMCPMMS_UI_DIR at this tree once -- to
+# try a change without copying files around -- and these appear next to the
+# release assets. Committed, they would fail the dictionary gate: en.json
+# holds no translations, and languages.json is the 56-language default that
+# no application chose.
+gpsmcpmms/ui/.staged.json
+gpsmcpmms/ui/languages.json
+gpsmcpmms/ui/lang/en.json
+gpsmcpmms/ui/lang/*.broken
 
 # OS / editor cruft
 .DS_Store
