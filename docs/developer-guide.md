@@ -245,6 +245,52 @@ that knows about tokens. Everything above is enforced in the backend *and*
 rendered by the editor from the same declaration, which is the point: the two
 cannot disagree, because there is only one statement of the rule.
 
+### Delivering a captured value: what goes in `alt_target_paths`
+
+The capture above has a second half. Pressing *Scan* leaves the editor waiting;
+the module then reads its hardware and hands the result over:
+
+```python
+# every path a scanned token could legitimately fill
+TOKEN_PATHS = ["tokens.cancel_tag",
+               "tokens.restart_tag",
+               "tokens.pairs.*.tag"]
+
+def on_token_read(self, token):
+    if config_mgr.handle_value_event(token, TOKEN_PATHS):
+        return              # the editor took it; it means nothing else now
+    ...                     # otherwise: whatever a token normally does
+```
+
+**The list is not "where the value goes" — it is "where it could go".** The
+module cannot know which field somebody has open; the editor does. So the module
+names every path this kind of value may legitimately fill, and the library hands
+it to whichever one is actually waiting. Exactly one can be: a capture freezes
+the editor behind a modal, so there is never a second candidate.
+
+**`*` matches exactly one path element**, which is what makes a list row
+reachable — including the row that does not exist yet. Somebody adding a pair
+presses *Scan* before the row has an ordinal, and the same pattern covers both
+that template and every row already there.
+
+**Keep the list beside the declaration.** In the appliance these are the very
+three paths that also form the `distinct_values` group, and that is not a
+coincidence: what may hold a token is what must be unique among tokens. Written
+in two places, they will disagree eventually — put them next to each other, and
+say in a comment that they are the same set.
+
+**The return value is the point of the whole call.** One reader, two meanings:
+while the editor waits, a token being held against it means *configure this
+field*; at any other moment the same event means *do the thing tokens do*.
+Without the `if`, teaching the device a cancel token would also cancel
+something.
+
+Name the paths this kind of value can fill, and only those. Too few is the
+failure that hurts — the button waits for something that was delivered to
+nobody — and a path that can never wait is dead weight at best; at worst, if the
+module captures more than one kind of value, an overlapping list lets the wrong
+one satisfy the wrong field.
+
 ### A worked case: trying a value before committing it
 
 Two fields where the first parameterises the second, and the second is only
