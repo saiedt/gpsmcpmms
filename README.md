@@ -646,12 +646,38 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   a value ever arrives, and so the only moment anyone can be told.
 - **Testable parameters** — `test_func` + `test_func_msg` add a Test button and a
   confirmation modal, executed via `/api/config/test`.
+
+  *Test* and *Check* are two different buttons, and the difference is who is
+  responsible. **Test is declared**: only the host knows that a voice can be
+  heard or a number dialled, so without `test_func` there is no button, and
+  pressing it *does* something — it speaks, it rings, it lights up. **Check is
+  not declared.** It belongs to validation, which is the editor's own work, and
+  it appears by itself wherever validation cannot be finished in the browser.
 - **Backend-verified values** — every field is checked, but most of them in the
-  browser, against what the declaration says. A `pingable` or `path` field is
-  different: it is checked on the **device**, because only the device can answer.
-  The file system is its own, and what matters about a host is whether *it*
-  reaches it — the browser may be on the other interface. The check runs as soon
-  as the value is entered, and again whenever *Check* is pressed.
+  browser, against what the declaration says: a range, a pattern, a set of
+  options, a uniqueness group. None of that needs a round trip and none of it
+  needs a button.
+
+  A `pingable` or `path` field is the exception: it is checked on the **device**,
+  because only the device can answer. The file system is its own, and what
+  matters about a host is whether *it* reaches it — the browser may be on the
+  other interface. So the check becomes a request, and a request has a moment.
+
+  **Leaving the field is that moment.** The value commits on `change` — blur, or
+  Enter, which the editor turns into a blur — and the probe goes out with it. No
+  button is needed for the ordinary case, and there is none in the sense of "press
+  this to validate".
+
+  *Check* is there for the two cases losing focus cannot cover:
+
+  - **The value did not change, the world did.** A host was unreachable a minute
+    ago because a cable was out; it is in now. Without the button the only way to
+    ask again would be to retype the value, which is asking a question by
+    pretending to answer a different one.
+  - **Nobody typed the value.** One loaded from the store when the editor opened,
+    or a `likely_val` the editor filled in, never passed through the field's
+    change event and therefore carries no verdict. After taking over a session,
+    *Check* is how you find out whether what is configured is reachable **now**.
 
   Each verdict is three-way rather than yes/no, because "not there" carries two
   very different meanings, and they get different treatment:
