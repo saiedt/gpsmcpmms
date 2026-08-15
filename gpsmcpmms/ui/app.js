@@ -984,8 +984,16 @@ function renderListB(node, container, relKeys, ctx) {
         st.changed = false;
         st.adopted = new Set();   // every fresh draft may take the proposals
     }
+    // On a fixed list the empty new-record slot is not a place anybody can
+    // go: its length is locked, so position list.length + 1 does not exist.
+    // Disabling "New" was not enough -- the navigator still walked into that
+    // slot, and Apply there appended an entry the device then refused at
+    // save time, which is a late and puzzling way to learn that a list
+    // cannot grow.
+    const lastPos = structureFixed ? Math.max(list.length, 1)
+                                   : list.length + 1;
     const goTo = (pos) => {                       // B.3 / B.4: discard edits
-        st.pos = (pos >= 1 && pos <= list.length + 1) ? pos : list.length + 1;
+        st.pos = (pos >= 1 && pos <= lastPos) ? pos : lastPos;
         st.draft = null;
         ctx.rerender();
     };
@@ -1020,14 +1028,14 @@ function renderListB(node, container, relKeys, ctx) {
         value: st.pos});
     posField.addEventListener("change", () => {
         const n = parseInt(posField.value, 10);
-        goTo(Number.isInteger(n) ? n : list.length + 1);
+        goTo(Number.isInteger(n) ? n : lastPos);
     });
     const nav = el("div", {class: "nav-block"},
         el("button", {onclick: () =>
-            goTo(st.pos > 1 ? st.pos - 1 : list.length + 1)}, "▲"),
+            goTo(st.pos > 1 ? st.pos - 1 : lastPos)}, "▲"),
         posField,
         el("button", {onclick: () =>
-            goTo(st.pos < list.length + 1 ? st.pos + 1 : 1)}, "▼"));
+            goTo(st.pos < lastPos ? st.pos + 1 : 1)}, "▼"));
 
     // The same rule one level up: as long as the draft repeats a member that
     // already exists, applying it would only hand the backend something it is
@@ -1041,8 +1049,12 @@ function renderListB(node, container, relKeys, ctx) {
                    .has(value);
     });
 
+    // ...and the same rule again at the button, not only at the navigator: a
+    // position typed straight into the field must not find a way in either.
     const apply = el("button", {class: "primary",
-        disabled: S.readOnly || !st.changed || repeatsKey ? "" : null},
+        disabled: S.readOnly || !st.changed || repeatsKey
+                      || (structureFixed && st.pos > list.length)
+                          ? "" : null},
         xl("Apply"));
     apply.addEventListener("click", () => {
         if (st.pos <= list.length) {

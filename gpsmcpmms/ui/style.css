@@ -80,6 +80,14 @@ hr.title-rule { border: 0; border-top: 2px solid var(--line); margin: 0 0 12px; 
 }
 .group-header:hover { background: var(--accent-soft); }
 .group-header .arrow { width: 14px; color: var(--accent); flex: none; }
+/* The disclosure triangle is not a mirroring character. Unicode leaves U+25B6
+   pointing right whatever the paragraph direction, so in Arabic it pointed
+   away from the label it belongs to -- and the label sits to its left there.
+   ▼ is symmetric under a horizontal flip, so the one rule covers both states.
+   The flip belongs in CSS and not in the character chosen in app.js: the
+   direction is a property of the rendering, and the two would otherwise have
+   to be kept in step by hand. */
+[dir="rtl"] .group-header .arrow { transform: scaleX(-1); }
 .module > .group-header { background: var(--accent-soft); }
 
 .group-body {
