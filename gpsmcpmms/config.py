@@ -786,7 +786,7 @@ class ConfigManager:
                     # group is refused here, at the moment of capture. Waiting
                     # for Save would mean holding a card against the reader,
                     # seeing it accepted, and only later being told it is
-                    # already the Neustartkarte -- and for these parameters
+                    # already the restart card -- and for these parameters
                     # capture is the only way in, so this is the only moment
                     # anybody can be told.
                     if CvvNode.value_breaks_distinct_values(self, path, value):
