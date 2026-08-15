@@ -15,8 +15,8 @@ configuration parameters — with types, constraints and UI metadata — and the
 It is designed for a zero-maintenance appliance on a trusted LAN, but the core is
 generic.
 
-This README is the reference: what exists and how it behaves. Three guides sit
-beside it, each for a different pair of hands:
+This README is the reference: what exists and how it behaves. Two guides, one of
+them in two languages, sit beside it, each for a different pair of hands:
 
 | Guide | For |
 |-------|-----|
@@ -31,13 +31,16 @@ beside it, each for a different pair of hands:
 pip install .          # from a checkout of this repo (Python 3.10+; pulls in Flask)
 ```
 
-> **Deploying over git? Bump the version first.** `pip install git+https://…`
+> **Deploying over git?** Be aware that `pip install git+https://…`
 > compares the *version* in the cloned metadata against what is installed — not
-> the commit. With an unchanged number it clones, reads the metadata and then
-> quietly does nothing, leaving the old code in place and no error to notice.
-> The version lives in `gpsmcpmms/__init__.py`; `pyproject.toml` reads it from
-> there, so there is one place to change. To reinstall the same version on
-> purpose, use `--force-reinstall --no-deps`.
+> the commit. If an update in the repository leaves the version number unchanged,
+> a deployment over git reads the metadata and then quietly does nothing, leaving
+> the old code in place and no error to notice.
+> 
+> To reinstall the same version on purpose, use `--force-reinstall --no-deps`.
+> 
+> Good to know for contributors: The version lives in `gpsmcpmms/__init__.py`;
+> `pyproject.toml` reads it from there, so there is one place to change. 
 
 Register a parameter and launch the editor:
 
@@ -129,13 +132,13 @@ Other API methods:
 
 | Method | Purpose |
 |--------|---------|
-| `query(path)` | `{absolute_path: value}` for the nodes the path matches (module-rooted; wildcards allowed). |
-| `config_ready(path=None)` | `True` if no *relevant* leaf under the match is still unset. `None`/`""`/`"*"` = whole tree. Skips empty min-0 lists and fields whose relevance condition is false. |
+| `query(path)` | Returns a map with items `{absolute_path: value}` for the nodes the path matches (module-rooted; wildcards allowed). |
+| `config_ready(path=None)` | Returns `True` if no *relevant* leaf under the match is still unset. `None`/`""`/`"*"` = whole tree. Skips empty min-0 lists and fields whose relevance condition is false. |
 | `protected_params_ready()` | Like `config_ready`, restricted to `protected` parameters. |
 | `handle_value_event(value, alt_target_paths)` | Deliver a backend-captured value to a waiting editor; `True` if one took it (see 4.9.3). |
 | `note_xlation_keys(*keys, kind=None)` | Register display strings a module only uses at runtime, so they reach the translation templates. `kind` says what they are — pass `"speech"` for anything read aloud, which nothing else could tell a translator. |
 | `add_original_xlations(xlation_lang, xlations)` | Supply translations for keys already noted, taken from where their wording came: `xlations` maps each key to its reading in `xlation_lang`. Never overwrites, never invents a language, refuses unregistered keys. See [Strings that arrive in another language](#strings-that-arrive-in-another-language). |
-| `translate(key, lang)` | The `lang` rendering of such a string, falling back to the key itself. Accepts `de` or `de-DE`. |
+| `translate(key, lang)` | Returns the `lang` rendering of such a string, falling back to the key itself. Accepts `de` or `de-DE`. |
 | `switch_to_app_logger(logger)` | Inject the application logger (once per run). |
 | `discard_module(module_id)` | The module has no parameters any more: the declaration is dropped and everything persisted for it is deleted. See [Giving up a module's parameters](#giving-up-a-modules-parameters). |
 
