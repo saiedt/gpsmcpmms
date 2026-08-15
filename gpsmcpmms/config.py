@@ -179,7 +179,13 @@ class ConfigManager:
         "Take over session", "Session taken over",
         "The device is still using the factory default password",
         "Invalid input", "Apply failed",
-        "Connection to the device lost",
+        # What is left to say when a request comes back without a reason the
+        # editor can show. It claimed "connection lost" once, which is a
+        # diagnosis: the device was reachable throughout, and the sentence
+        # sent somebody looking for a fault in the wrong place. This one says
+        # only what is known, and it stays true where the connection really
+        # has gone.
+        "No answer from the device.",
         "OK", "Cancel", "Saved", "Rejected", "Test", "New",
         "Password", "New password",
         "Reading value...", "Value applied", "Timeout",

@@ -245,7 +245,7 @@ async function fetchEnumOptions(path, rerender, arg) {
         url += `&arg=${encodeURIComponent(JSON.stringify(arg))}`;
     const r = await api(url);
     S.enums[path] = (r.data && r.data.values) ? {values: r.data.values, arg}
-                  : {error: (r.data && r.data.error) || xl("Connection to the device lost"),
+                  : {error: (r.data && r.data.error) || xl("No answer from the device."),
                      arg};
     // xl() on a string the device sent: the library's own failure messages are
     // registered keys, and a text the hosting application invented falls
@@ -267,7 +267,7 @@ async function fetchHint(path, rerender) {
     S.hints[path] = (r.data && typeof r.data.text === "string")
                   ? {text: r.data.text, at: r.data.at}
                   : {error: (r.data && r.data.error) ||
-                            xl("Connection to the device lost")};
+                            xl("No answer from the device.")};
     rerender();
 }
 
@@ -529,7 +529,7 @@ function acquireButton(node, input, commit) {
             // the device answers refusals with the German key, so that the
             // session's own language decides how they read
             msg(data && data.error ? xl(data.error)
-                                   : xl("Connection to the device lost"),
+                                   : xl("No answer from the device."),
                 "error");
         }
     });
@@ -611,7 +611,7 @@ async function probeValue(node, value, rerender) {
     const verdict = PROBE_VERDICT[d.outcome];
     if (r.status !== 200 || !verdict)
         return msg(`${xl("Check failed")}: ` +
-                   `${d.error || xl("Connection to the device lost")}`,
+                   `${d.error || xl("No answer from the device.")}`,
                    "error");
     const [text, level] = verdict(d);
     const refused = level === "error";
@@ -1172,7 +1172,7 @@ async function saveModule(mid) {
     const r = await api("/api/config/update",
         {json: {module: mid, value: S.edit[mid]}});
     if (r.status === 401) {
-        await modal(xl("Connection to the device lost"), {alert: true});
+        await modal(xl("No answer from the device."), {alert: true});
         location.reload();
         return;
     }
@@ -1240,7 +1240,7 @@ async function takeOverSession() {
     const r = await api("/api/session/takeover", {json: {passwd}});
     if (r.status !== 200 || !r.data || !r.data.token) {
         msg(r.status === 403 ? xl("Incorrect password")
-                             : xl("Connection to the device lost"), "error");
+                             : xl("No answer from the device."), "error");
         return;
     }
     S.token = r.data.token;
@@ -1630,7 +1630,7 @@ async function boot() {
         document.getElementById("app").innerHTML = "";
         document.getElementById("app").append(
             el("div", {class: "banner"},
-               xl("Connection to the device lost"),
+               xl("No answer from the device."),
                el("button", {class: "small",
                    onclick: () => location.reload()}, xl("Reload"))));
     }
