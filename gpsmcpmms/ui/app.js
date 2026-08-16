@@ -36,7 +36,13 @@ const S = {
     // wording. The server names it in `source` -- never guess it here again.
     sourceLang: "en",
     languages: ["en"],
-    langNames: {},           // code -> name, from ui_dir/languages.json
+    // Whether the hosting application named the languages it permits. It
+    // decides the shape of the "new language" row, so assume it does until
+    // /api/lang/info says otherwise: shutting the fields on a deployment that
+    // turns out to be open is a moment's confusion, opening them on one that
+    // is bounded invites a code the device will refuse.
+    bounded: true,
+    langNames: {},           // code -> name; the app's list, or endonyms
     langPanel: null,         // null | "new" | "edit"
     langForm: {},            // what the open panel has been told so far
     edit: {},                // moduleId -> working value (deep copy)
@@ -1384,30 +1390,39 @@ function renderLangPanel(mode) {
         row1 = el("div", {class: "lang-panel-row"},
             el("span", {}, xl("Editing") + ":"), sel);
     } else {
-        const unused = Object.keys(S.langNames || {})
-            .filter(c => !S.languages.includes(c))
-            .sort((a, b) => langName(a).localeCompare(langName(b)));
+        // Two shapes, and the application chooses which by shipping
+        // languages.json or not. With a list, the picker holds every language
+        // there is to add and the two fields only show what was picked --
+        // typing a code the list does not name would be a request the device
+        // is bound to refuse. Without one, there is nothing to pick from and
+        // the fields are the way in.
+        const unused = S.bounded
+            ? Object.keys(S.langNames || {})
+                  .filter(c => !S.languages.includes(c))
+                  .sort((a, b) => langName(a).localeCompare(langName(b)))
+            : [];
         const code = el("input", {type: "text", class: "lang-code",
                                   placeholder: xl("Language code"),
+                                  readonly: S.bounded ? "" : null,
                                   value: st.newCode || ""});
         const name = el("input", {type: "text", class: "lang-name",
                                   placeholder: xl("Language name"),
+                                  readonly: S.bounded ? "" : null,
                                   value: st.newName || ""});
-        const pick = el("select", {onchange: (e) => {
+        const pick = el("select", {disabled: S.bounded ? null : "",
+                                   onchange: (e) => {
             const c = e.target.value;
             if (!c) return;
-            // the two fields are what actually counts; the dropdown only
-            // fills them in, and stays a convenience rather than a gate
             st.newCode = code.value = c;
             st.newName = name.value = langName(c);
         }}, el("option", {value: ""}, "—"),
            ...unused.map(c => el("option", {value: c}, langName(c))));
-        const typed = (field, key) => field.addEventListener("input", () => {
-            st[key] = field.value;
-            pick.value = "";            // hand-typed wins over the list
-        });
-        typed(code, "newCode");
-        typed(name, "newName");
+        if (!S.bounded) {
+            const typed = (field, key) => field.addEventListener("input",
+                () => { st[key] = field.value; });
+            typed(code, "newCode");
+            typed(name, "newName");
+        }
         targetOf = () => (code.value || "").trim().toLowerCase();
 
         row1 = el("div", {class: "lang-panel-row"},
@@ -1565,6 +1580,8 @@ async function loadLangList() {
     const r = await api("/api/lang/info");
     if (r.data && r.data.languages) S.languages = r.data.languages;
     if (r.data && r.data.source) S.sourceLang = r.data.source;
+    if (r.data && typeof r.data.bounded === "boolean")
+        S.bounded = r.data.bounded;
     if (r.data && r.data.options) S.langNames = r.data.options;
     // The browser may name a language no dictionary here covers. What would
     // show then are the keys themselves -- readable, but the dropdown would

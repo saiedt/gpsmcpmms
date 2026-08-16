@@ -84,7 +84,13 @@ class ConfigManager:
     # bookkeeping a translation dictionary carries beside its translations;
     # never a key anybody translates
     LANG_FORMAT_KEY = "lang_format"
-    RESERVED_LANG_KEYS = ("lang_cache_modified", LANG_FORMAT_KEY)
+    # What this dictionary's language calls itself. It lives here rather than
+    # in languages.json because the name belongs to the language, not to the
+    # list of languages somebody permits -- a deployment that permits
+    # everything still has to be able to write "Português" under the dropdown.
+    LANG_NAME_KEY = "lang_name"
+    RESERVED_LANG_KEYS = ("lang_cache_modified", LANG_FORMAT_KEY,
+                          LANG_NAME_KEY)
     # 2: an absent entry means untranslated, and an entry that reads like the
     # German means a translator decided it stays that way. Until 1 every known
     # key was present in every dictionary as its own value, and that was how
@@ -95,31 +101,25 @@ class ConfigManager:
     # Which languages a deployment may keep dictionaries for at all -- the
     # first of the two handles over that choice.
     #
-    # This is a seed, not the storage. On first start it is written to
-    # <ui_dir>/languages.json, and from then on that file decides. Editing the
-    # file is what a deployment should do: editing this constant means editing
-    # a package inside a virtual environment, where the change is also lost on
-    # the next upgrade. The second handle is set_language_validator(), with
-    # which a host application narrows the list further -- the H4H appliance
-    # uses it to refuse languages its speech service has no voice for, which
-    # is knowledge this library has no business holding. Narrows, not
-    # replaces: the list belongs to whoever installs the device and the
-    # validator to whoever wrote the host, and neither gets to hand back what
-    # the other struck out.
-    # The list below is not invented: it is what Google Cloud Text-to-Speech
-    # answered on 2026-08-02 when asked which languages it has voices for --
-    # a serviceable starting point, since a host that speaks will not get far
-    # with a language nothing can pronounce.
+    # Names, not permission. This table answers "what does this language call
+    # itself", so that a dropdown reads Deutsch and Türkçe rather than de and
+    # tr; it permits nothing and forbids nothing.
     #
-    # It is a starting point and not the rule, and the difference showed the
-    # first time somebody wanted Persian. This list answers "which language
-    # may the editor be *read* in", and reading needs no voice. Speaking is a
-    # separate question, asked separately: the H4H appliance offers its
-    # announcements in the languages it has recordings for, and narrows this
-    # list through set_language_validator(). Persian was left out here because
-    # the speech service refuses fa-IR outright ("Voice '' does not exist"),
-    # however often documentation claims otherwise -- which was a reason for
-    # that host to refuse it, never a reason for this library to.
+    # It was both once, and being both was the mistake. It was written to
+    # <ui_dir>/languages.json on first start, and a deployment thereby
+    # acquired an upper bound it had never chosen -- sitting in its own
+    # release assets, looking like its own decision. Which languages exist in
+    # a deployment is the hosting application's to settle, by shipping that
+    # file or by registering a validator; see set_language_validator().
+    #
+    # The entries are not invented: they are what Google Cloud Text-to-Speech
+    # answered on 2026-08-02 when asked which languages it has voices for.
+    # That origin is now no more than an accident of how the table was first
+    # filled -- as a list of endonyms it is simply incomplete, and a language
+    # missing from it costs only its name, which whoever adds it types in.
+    # Persian is absent for that reason and no other: the speech service
+    # refuses fa-IR outright, which was a reason for one appliance to refuse
+    # it, never a reason for this library to.
     LANGUAGE_OPTIONS = {
         "af": "Afrikaans", "am": "አማርኛ", "ar": "العربية", "bg": "Български",
         "bn": "বাংলা", "ca": "Català", "cmn": "普通话", "cs": "Čeština",
@@ -558,20 +558,30 @@ class ConfigManager:
                     f"{added} original reading(s) recorded for '{lang}'.")
 
     def _load_language_options(self):
-        """The allow-list, seeded from LANGUAGE_OPTIONS on first start.
+        """The application's list of permitted languages, or None if it keeps
+        none.
 
-        Written once and then left alone: a deployment edits the file, not the
-        constant, and its edit survives the next upgrade of the package.
+        <ui_dir>/languages.json belongs to the hosting application, and this
+        library neither ships it nor creates it. It used to be seeded here
+        from LANGUAGE_OPTIONS whenever it was missing, and that was wrong
+        twice over: a deployment ended up with a list it never chose, and the
+        file then looked like the application's decision in its own release
+        assets. One appliance carried fifty-five languages that way, none of
+        them meant.
+
+        Absent is therefore an answer and not a gap. It means the application
+        imposes no upper bound, and whoever administers the device may name a
+        language of their own -- subject to a validator, if one is registered.
+
+        A file that cannot be read is treated as absent, loudly. A bound this
+        library cannot make out is one it cannot honour, and hiding languages
+        the device holds dictionaries for would take the end customer's own
+        language out of the selector -- a worse failure than allowing one more
+        than somebody intended.
         """
         path = os.path.join(self.ui_dir, self.LANGUAGE_FILE)
         if not os.path.exists(path):
-            try:
-                with open(path, "w", encoding="utf-8") as f:
-                    json.dump(self.LANGUAGE_OPTIONS, f, ensure_ascii=False,
-                              indent=1, sort_keys=True)
-            except OSError as exc:
-                self._logger.error(f"Seeding '{path}' failed: {exc}")
-                return dict(self.LANGUAGE_OPTIONS)
+            return None
         try:
             with open(path, "r", encoding="utf-8") as f:
                 options = json.load(f)
@@ -580,70 +590,91 @@ class ConfigManager:
                         for k, v in options.items())):
                 raise ValueError("not a non-empty object of strings")
         except (OSError, ValueError) as exc:
-            # a broken allow-list must not take the device down: fall back to
-            # what the release shipped and say so
-            self._logger.error(f"'{path}' unusable ({exc}); falling back to "
-                               "the language list shipped with the release.")
-            return dict(self.LANGUAGE_OPTIONS)
+            self._logger.error(
+                    f"'{path}' unusable ({exc}); this deployment is treated as "
+                    f"one that names no permitted languages. Every dictionary "
+                    f"present stays selectable.")
+            return None
         return options
-
-    def _save_language_options(self):
-        path = os.path.join(self.ui_dir, self.LANGUAGE_FILE)
-        try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(self._language_options, f, ensure_ascii=False,
-                          indent=1, sort_keys=True)
-        except OSError as exc:
-            self._logger.error(f"Writing '{path}' failed: {exc}")
 
     def set_language_name(self, lang, name):
         """Records what a language is called, and keeps it.
 
-        The shipped list covers the languages the release knows about. Anyone
-        adding one beyond those has to say what it is called, because the
-        editor shows names and never codes: a row reading "ps" tells a
-        deployer nothing, and a translator even less. That name belongs with
-        the others, so the seeded file becomes a written one from here on.
+        Anyone adding a language this release has no name for has to say what
+        it is called, because the editor shows names and never codes: a row
+        reading "ps" tells a deployer nothing, and a translator even less.
+
+        The name goes into the dictionary it names, under a reserved key --
+        not into languages.json. That file states which languages the
+        application permits, and writing to it here would turn a deployment
+        that permits everything into one that permits exactly what somebody
+        happened to add. Where the application does keep a list, the name is
+        in it already and there is nothing to record.
         """
         if not (isinstance(lang, str) and lang.strip() and
                 isinstance(name, str) and name.strip()):
             return False
         lang, name = lang.strip(), name.strip()
-        if self._language_options.get(lang) == name:
-            return True
-        self._language_options[lang] = name
-        self._save_language_options()
+        with self._lock:
+            book = self._lang_cache.get(lang)
+            if book is None:
+                return False
+            if book.get(self.LANG_NAME_KEY) == name:
+                return True
+            book[self.LANG_NAME_KEY] = name
+            book["lang_cache_modified"] = True
         return True
 
     def language_name(self, lang):
         """What to call a language on screen; the code itself only as a last
-        resort, and that is a gap somebody should fill."""
-        return self._language_options.get(lang, lang)
+        resort, and that is a gap somebody should fill.
+
+        Three places, in the order of who knows best: the dictionary's own
+        record of its name, then the application's list of permitted
+        languages, then the endonyms this release happens to know.
+        """
+        with self._lock:
+            book = self._lang_cache.get(lang)
+            own = book.get(self.LANG_NAME_KEY) if isinstance(book, dict) else None
+        if isinstance(own, str) and own.strip():
+            return own.strip()
+        if self._language_options and lang in self._language_options:
+            return self._language_options[lang]
+        return self.LANGUAGE_OPTIONS.get(lang, lang)
 
     def set_language_validator(self, validator):
-        """The second handle: let the host application decide which languages
-        a deployment may keep dictionaries for.
+        """The *other* way for an application to bound the languages: judge
+        each one as it is named, rather than list them in advance.
 
         `validator` takes a language code and returns whether it is
-        acceptable; None restores the allow-list from <ui_dir>/languages.json.
-        The host knows things this library cannot -- the H4H appliance, for
-        instance, refuses any language its speech service has no voice for,
-        because a language it can display but never speak is only half a
+        acceptable; None withdraws it. An application knows things this
+        library cannot -- whether a speech service has a voice for a language,
+        say, since one a device can display but never speak is only half a
         language on a device that reads aloud.
 
+        The two ways are alternatives, not layers. Where the application ships
+        <ui_dir>/languages.json, that file is the whole answer and a validator
+        is never asked: the list already says which languages exist here, and
+        putting a second opinion behind it would mean an entry somebody wrote
+        down could still be refused, with nothing on screen to say why. A
+        validator therefore governs exactly the case the list does not cover --
+        a language an administrator names that nobody listed in advance.
+
         A validator that raises is treated as a yes. Refusing to configure a
-        device because a check itself is broken would be the worse failure, and
-        the protected languages are accepted regardless: DECL_LANG is what every
-        other dictionary is written against, and German is what this project
-        ships for.
+        device because a check itself is broken would be the worse failure,
+        and the protected languages are accepted regardless: DECL_LANG is what
+        every other dictionary is written against.
         """
         self._language_validator = validator if callable(validator) else None
 
     def language_options(self):
-        """The languages this deployment may keep dictionaries for, as
-        {code: endonym}. Not the ones it *has* -- that is
-        supported_languages()."""
-        return dict(self._language_options)
+        """The languages the application permits, as {code: endonym}, or None
+        where it permits any.
+
+        Not the ones this deployment *has* -- that is supported_languages().
+        """
+        return (dict(self._language_options)
+                if self._language_options is not None else None)
 
     def protected_langs(self):
         """The languages that cannot be discarded: DECL_LANG, and nothing else.
@@ -659,16 +690,14 @@ class ConfigManager:
         return (self.DECL_LANG,)
 
     def _language_allowed(self, lang):
-        # Both gates narrow; neither overrules the other. The allow-list is
-        # what the deployment says may be offered here, the validator what the
-        # host knows about the languages it can actually serve -- two parties,
-        # two concerns. The validator used to replace the list, which quietly
-        # made the list dead weight for every host that installs one: an
-        # operator could strike a language out and still be handed it back.
+        # One gate or the other, never both. A list settles the question by
+        # itself, and a validator only gets asked where there is no list --
+        # see set_language_validator() for why layering them would leave an
+        # administrator staring at a refusal with nothing to explain it.
         if lang in self.protected_langs():
             return True
-        if lang not in self._language_options:
-            return False
+        if self._language_options is not None:
+            return lang in self._language_options
         if self._language_validator is None:
             return True
         try:
@@ -692,20 +721,37 @@ class ConfigManager:
         be read in the wrong language by a voice from the right one, and
         nothing in the log would explain it.
 
-        The allow-list has to be part of the answer, not just of what an upload
-        may add. A release ships dictionaries for its own strings, and a fresh
-        deployment starts from those; without this, every language the package
-        happens to carry would turn up in the editor's language menu, covered
-        for this library's own chrome and untranslated for everything the host
-        declares. Whoever narrows the list expects that to be the last word on
-        which languages exist here -- and a dictionary standing by for a
-        language nobody allows costs nothing and is ready the day somebody
-        does.
+        Where the application keeps a list, it has to be part of the answer
+        and not just of what an upload may add. A release ships dictionaries
+        for its own strings, and a fresh deployment starts from those;
+        without this, every language the package happens to carry would turn
+        up in the editor's language menu, covered for this library's own
+        chrome and untranslated for everything the application declares.
+        Whoever writes the list expects it to be the last word on which
+        languages exist here -- and a dictionary standing by for a language
+        nobody permits costs nothing and is ready the day somebody does.
+
+        Where the application keeps none, the dictionaries are the whole
+        answer: nothing bounds them, so nothing narrows them either.
+
+        A validator does not narrow this set, and the difference from a list
+        is deliberate. A list is a standing statement about which languages
+        exist here, cheap to consult for every dictionary present. A validator
+        is a judgement made on the spot, possibly over the network, and asking
+        it once per language on every call would be both slow and fragile --
+        an unreachable service would answer "acceptable" for everything, which
+        is how the old arrangement quietly stopped bounding anything. So a
+        validator guards admission, not what has already been admitted: it
+        decides whether a language may be added, and a dictionary that exists
+        stays readable.
         """
         with self._lock:
             present = set(self._lang_cache)
-            allowed = set(self._language_options)
-        return sorted((present & allowed) | set(self.protected_langs()))
+            allowed = (None if self._language_options is None
+                       else set(self._language_options))
+        if allowed is not None:
+            present &= allowed
+        return sorted(present | set(self.protected_langs()))
 
     def translation_status(self, lang, keys=None):
         """
@@ -2087,9 +2133,17 @@ class ConfigManager:
                 # editor's assumptions. It was hard-coded there once, and when
                 # DECL_LANG moved the editor kept offering the source as a
                 # translation target while hiding a language that needed one.
+                options = self.language_options()
+                # `bounded` says which of the two shapes the panel takes.
+                # With a list, the picker is the only way in and the two
+                # free-text fields are shut; without one, there is nothing to
+                # pick from and typing is the way. The names travel either
+                # way -- a dropdown of codes helps nobody.
                 info = {"languages": sorted(self._lang_cache),
                         "source": self.DECL_LANG,
-                        "options": self.language_options()}
+                        "bounded": options is not None,
+                        "options": options if options is not None
+                                   else dict(self.LANGUAGE_OPTIONS)}
                 if editable and self._session_admin:
                     info["orphans"] = {
                         lang: self._orphan_keys_of(lang_dict)
@@ -2160,17 +2214,19 @@ class ConfigManager:
             name = (request.form.get("name") or "").strip()
             if upload is None or not target:
                 abort(400)
-            # Recorded before the rows are applied, and only kept if they are:
-            # a language nobody can name has no business appearing in a list
-            # that shows names.
-            if name:
-                self.set_language_name(target, name)
             report, result, total = self._apply_lang_csv(
                     target, upload.read(), remove)
             if report is None:
                 if isinstance(result, dict):
                     return jsonify(result), 409     # removal choice required
                 return jsonify({"error": result}), 400
+            # Recorded after the rows are applied, and only if they were. The
+            # name now lives inside the dictionary it names, so there is
+            # nothing to write it into until that dictionary exists -- this
+            # ran first while the name went to languages.json, and moving it
+            # is what keeps a new language from arriving nameless.
+            if name:
+                self.set_language_name(target, name)
             resp = _csv_download(report, f"{target}.report.csv")
             resp.headers["X-GPSMCPMMS-Translated"] = str(result)
             resp.headers["X-GPSMCPMMS-Total"] = str(total)
