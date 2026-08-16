@@ -98,46 +98,18 @@ class ConfigManager:
     # word is simply the same in both languages.
     LANG_FORMAT = 2
 
-    # Which languages a deployment may keep dictionaries for at all -- the
-    # first of the two handles over that choice.
+    # The source language names itself here, and nowhere else can: every
+    # other language is named by its own dictionary, under LANG_NAME_KEY, but
+    # DECL_LANG has no dictionary -- the keys are already written in it.
     #
-    # Names, not permission. This table answers "what does this language call
-    # itself", so that a dropdown reads Deutsch and Türkçe rather than de and
-    # tr; it permits nothing and forbids nothing.
-    #
-    # It was both once, and being both was the mistake. It was written to
-    # <ui_dir>/languages.json on first start, and a deployment thereby
-    # acquired an upper bound it had never chosen -- sitting in its own
-    # release assets, looking like its own decision. Which languages exist in
-    # a deployment is the hosting application's to settle, by shipping that
-    # file or by registering a validator; see set_language_validator().
-    #
-    # The entries are not invented: they are what Google Cloud Text-to-Speech
-    # answered on 2026-08-02 when asked which languages it has voices for.
-    # That origin is now no more than an accident of how the table was first
-    # filled -- as a list of endonyms it is simply incomplete, and a language
-    # missing from it costs only its name, which whoever adds it types in.
-    # Persian is absent for that reason and no other: the speech service
-    # refuses fa-IR outright, which was a reason for one appliance to refuse
-    # it, never a reason for this library to.
-    LANGUAGE_OPTIONS = {
-        "af": "Afrikaans", "am": "አማርኛ", "ar": "العربية", "bg": "Български",
-        "bn": "বাংলা", "ca": "Català", "cmn": "普通话", "cs": "Čeština",
-        "da": "Dansk", "de": "Deutsch", "el": "Ελληνικά", "en": "English",
-        "es": "Español", "et": "Eesti", "eu": "Euskara", "fa": "فارسی",
-        "fi": "Suomi", "fil": "Filipino", "fr": "Français", "gl": "Galego",
-        "gu": "ગુજરાતી",
-        "he": "עברית", "hi": "हिन्दी", "hr": "Hrvatski", "hu": "Magyar",
-        "id": "Bahasa Indonesia", "is": "Íslenska", "it": "Italiano",
-        "ja": "日本語", "kn": "ಕನ್ನಡ", "ko": "한국어", "lt": "Lietuvių",
-        "lv": "Latviešu", "ml": "മലയാളം", "mr": "मराठी",
-        "ms": "Bahasa Melayu", "nb": "Norsk bokmål", "nl": "Nederlands",
-        "pa": "ਪੰਜਾਬੀ", "pl": "Polski", "pt": "Português", "ro": "Română",
-        "ru": "Русский", "sk": "Slovenčina", "sl": "Slovenščina",
-        "sr": "Српски", "sv": "Svenska", "sw": "Kiswahili", "ta": "தமிழ்",
-        "te": "తెలుగు", "th": "ไทย", "tr": "Türkçe", "uk": "Українська",
-        "ur": "اردو", "vi": "Tiếng Việt", "yue": "粵語",
-    }
+    # A table of fifty-six endonyms stood here once, and it did two jobs. It
+    # was seeded into <ui_dir>/languages.json and so decided which languages a
+    # deployment permitted, which is the hosting application's to decide; and
+    # it named them, which is now each dictionary's own business. The entries
+    # were whatever Google Cloud Text-to-Speech answered on 2026-08-02 when
+    # one appliance asked which languages it had voices for -- an arbitrary
+    # set for a library that neither speaks nor cares.
+    DECL_LANG_NAME = "English"
     # what a single upload for a 'file' parameter may weigh. Ring tones and
     # announcements are measured in kilobytes; the limit is here because an
     # editor that accepts unbounded uploads can fill an appliance's SD card
@@ -631,7 +603,12 @@ class ConfigManager:
 
         Three places, in the order of who knows best: the dictionary's own
         record of its name, then the application's list of permitted
-        languages, then the endonyms this release happens to know.
+        languages, then DECL_LANG -- which names itself, having no dictionary
+        to be named by.
+
+        The code itself is the fourth answer, and an honest one: it means
+        nobody has said what this language is called. Whoever adds a language
+        types its name in, and it goes into the dictionary from there.
         """
         with self._lock:
             book = self._lang_cache.get(lang)
@@ -640,7 +617,9 @@ class ConfigManager:
             return own.strip()
         if self._language_options and lang in self._language_options:
             return self._language_options[lang]
-        return self.LANGUAGE_OPTIONS.get(lang, lang)
+        if lang == self.DECL_LANG:
+            return self.DECL_LANG_NAME
+        return lang
 
     def set_language_validator(self, validator):
         """The *other* way for an application to bound the languages: judge
@@ -2134,16 +2113,31 @@ class ConfigManager:
                 # DECL_LANG moved the editor kept offering the source as a
                 # translation target while hiding a language that needed one.
                 options = self.language_options()
+                present = sorted(self._lang_cache)
                 # `bounded` says which of the two shapes the panel takes.
                 # With a list, the picker is the only way in and the two
                 # free-text fields are shut; without one, there is nothing to
-                # pick from and typing is the way. The names travel either
-                # way -- a dropdown of codes helps nobody.
-                info = {"languages": sorted(self._lang_cache),
+                # pick from and typing is the way.
+                #
+                # The names travel either way -- a dropdown of codes helps
+                # nobody. Where the application named the languages, its list
+                # is also the name table, because it holds languages no
+                # dictionary exists for yet. Where it did not, the names come
+                # from the dictionaries themselves, which is the only place
+                # left that knows them.
+                # Read out of the cache here rather than through
+                # language_name(): that takes this same lock, and it is not
+                # reentrant.
+                names = dict(options) if options is not None else {
+                        code: (self._lang_cache.get(code, {})
+                                   .get(self.LANG_NAME_KEY)
+                               or (self.DECL_LANG_NAME
+                                   if code == self.DECL_LANG else code))
+                        for code in present + [self.DECL_LANG]}
+                info = {"languages": present,
                         "source": self.DECL_LANG,
                         "bounded": options is not None,
-                        "options": options if options is not None
-                                   else dict(self.LANGUAGE_OPTIONS)}
+                        "options": names}
                 if editable and self._session_admin:
                     info["orphans"] = {
                         lang: self._orphan_keys_of(lang_dict)
