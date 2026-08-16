@@ -1375,12 +1375,15 @@ class ConfigManager:
         tooltip may run on, a label may not, and a spoken sentence wants to
         sound read aloud.
 
-        The target column arrives pre-filled with whatever is stored for that
-        language today, which is why the round trip is lossless: download the
-        template, change nothing, upload it, and nothing changes. It is not a
-        separate mode for editing an existing dictionary -- a new language
-        simply has an empty column. Clearing a cell is the deliberate way to
-        remove a translation.
+        Where `target` already has a dictionary, its column arrives pre-filled
+        with whatever was stored at the moment of download -- a snapshot, not
+        a live view, so a translation changed in the editor meanwhile is not
+        in the file. That is what makes the round trip lossless: download the
+        template, change nothing, upload it, and nothing changes. Clearing a
+        cell is the deliberate way to remove a translation.
+
+        A language that has no dictionary yet takes the same path and comes
+        out with that column empty; there is no second case in the code.
 
         This described two leading columns until 0.17.1, and a `src` column
         saying which of them a row was written in. Both belonged to the time
