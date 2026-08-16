@@ -371,15 +371,16 @@ translated and still read. Any number of languages may coexist, and none is ever
 removed to make room for another. Corrupt dictionary files are quarantined and
 regenerated at startup.
 
-**Every key in the tree is written in `DECL_LANG`** — English, so that adopting
-this library does not oblige anyone to write German labels and translate them
-into their own language. That holds for the host's keys as much as for this
-library's, and it is what makes the fallback safe: an untranslated string reads
-in English, never in a third language the reader has no reason to know.
+**Every key in the tree is written in `DECL_LANG`** — by default, English.
+The set of keys is extensible by modules using this library; the set of keys
+added by client modules is referred to as **host keys**. Host keys must be in
+the same language as the library's own keys. It is recommended to keep English
+as the `DECL_LANG` in order to make the fallback safe: an untranslated string
+reads in English, never in a third language the reader has no reason to know.
 
 Where a module's wording genuinely arrives in another language — a remote
-catalogue, a foreign schema — it settles on a `DECL_LANG` wording and hands the
-original over as a translation; see
+catalogue, a foreign schema — the module has to settle on a wording in
+`DECL_LANG` and hand the original over as a translation; see
 [Strings that arrive in another language](#strings-that-arrive-in-another-language).
 Identical strings are one key, whoever registered them.
 
@@ -389,8 +390,9 @@ pass **both**:
 1. **An allow-list**, `{code: endonym}`, seeded once from
    `ConfigManager.LANGUAGE_OPTIONS` into **`ui_dir/languages.json`** and never
    overwritten again. This is the deployment's upper bound: whatever the release
-   happens to ship dictionaries for, only what stands here is offered.
-2. **A validator the host registers** — `set_language_validator(fn)`, where
+   happens to ship dictionaries for, only what stands here is offered. Hence,
+   applications may manipulate this to introduce their own upper bound.
+3. **A validator the host registers** — `set_language_validator(fn)`, where
    `fn(code)` returns whether that language is acceptable. Use this when the host
    knows something the library cannot. An appliance that reads its texts aloud has
    no use for a language its speech service has no voice for: without the check,
