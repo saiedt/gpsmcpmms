@@ -1364,25 +1364,41 @@ class ConfigManager:
         return v if isinstance(v, str) else ""
 
     def _lang_template_csv(self, target, refs):
-        """Builds the CSV template for translating into `target`: the source
-        keys, what each of them is, which language it is written in, one column
-        per reference language, and the target column (pre-filled with any
-        existing translation).
+        """Builds the CSV template for translating into `target`.
 
-        DECL_LANG always travels as a reference, even unasked. A key written in
-        German gets its English beside it and vice versa, so neither language
-        reads as the privileged one -- which is the truth of it: this library
-        writes English keys, a host may write its own in something else, and the
-        'src' column says which is which per row.
+        The columns, in order: DECL_LANG, `kind`, up to MAX_TEMPLATE_REFS
+        reference languages the caller chose, and `target` itself.
+
+        The DECL_LANG column holds the key, because a key *is* its text in the
+        source language -- there is nothing to look up. `kind` says what each
+        string is (see XLATION_KINDS), which decides how it may be worded: a
+        tooltip may run on, a label may not, and a spoken sentence wants to
+        sound read aloud.
+
+        The target column arrives pre-filled with whatever is stored for that
+        language today, which is why the round trip is lossless: download the
+        template, change nothing, upload it, and nothing changes. It is not a
+        separate mode for editing an existing dictionary -- a new language
+        simply has an empty column. Clearing a cell is the deliberate way to
+        remove a translation.
+
+        This described two leading columns until 0.17.1, and a `src` column
+        saying which of them a row was written in. Both belonged to the time
+        when a module could declare its strings in a language of its own;
+        every host settles on DECL_LANG now, so one column carries the source
+        and nothing has to say which it is.
         """
         with self._lock:
             existing = set(self._lang_cache)
-        # The protected languages lead, both of them, and neither is "the key
-        # column": whichever of the two a row was written in, the other holds
-        # its translation, so both cells are filled and a translator reads
-        # whichever they know. There used to be a `key` column in front, which
-        # meant every row had one empty cell among these two -- empty precisely
-        # because that text was sitting in `key` instead.
+        # The protected language leads, and it is not "the key column" beside
+        # the real content: it holds the key, and the key is the text. A `key`
+        # column used to stand in front of it, which left every row with one
+        # cell empty among the two -- empty precisely because that same text
+        # was sitting in `key` instead.
+        #
+        # Still written as a list over protected_langs(): the filter is what
+        # keeps a language out of its own reference columns, and it costs
+        # nothing to leave the shape general.
         leading = [lang for lang in self.protected_langs()
                    if lang != target]
         seen = set(leading)
@@ -1392,13 +1408,12 @@ class ConfigManager:
                 seen.add(r)
                 extra.append(r)
         extra = extra[:self.MAX_TEMPLATE_REFS]
-        # There is no column saying which of the leading two is the original,
-        # because knowing it would change nothing. A key *is* its text, so
-        # rewording a source string produces a new key rather than staling an
-        # old translation: what a translator meets is a filled cell or an empty
-        # one, never a filled cell that has quietly gone wrong. Both languages
-        # are therefore equally good to translate from, and the choice is the
-        # translator's -- whichever they read.
+        # Nothing marks which column is the original, because knowing it would
+        # change nothing. A key *is* its text, so rewording a source string
+        # produces a new key rather than staling an old translation: what a
+        # translator meets is a filled cell or an empty one, never a filled
+        # cell that has quietly gone wrong. Which reference language they work
+        # from is therefore theirs to choose -- whichever they read.
         #
         # 'kind' is not a language, and the upload finds its columns by name and
         # ignores the others, so nothing has to be taught about it; a language
