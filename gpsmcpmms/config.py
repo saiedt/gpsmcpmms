@@ -594,29 +594,42 @@ class ConfigManager:
             if book.get(self.LANG_NAME_KEY) == name:
                 return True
             book[self.LANG_NAME_KEY] = name
-            book["lang_cache_modified"] = True
+            # Written through rather than left for the next reader: a name
+            # somebody typed once is the only record of it, and the window
+            # between here and the next fetch is a window in which it is
+            # nowhere on disk.
+            book["lang_cache_modified"] = not self._write_translation_file(
+                    lang, book)
         return True
 
     def language_name(self, lang):
         """What to call a language on screen; the code itself only as a last
         resort, and that is a gap somebody should fill.
 
-        Three places, in the order of who knows best: the dictionary's own
-        record of its name, then the application's list of permitted
-        languages, then DECL_LANG -- which names itself, having no dictionary
-        to be named by.
+        Three places, in the order of whose word is final: the application's
+        list of permitted languages, then the dictionary's own record of its
+        name, then DECL_LANG -- which names itself, having no dictionary to be
+        named by. Nothing is merged; the first answer is the answer.
+
+        The list comes first for a reason that only shows on the second
+        release. An application ships languages.json and a set of
+        dictionaries; correct a name in the file and ship again, and if the
+        dictionary's copy won, the correction would never arrive -- the old
+        name is already on every device. Where the application names a
+        language, it keeps naming it. Where it names none, the dictionary
+        speaks for itself, which is the case the editor's own free-text field
+        writes into.
 
         The code itself is the fourth answer, and an honest one: it means
-        nobody has said what this language is called. Whoever adds a language
-        types its name in, and it goes into the dictionary from there.
+        nobody has said what this language is called.
         """
+        if self._language_options and lang in self._language_options:
+            return self._language_options[lang]
         with self._lock:
             book = self._lang_cache.get(lang)
             own = book.get(self.LANG_NAME_KEY) if isinstance(book, dict) else None
         if isinstance(own, str) and own.strip():
             return own.strip()
-        if self._language_options and lang in self._language_options:
-            return self._language_options[lang]
         if lang == self.DECL_LANG:
             return self.DECL_LANG_NAME
         return lang
@@ -1264,9 +1277,22 @@ class ConfigManager:
             return "language_not_allowed"
 
         with self._lock:
+            # Two of the reserved keys are not bookkeeping. The name is the
+            # dictionary's own content and has to outlive a re-store: an
+            # upload correcting one translation must not cost a language its
+            # name, which is what happened while every reserved key was
+            # stripped alike. The format stamp goes on here rather than
+            # waiting for the next start, so a dictionary is never briefly
+            # unversioned.
+            previous = self._lang_cache.get(lang) or {}
+            kept_name = (lang_dict.get(self.LANG_NAME_KEY)
+                         or previous.get(self.LANG_NAME_KEY))
 
             lang_dict = {k: v for k, v in lang_dict.items()
                          if k not in self.RESERVED_LANG_KEYS}
+            if isinstance(kept_name, str) and kept_name.strip():
+                lang_dict[self.LANG_NAME_KEY] = kept_name.strip()
+            lang_dict[self.LANG_FORMAT_KEY] = self.LANG_FORMAT
             lang_dict["lang_cache_modified"] = False
 
             # atomic write-and-update: cache first, then disk (spec 4.3.1)
