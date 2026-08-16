@@ -83,20 +83,27 @@ class ConfigManager:
     }
     # bookkeeping a translation dictionary carries beside its translations;
     # never a key anybody translates
-    LANG_FORMAT_KEY = "lang_format"
+    #
     # What this dictionary's language calls itself. It lives here rather than
     # in languages.json because the name belongs to the language, not to the
     # list of languages somebody permits -- a deployment that permits
     # everything still has to be able to write "Português" under the dropdown.
+    # It never travels through the CSV: the template does not carry it, an
+    # uploaded row naming it is reported as an unknown key, and a merge keeps
+    # what is already there. Translating it would be a category error anyway
+    # -- it asks what this language calls itself, not how to say it in
+    # another.
     LANG_NAME_KEY = "lang_name"
-    RESERVED_LANG_KEYS = ("lang_cache_modified", LANG_FORMAT_KEY,
-                          LANG_NAME_KEY)
-    # 2: an absent entry means untranslated, and an entry that reads like the
-    # German means a translator decided it stays that way. Until 1 every known
-    # key was present in every dictionary as its own value, and that was how
-    # "untranslated" was written down -- which left no way at all to say that a
-    # word is simply the same in both languages.
-    LANG_FORMAT = 2
+    RESERVED_LANG_KEYS = ("lang_cache_modified", LANG_NAME_KEY)
+    # A dictionary carried a "lang_format" stamp until 0.17.1, and the only
+    # thing it ever guarded was the migration away from a format where every
+    # known key stood in every dictionary as its own value -- which was how
+    # "untranslated" used to be written down, and left no way to say that a
+    # word is simply the same in both languages. Absent has meant untranslated
+    # for long enough that no dictionary of the old shape exists: the package
+    # ships two, an appliance six, and every upload builds a new one by the
+    # current rules. A version marker whose migration cannot occur is not
+    # insurance, it is a field nobody dares remove later.
 
     # The source language names itself here, and nowhere else can: every
     # other language is named by its own dictionary, under LANG_NAME_KEY, but
@@ -135,7 +142,13 @@ class ConfigManager:
     # in. They are keys like any other, so a deployment that wants the editor in
     # German takes it from the shipped de.json -- see DECL_LANG.
     OWN_UI_KEYS = (
-        "Hub4Help Configuration Editor",
+        # Two, because an application may or may not put its name on this
+        # editor, and because a name is not a prefix: German and Turkish take
+        # it in front, Arabic reads it at the other end. The placeholder lets
+        # each language decide, and the browser fills it -- with the name
+        # itself, untranslated, the way a proper noun goes.
+        "{app} Configuration Editor",
+        "Configuration Editor",
         "Save", "Apply", "Remove", "Undo",
         "End session", "Show protected parameters",
         "Exit admin mode", "Language",
@@ -230,6 +243,9 @@ class ConfigManager:
         # Initialize the internal logger reference with a clean bootstrap default
         self._logger = logging.getLogger("GPSMCPMMS_Bootstrap")
         self._logger_explicitly_set = False
+        # what the hosting application is called, if it said; see
+        # set_app_context()
+        self._app_title = ""
         
         if not self._logger.handlers:
             _bootstrap_handler = logging.StreamHandler()
@@ -312,7 +328,7 @@ class ConfigManager:
     # ------------------------------------------------------------------
     # API
     #
-    # - for the main app: switch_to_app_logger(logger)
+    # - for the main app: set_app_context(logger, title)
     #                     to inject application specific logger
     # - for importers of config_mgr: config_ready, protected_params_ready,
     #                                query, register_params, and
@@ -321,22 +337,37 @@ class ConfigManager:
     #                                _resolve_backend_func, and _may_access
     # - for frontend: the REST-API set up by start_editor()
     # ------------------------------------------------------------------
-    def switch_to_app_logger(self, logger: logging.Logger) -> None:
-        """
-        Injects the production-grade application logger. 
-        Can only be called once per application runtime lifecycle.
+    def set_app_context(self, logger: logging.Logger, title: str = "") -> None:
+        """Tells this library which application it is serving.
+
+        Call it once, as early as possible -- before the other modules
+        register their parameters on import and log while doing so, or their
+        first lines go to the fallback logger.
+
+        `logger` is the application's own; everything this library has to say
+        goes there from now on, so a device has one log and not two.
+
+        `title` is what the application is called, and it prefaces the
+        editor's heading and its browser tab: "Hub4Help Configuration Editor".
+        Left out, the editor is simply the "Configuration Editor" -- which is
+        what it is, for an application that would rather not put its name on
+        it. The name is never translated: it is a proper noun, like a voice's
+        name or a language's endonym. Where it goes in the heading is a
+        translator's decision and not a prefix, because in Arabic it belongs
+        at the other end.
         """
         if self._logger_explicitly_set:
             raise RuntimeError("Application logger has already been registered "
                                "and locked.")
-        
+
         if not isinstance(logger, logging.Logger):
             raise TypeError("Injected logger must be an instance of "
                             "logging.Logger.")
-            
+
         self._logger = logger
         CvvNode.set_logger(self, logger)
         self._logger_explicitly_set = True
+        self._app_title = title.strip() if isinstance(title, str) else ""
         self._logger.debug("GPSMCPMMS engine successfully attached to "
                            "production application logger.")
 
@@ -1096,40 +1127,8 @@ class ConfigManager:
                         f"dictionaries in '{self._lang_dir}' with the ones "
                         f"shipped in the package.")
 
-        for lang, lang_dict in self._lang_cache.items():
+        for lang_dict in self._lang_cache.values():
             lang_dict["lang_cache_modified"] = False
-            self._migrate_lang_format(lang, lang_dict)
-
-    def _migrate_lang_format(self, lang, lang_dict):
-        """Brings a dictionary from the old encoding to the current one, once.
-
-        Until format 2 every known key was written into every dictionary as its
-        own value, and *that* was how "not translated yet" was recorded. Now an
-        absent entry says it, and an entry reading like the German says the
-        opposite: somebody looked at this string and decided it stays. Both
-        cannot be true of the same file, so the old entries have to go -- once,
-        and marked, because after the migration those very entries are the
-        deliberate ones and must survive every later start.
-
-        What this costs is the handful of words that were already right by
-        coincidence -- "OK" is Polish for OK -- and they have to be entered
-        again. There is no way to tell them apart from the thousands that were
-        merely never touched; only the person translating knows.
-        """
-        if lang_dict.get(self.LANG_FORMAT_KEY) == self.LANG_FORMAT:
-            return
-        stale = [k for k, v in lang_dict.items()
-                 if k not in self.RESERVED_LANG_KEYS and v == k]
-        for key in stale:
-            del lang_dict[key]
-        lang_dict[self.LANG_FORMAT_KEY] = self.LANG_FORMAT
-        lang_dict["lang_cache_modified"] = True
-        if stale:
-            self._logger.info(
-                    f"Translation dictionary '{lang}': {len(stale)} entries "
-                    "that merely repeated the German key were dropped; they "
-                    "used to mean 'untranslated'. An entry equal to the "
-                    "German now means the opposite, and is kept.")
 
     def _harvest_xlation_keys(self, decl_data, funcs=None):
         """
@@ -1292,7 +1291,6 @@ class ConfigManager:
                          if k not in self.RESERVED_LANG_KEYS}
             if isinstance(kept_name, str) and kept_name.strip():
                 lang_dict[self.LANG_NAME_KEY] = kept_name.strip()
-            lang_dict[self.LANG_FORMAT_KEY] = self.LANG_FORMAT
             lang_dict["lang_cache_modified"] = False
 
             # atomic write-and-update: cache first, then disk (spec 4.3.1)
@@ -2163,6 +2161,7 @@ class ConfigManager:
                 info = {"languages": present,
                         "source": self.DECL_LANG,
                         "bounded": options is not None,
+                        "app_title": self._app_title,
                         "options": names}
                 if editable and self._session_admin:
                     info["orphans"] = {
@@ -2234,6 +2233,16 @@ class ConfigManager:
             name = (request.form.get("name") or "").strip()
             if upload is None or not target:
                 abort(400)
+            # A language that does not exist yet is being created, and it is
+            # created with a name or not at all. Nothing else would ever name
+            # it: languages.json is the application's and may not list it, and
+            # this library keeps no table of its own. Refused here and not
+            # only in the panel, because the panel is not the only way in --
+            # a CSV that arrives by another route reaches this handler too.
+            with self._lock:
+                exists = target in self._lang_cache
+            if not exists and not name:
+                return jsonify({"error": "name_required"}), 400
             report, result, total = self._apply_lang_csv(
                     target, upload.read(), remove)
             if report is None:

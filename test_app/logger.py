@@ -16,7 +16,7 @@
 
 Provides the ready-to-use singleton `h4h_logger` and registers the "log"
 config module. The main app injects h4h_logger into config_mgr via
-config_mgr.switch_to_app_logger(h4h_logger).
+config_mgr.set_app_context(h4h_logger, "<application name>").
 """
 import logging
 import os

@@ -139,7 +139,7 @@ Other API methods:
 | `note_xlation_keys(*keys, kind=None)` | Register display strings a module only uses at runtime, so they reach the translation templates. `kind` says what they are — pass `"speech"` for anything read aloud, which nothing else could tell a translator. |
 | `add_original_xlations(xlation_lang, xlations)` | Supply translations for keys already noted, taken from where their wording came: `xlations` maps each key to its reading in `xlation_lang`. Never overwrites, never invents a language, refuses unregistered keys. See [Strings that arrive in another language](#strings-that-arrive-in-another-language). |
 | `translate(key, lang)` | Returns the `lang` rendering of such a string, falling back to the key itself. Accepts `de` or `de-DE`. |
-| `switch_to_app_logger(logger)` | Inject the application logger (once per run). |
+| `set_app_context(logger, title="")` | Tell the library which application it serves: its logger (once per run), and what it is called. The title prefaces the editor's heading and browser tab — `Hub4Help Configuration Editor` — and left out, the editor is simply the `Configuration Editor`. |
 | `discard_module(module_id)` | The module has no parameters any more: the declaration is dropped and everything persisted for it is deleted. See [Giving up a module's parameters](#giving-up-a-modules-parameters). |
 
 ---

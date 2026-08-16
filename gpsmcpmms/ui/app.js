@@ -42,6 +42,7 @@ const S = {
     // turns out to be open is a moment's confusion, opening them on one that
     // is bounded invites a code the device will refuse.
     bounded: true,
+    appTitle: "",            // what the hosting application calls itself
     langNames: {},           // code -> name; the app's list, or endonyms
     langPanel: null,         // null | "new" | "edit"
     langForm: {},            // what the open panel has been told so far
@@ -1272,8 +1273,24 @@ async function exitAdminMode() {
 }
 
 const RTL_LANGS = new Set(["fa", "ar", "he", "ur", "ps", "sd"]);
+/* What the editor is called, in the reading language and with the hosting
+   application's name in it -- or without, for an application that gave none.
+   The name is inserted rather than looked up: it is a proper noun, and where
+   it belongs in the sentence is the translation's business, not a prefix. */
+function editorTitle() {
+    return S.appTitle
+        ? xl("{app} Configuration Editor").replace("{app}", S.appTitle)
+        : xl("Configuration Editor");
+}
+
+/* The document's own language and direction, which index.html cannot know:
+   it is served before anybody has chosen one, and it used to claim German
+   for every reader. `lang` matters beyond looks -- it is what a screen reader
+   picks a voice by, and what a browser hyphenates by. */
 function applyTextDirection() {
+    document.documentElement.lang = S.lang || S.sourceLang;
     document.documentElement.dir = RTL_LANGS.has(S.lang) ? "rtl" : "ltr";
+    document.title = editorTitle();
 }
 
 async function switchLanguage(lang) {
@@ -1489,7 +1506,7 @@ function renderAll() {
     const app = document.getElementById("app");
     app.innerHTML = "";
     app.append(
-        el("h1", {class: "title"}, xl("Hub4Help Configuration Editor")),
+        el("h1", {class: "title"}, editorTitle()),
         el("hr", {class: "title-rule"}));
 
     const general = el("div", {class: "general-row"});
@@ -1582,6 +1599,8 @@ async function loadLangList() {
     if (r.data && r.data.source) S.sourceLang = r.data.source;
     if (r.data && typeof r.data.bounded === "boolean")
         S.bounded = r.data.bounded;
+    if (r.data && typeof r.data.app_title === "string")
+        S.appTitle = r.data.app_title;
     if (r.data && r.data.options) S.langNames = r.data.options;
     // The browser may name a language no dictionary here covers. What would
     // show then are the keys themselves -- readable, but the dropdown would

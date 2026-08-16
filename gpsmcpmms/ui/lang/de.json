@@ -9,6 +9,7 @@
     "Check": "Prüfen",
     "Check failed": "Prüfung fehlgeschlagen",
     "Choose file": "Datei auswählen",
+    "Configuration Editor": "Konfigurationseditor",
     "Configuration service": "Konfigurationsdienst",
     "Does not exist yet, can be created": "Noch nicht vorhanden, kann angelegt werden",
     "Download CSV": "CSV herunterladen",
@@ -21,7 +22,6 @@
     "File too large": "Datei zu groß",
     "File type not allowed": "Dateityp nicht zulässig",
     "Folder exists": "Ordner vorhanden",
-    "Hub4Help Configuration Editor": "Hub4Help Konfigurationseditor",
     "Incorrect password": "Falsches Passwort",
     "Internal error while determining the values": "Interner Fehler bei der Wertermittlung",
     "Internal error while establishing the hint": "Interner Fehler bei der Ermittlung des Hinweises",
@@ -71,9 +71,9 @@
     "Value already taken": "Wert bereits vergeben",
     "Value applied": "Wert übernommen",
     "finally": "zuletzt",
-    "lang_format": 2,
     "lang_name": "Deutsch",
     "no response to ping": "keine Antwort auf Ping",
     "then": "dann",
-    "translated": "übersetzt"
+    "translated": "übersetzt",
+    "{app} Configuration Editor": "{app} Konfigurationseditor"
 }

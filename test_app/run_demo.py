@@ -22,7 +22,7 @@ from gpsmcpmms import config_mgr
 
 # Inject the application logger as early as possible (spec 5.2)
 import logger
-config_mgr.switch_to_app_logger(logger.app_logger)
+config_mgr.set_app_context(logger.app_logger, "GPSMCPMMS demo")
 
 import led
 import sip  # noqa: F401  (registers the "sip" module)

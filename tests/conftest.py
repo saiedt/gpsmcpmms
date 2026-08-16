@@ -34,7 +34,7 @@ def setup_demo_environment():
     session.
     """
     import logger
-    config_mgr.switch_to_app_logger(logger.app_logger)
+    config_mgr.set_app_context(logger.app_logger, "GPSMCPMMS demo")
 
     import led
     import sip
