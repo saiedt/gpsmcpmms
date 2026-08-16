@@ -84,10 +84,16 @@ def test_no_entry_is_left_empty():
         assert not blank, f"'{lang}' has empty translations: {blank[:5]}"
 
 
-def test_each_dictionary_declares_its_format():
-    # Without the stamp the loader takes the file for an older format and
-    # migrates it, which drops every entry that reads like its key -- exactly
-    # the ones that say "this string is taken over unchanged".
+def test_each_dictionary_names_its_language():
+    # A dictionary says what its language calls itself, and nothing else will:
+    # this library keeps no table of endonyms, and a deployment that ships no
+    # languages.json has nowhere else to look. Without the entry the language
+    # selector shows a bare code.
+    #
+    # This replaced a test demanding a format stamp. The stamp guarded a
+    # migration away from a dictionary shape that no longer exists anywhere,
+    # and went with it.
     for lang, d in _shipped().items():
-        assert d.get(ConfigManager.LANG_FORMAT_KEY) == ConfigManager.LANG_FORMAT, (
-            f"'{lang}' is missing the current format marker")
+        name = d.get(ConfigManager.LANG_NAME_KEY)
+        assert isinstance(name, str) and name.strip(), (
+            f"'{lang}' does not say what its language is called")
