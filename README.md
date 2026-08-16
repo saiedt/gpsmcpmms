@@ -139,7 +139,7 @@ Other API methods:
 | `note_xlation_keys(*keys, kind=None)` | Register display strings a module only uses at runtime, so they reach the translation templates. `kind` says what they are — pass `"speech"` for anything read aloud, which nothing else could tell a translator. |
 | `add_original_xlations(xlation_lang, xlations)` | Supply translations for keys already noted, taken from where their wording came: `xlations` maps each key to its reading in `xlation_lang`. Never overwrites, never invents a language, refuses unregistered keys. See [Strings that arrive in another language](#strings-that-arrive-in-another-language). |
 | `translate(key, lang)` | Returns the `lang` rendering of such a string, falling back to the key itself. Accepts `de` or `de-DE`. |
-| `set_app_context(logger, title="")` | Tell the library which application it serves: its logger (once per run), and what it is called. The title prefaces the editor's heading and browser tab — `Hub4Help Configuration Editor` — and left out, the editor is simply the `Configuration Editor`. |
+| `set_app_context(logger, title="")` | Tell the library which application it serves: its logger (once per run), and what it is called. The title prefaces the editor's heading and browser tab — `MyApp Configuration Editor` — and left out, the editor is simply the `Configuration Editor`. |
 | `discard_module(module_id)` | The module has no parameters any more: the declaration is dropped and everything persisted for it is deleted. See [Giving up a module's parameters](#giving-up-a-modules-parameters). |
 
 ---
@@ -378,43 +378,26 @@ the same language as the library's own keys. It is recommended to keep English
 as the `DECL_LANG` in order to make the fallback safe: an untranslated string
 reads in English, never in a third language the reader has no reason to know.
 
-Where a module's wording genuinely arrives in another language — a remote
-catalogue, a foreign schema — the module has to settle on a wording in
-`DECL_LANG` and hand the original over as a translation; see
-[Strings that arrive in another language](#strings-that-arrive-in-another-language).
-Identical strings are one key, whoever registered them.
+The DECL_LANG (English) and the set of dictionaries `ui_dir/lang/<code>.json`
+determine the set of languages offered. The config-editor
+has a mechanism for adding new dictionaries. Applications can intervene to
+**qualify or disqualify a language** from being offered or added in two ways
+(DECL_LANG — English — is automatically always qualified):
 
-**Which languages exist here** is governed by two handles, and a language has to
-pass **both**:
-
-1. **An allow-list**, `{code: endonym}`, seeded once from
-   `ConfigManager.LANGUAGE_OPTIONS` into **`ui_dir/languages.json`** and never
-   overwritten again. This is the deployment's upper bound: whatever the release
-   happens to ship dictionaries for, only what stands here is offered. Hence,
-   applications may manipulate this to introduce their own upper bound.
-3. **A validator the host registers** — `set_language_validator(fn)`, where
-   `fn(code)` returns whether that language is acceptable. Use this when the host
-   knows something the library cannot. An appliance that reads its texts aloud has
-   no use for a language its speech service has no voice for: without the check,
-   somebody translates several hundred strings and discovers only afterwards that
-   none of them can be spoken. That knowledge belongs to the host — the library has
-   no business knowing which speech service exists.
-   A validator that raises counts as consent, and the protected languages are
-   accepted regardless. Refusing to let a device be configured because a check was
+1. **An allow-list**, `{code: endonym}`, seeded into **`ui_dir/languages.json`**
+   may declare the deployment's upper bound with two effects: a) shipped dictionaries
+   will not be offered if the corresponding language code is not included in this
+   file, and b) new dictionaries can only be added for languages whose codes are
+   included in this file. There is no such file in releases of GPSMCPMMS itself;
+   it is absolutely a deployment decision due to the host's and its application's
+   constraints. For instance, if the application has a voice interface for
+   interacting with users, its capability in TTS or Speech Recognition may
+   force such an upper bound.
+2. **A validator the host registers** — `set_language_validator(fn)`, where
+   `fn(code)` returns whether that language is acceptable. Use this as the dynamic
+   counterpart to the static way of `ui_dir/languages.json`. A validator that raises
+   an error counts as consent: Refusing to qualify a language because a check was
    itself unavailable is the worse failure.
-
-The two narrow, and neither overrules the other: the list belongs to whoever
-installs the device, the validator to whoever wrote the host. A validator used to
-replace the list, which made the list dead weight for every host that installs one
-— an operator could strike a language out and be handed it straight back, and on an
-appliance whose validator says yes whenever its speech service is unreachable, that
-is every language.
-
-> **Edit the file, not the constant.** Under a virtualenv the constant lives in
-> `.venv/lib/python3.x/site-packages/gpsmcpmms/config.py` — awkward to reach, and
-> the edit disappears at the next `pip install --upgrade`. `ui_dir/languages.json`
-> is yours, survives upgrades, and is read at every start. An unreadable file falls
-> back to the shipped list rather than to none.
 
 Both handles govern which languages are **offered**, not which dictionaries are
 loaded: a dictionary on disk for a language nobody allows is read, kept and simply
@@ -422,7 +405,42 @@ not offered — it costs nothing and is ready the day somebody allows it. Discar
 deployment's translations at startup because a rule changed later would destroy work
 nobody can get back.
 
-`DECL_LANG` is complete by construction, with or without a dictionary: the keys
+If the host does not intervene — i.e., there is no `languages.json` in `ui_dir`
+*and* `set_language_validator(fn)` was never called — then administrators can add
+dictionaries for arbitrary languages and all languages with a dictionary in
+`ui_dir/lang/` will be offered in addition to English.
+
+The sources where keys to translate come into life are:
+1. The config-editor's own chrome are displayed to end users and hence may need a
+   translation. These are a fixed set of keys for each release of GPSMCPMMS,
+   certainly static at the load time in each run. And, they are known to
+   the multi-linguality framework per se and hence are automatically recognized
+   as keys.
+2. Every registration of parameter declarations by the client modules with the
+   config_mgr bears wordings, such as labels, tooltips and placeholders, that are
+   fed into the config-editor and hence may need a translation. These are also a
+   fixed set of keys for each release of the app using GPSMCPMMS, and again
+   certainly static at the load time in each run. And, as part of the contract
+   between config_mgr and the client modules, they are also recognized as keys
+   automatically.
+3. Applications may depend on some external sources that may deliver info to
+   be communicated with human users. They are not part of the application release
+   and are probably fetched at runtime. There are then two issues to be resolved
+   in this context:
+   - config_mgr has no way to automatically recognize wordings to serve as keys,
+     but the application should know. Therefore, there is note_xlation_keys() in
+     API so that client modules can explicitly add further wordings as keys that
+     can be translated into other languages.
+   - The external source may provide the info in another language than English;
+     in that case, the related module has to establish an internal, probably manual
+     mechanism for a translation into English first, and then add those English
+     translations as keys, as if they were the original wordings. Then, the
+     original wording from the external source may be handed over as a translation;
+     see [Strings that arrive in another language](#strings-that-arrive-in-another-language).
+
+In any case, identical strings from different sources are one key, whoever registered them.
+
+As a matter of fact, `DECL_LANG` is complete by construction, with or without a dictionary: the keys
 are already written in it. For every other language **an absent entry means
 untranslated and any entry counts as translated** — including one that reads exactly like the key, which is
 how a translator records that a string stays as it is. Some words are the same in
@@ -430,46 +448,34 @@ two languages ("OK" is Polish for OK) and some strings are not sentences at all,
 like the placeholder showing the shape of a phone number; without this they could
 never be settled, and their language would stay incomplete for ever.
 
-> **Dictionary format 2.** Until format 1 every known key was written into every
-> dictionary as its own value, and *that* was how "untranslated" was recorded — so
-> the two meanings could not coexist. A dictionary without the `lang_format`
-> marker is migrated once on load: entries that merely repeat their key are
-> dropped and the marker is set. The cost is the handful that were already right
-> by coincidence; nothing tells them apart from the untouched ones, so they have
-> to be entered again, once.
-
 Translations are added/updated through a **CSV round-trip** (no timeouts, easy for
 a human or an AI):
 
-1. **Download a template** for the target language — columns: `de` (source/key),
-   `kind`, up to three chosen reference languages, and the target column
-   (pre-filled). The file is UTF-8 (with BOM), **pipe-separated (`|`)** and every
-   field is **fully quoted** (RFC 4180), so embedded `,`/`;` can never split a
-   row.
+1. **Download a template** for the target language — columns: `en` (source/key),
+   `kind`, up to three chosen reference languages, and the target column. Where
+   target already has a dictionary, its column arrives pre-filled with whatever
+   was stored at the moment of download — a snapshot, not a live view. The file
+   is UTF-8 (with BOM), **pipe-separated (`|`)** and every field is **fully
+   quoted** (RFC 4180), so embedded `,`/`;` can never split a row.
 
    **`kind`** says what a string *is*, because the same words are translated
-   differently depending on where they appear: `label` (short, sits beside a
-   field), `tooltip` (a sentence), `placeholder` (a format example, usually taken
-   over as it is), `speech` (read aloud — abbreviations and punctuation are
-   heard, not seen) and `ui` (the editor's own chrome). A string can be several
-   at once and then says so: a service name shown in a list *and* spoken in an
+   differently depending on where they appear:
+   - `label` (short, sits beside a field),
+   - `tooltip` (a sentence),
+   - `placeholder` (a format example, usually taken over as it is),
+   - `speech` (read aloud — abbreviations and punctuation are heard, not seen) and
+   - `ui` (the editor's own chrome).
+   A string can be several at once and then says so: a service name shown in a list *and* spoken in an
    announcement reads `label, speech`. Everything but `speech` derives itself
    from the Declaration the string came from; a host announces that one with
    `note_xlation_keys(*keys, kind="speech")`, since nothing else could know.
+
+   The reference languages may help to resolve ambiguity in English wording,
+   esp. when translating by AI assistance.
 2. **Fill it offline**, then **upload** it. Rows are applied one by one
    (non-empty sets, blank clears, absent keeps; unknown keys skipped). A cell
    repeating the key is a translation like any other — that is how "take this
-   one over unchanged" is said, and the only way to say it. Adding an 8th
-   language prompts which existing one to replace.
-
-   Both steps work from the same set: every key the software uses **plus** every
-   key any dictionary already holds. The two differ more than one would expect —
-   a string a host only registers at runtime, such as the name of a service type
-   fetched from a server, is absent from the first set until something has asked
-   for it. Cutting a template from the narrow set left those rows out of the
-   file; uploading against it deleted their translations outright. Keys that
-   really have fallen out of the software are listed under `/api/lang/info` for
-   the admin, where removing them is a decision rather than a side effect.
+   one over unchanged" is said, and the only way to say it.
 3. A **report CSV** is returned with a per-row status and translated/total counts.
 
 ### Strings that arrive in another language
