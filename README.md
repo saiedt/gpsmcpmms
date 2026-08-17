@@ -368,15 +368,20 @@ A display string **is** its own translation key: the `label`/`tooltip`/
 `placeholder` text as written. Dictionaries live at `ui_dir/lang/<code>.json`;
 missing keys fall back to the key itself, so a language may stay partially
 translated and still read. Any number of languages may coexist, and none is ever
-removed to make room for another. Corrupt dictionary files are quarantined and
-regenerated at startup.
+removed to make room for another. A dictionary file that cannot be read or parsed
+is set aside at startup so it cannot stop the editor; that language then falls
+back to the source language until a dictionary is uploaded again.
 
 **Every key in the tree is written in `DECL_LANG`** — by default, English.
 The set of keys is extensible by modules using this library; the set of keys
 added by client modules is referred to as **host keys**. Host keys must be in
 the same language as the library's own keys. It is recommended to keep English
-as the `DECL_LANG` in order to make the fallback safe: an untranslated string
-reads in English, never in a third language the reader has no reason to know.
+as the `DECL_LANG`, as changing it alone is never harmless. Changing it truthfully means rewriting
+every registered display string in the new language — every label, tooltip,
+placeholder, hint, test_func_msg, acquire_button, and every note_xlation_keys()
+string, in the library and in every host — and at that moment every existing
+dictionary is dead, because a dictionary's keys are the old strings. There is
+no re-keying path in the code; nothing migrates a dictionary when the constant moves.
 
 The DECL_LANG (English) and the set of dictionaries `ui_dir/lang/<code>.json`
 determine the set of languages offered. The config-editor
@@ -465,10 +470,11 @@ a human or an AI):
    - `placeholder` (a format example, usually taken over as it is),
    - `speech` (read aloud — abbreviations and punctuation are heard, not seen) and
    - `ui` (the editor's own chrome).
+   
    A string can be several at once and then says so: a service name shown in a list *and* spoken in an
    announcement reads `label, speech`. Everything but `speech` derives itself
-   from the Declaration the string came from; a host announces that one with
-   `note_xlation_keys(*keys, kind="speech")`, since nothing else could know.
+   from the Declaration the string came from; it is the responsibility of the host to announce `speech` with
+   `note_xlation_keys(*keys, kind="speech")`, as nothing in GPSMCPMMS could know that.
 
    The reference languages may help to resolve ambiguity in English wording,
    esp. when translating by AI assistance.
@@ -504,7 +510,7 @@ config_mgr.add_original_xlations("de", {
 
 Two calls, because they are two things: the first decides what the software
 uses, the second fills a dictionary. `add_original_xlations()` works for any
-registered key, including one that came from a Declaration. The keys are now
+registered key, including one that came from a Declaration. After the above two statements, the keys are
 ordinary `DECL_LANG` keys — they appear in every template, are translated like
 anything else, and the German reading is there from the start.
 
