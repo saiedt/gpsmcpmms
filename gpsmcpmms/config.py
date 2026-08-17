@@ -515,6 +515,16 @@ class ConfigManager:
         * **Keys nobody registered are refused.** An entry for a key the
           software does not use is an orphan the moment it is written, and it
           would then be offered to a translator as work.
+
+        Where the readings live: in the dictionary this run holds, and not yet
+        in the file. They are served from there like any other translation --
+        the editor shows them, translate() returns them, the completeness count
+        includes them -- while <lang>.json on disk stays as it was. A template
+        downloaded while they stand carries them pre-filled in the target
+        column, and that upload is what writes them down; so does any other
+        save of that dictionary, since a save writes the whole of it. Until
+        then nothing is at stake: the readings come from the module's own
+        source, so the next start supplies them again.
         """
         lang = (xlation_lang.strip().split("-")[0]
                 if isinstance(xlation_lang, str) else "")
@@ -1092,8 +1102,13 @@ class ConfigManager:
                 if not isinstance(lang_dict, dict):
                     raise ValueError("content is not a json object")
             except (OSError, ValueError) as exc:
-                # spec 4.3.1: quarantine the broken file and regenerate a
-                # fresh default dictionary instead of crashing
+                # Unreadable, or not a json object at all. Set the file aside
+                # and go on with nothing for this language: no dictionary is
+                # worth refusing to start over. Nothing is restored in its
+                # place -- the language reads in the source language for the
+                # rest of this run, and from the next start, with no file left
+                # to find, it is not offered at all until a dictionary is
+                # uploaded again.
                 self._logger.critical(
                     f"Quarantining broken translation dictionary "
                     f"'{file_name}': {exc}")
