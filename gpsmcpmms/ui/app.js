@@ -1434,16 +1434,23 @@ function renderLangPanel(mode) {
     const active = S.languages.filter(l => l !== S.sourceLang);
     const st = S.langForm || (S.langForm = {});
 
-    // row 0 -- the standing of things, and the way out. The panel could always
-    // be closed by pressing the button that opened it again, but nothing said
-    // so: that button reads as a command and merely turns blue, and inside the
-    // panel there was no exit at all.
-    const row0 = el("div", {class: "lang-panel-row"},
-        ...langStatusNodes(),
-        el("span", {class: "spacer"}),
-        el("button", {class: "small", type: "button",
-                      onclick: () => { S.langPanel = null; renderAll(); }},
-           xl("Close")));
+    // The way out, in the corner. Until now the panel could only be closed by
+    // pressing the button that had opened it, and nothing said so.
+    //
+    // A cross rather than a word, because it sits in the corner rather than in
+    // a sentence -- and the word is what it carries as its label, so a reader
+    // who cannot make out the glyph is still told what it does.
+    const closeX = el("button", {class: "panel-close", type: "button",
+                                 title: xl("Close"), "aria-label": xl("Close"),
+                                 onclick: () => { S.langPanel = null;
+                                                  renderAll(); }},
+                      "×");
+
+    // row 0 -- how the translations stand. Left out where there is nothing to
+    // report, so that an empty line never pushes the panel open by itself.
+    const status = langStatusNodes();
+    const row0 = status.length ? el("div", {class: "lang-panel-row"}, ...status)
+                               : null;
 
     // row 1 -- the only row that differs between the two panels
     let row1, targetOf;
@@ -1547,7 +1554,7 @@ function renderLangPanel(mode) {
         }}, xl("Upload the selected CSV")));
 
     const panel = el("div", {class: "lang-panel"},
-                     row0, row1, row1b, row2, row3);
+                     closeX, row0, row1, row1b, row2, row3);
     limit();
     return panel;
 }
