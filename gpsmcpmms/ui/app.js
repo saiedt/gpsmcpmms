@@ -1425,6 +1425,18 @@ function langStatusNodes() {
         out.push(el("span", {class: "hint-inline"},
             xl("Entries nothing uses any more: {langs}.")
                 .replace("{langs}", stale.join(", "))));
+
+    // Asking again, inside the last sentence rather than beside it. As a
+    // sibling in the row it was a flex item of its own, and a report long
+    // enough to fill the line pushed it onto the next one, where it stood
+    // alone under the text like a stray. Inside the span it wraps with the
+    // words it belongs to.
+    out[out.length - 1].append(
+        el("button", {class: "small lang-refresh", type: "button",
+                      title: xl("Reload"), "aria-label": xl("Reload"),
+                      onclick: async () => { await loadLangList();
+                                             renderAll(); }},
+           "↻"));
     return out;
 }
 
@@ -1460,12 +1472,8 @@ function renderLangPanel(mode) {
     // Left out entirely where there is nothing to report, so that an empty
     // line never pushes the panel open by itself.
     const status = langStatusNodes();
-    const row0 = status.length ? el("div", {class: "lang-panel-row"}, ...status,
-        el("button", {class: "small lang-refresh", type: "button",
-                      title: xl("Reload"), "aria-label": xl("Reload"),
-                      onclick: async () => { await loadLangList();
-                                             renderAll(); }},
-           "↻")) : null;
+    const row0 = status.length ? el("div", {class: "lang-panel-row"}, ...status)
+                               : null;
 
     // row 1 -- the only row that differs between the two panels
     let row1, targetOf;

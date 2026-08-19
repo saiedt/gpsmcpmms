@@ -192,8 +192,8 @@ button.toggled:hover:not(:disabled) { background: var(--accent-soft); }
 /* Asking again, beside the sentence it refreshes -- quiet, because it reports
    rather than acts, and nothing is lost by never pressing it. */
 .lang-panel .lang-refresh {
-  padding: 0 6px; border: none; background: none;
-  color: var(--muted); font-size: 15px;
+  margin-left: 6px; padding: 0 5px; border: none; background: none;
+  color: var(--muted); font-size: 15px; vertical-align: middle;
 }
 .lang-panel .lang-refresh:hover:not(:disabled) {
   background: var(--accent-soft); color: var(--text);
