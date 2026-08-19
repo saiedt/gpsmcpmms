@@ -198,6 +198,17 @@ class ConfigManager:
         # never said whether you were about to add or to improve, and the
         # panel looked identical either way.
         "Add new translation", "Edit existing translation",
+        # The panel opens with how things stand, and closes by a button of its
+        # own. Both are here rather than beside the language selector because
+        # only an admin ever sees this panel, and nobody else could act on
+        # either: the place decides the visibility, so no rule has to.
+        "All {n} translations are complete.",
+        "{n} translations; still incomplete: {langs}.",
+        # An entry nothing registers any more is offered to a translator as
+        # work. The device has always known which they are; until now it kept
+        # the answer to itself.
+        "Entries nothing uses any more: {langs}.",
+        "Close",
         "New language", "Language code", "Language name", "Editing",
         "Translating the source keys, with up to 3 languages as further "
             "context (please choose):",
@@ -2200,6 +2211,27 @@ class ConfigManager:
                     info["orphans"] = {
                         lang: self._orphan_keys_of(lang_dict)
                         for lang, lang_dict in self._lang_cache.items()
+                    }
+                    # How far each language has got. Counted here rather than
+                    # through translation_status(): that takes this same lock,
+                    # which is not reentrant.
+                    #
+                    # Only for an admin, and that is the whole visibility rule
+                    # -- a reader who may not upload a dictionary can do
+                    # nothing with the answer, so it travels only to the panel
+                    # where translations are managed.
+                    active = set(self._active_xlation_keys)
+                    info["coverage"] = {
+                        "total": len(active),
+                        # DECL_LANG is complete by construction, having no
+                        # dictionary to be counted in; see translation_status().
+                        "done": {
+                            lang: (len(active) if lang == self.DECL_LANG else
+                                   sum(1 for k in active
+                                       if isinstance(lang_dict.get(k), str)
+                                       and lang_dict[k]))
+                            for lang, lang_dict in self._lang_cache.items()
+                        },
                     }
             return jsonify(info)
 

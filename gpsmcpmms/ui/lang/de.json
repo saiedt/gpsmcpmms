@@ -1,6 +1,7 @@
 {
     "Add new translation": "Neue Übersetzung hinzufügen",
     "Administrator password for unlocking protected parameters.": "Administrator-Passwort zum Freischalten geschützter Parameter.",
+    "All {n} translations are complete.": "Alle {n} Übersetzungen sind vollständig.",
     "Alternatively, without an admin password: renewed access after {time}.": "Alternativ, ohne Admin-Passwort: Erneuter Zugriff nach {time} Uhr.",
     "Apply": "Anwenden",
     "Apply failed": "Übernehmen fehlgeschlagen",
@@ -9,6 +10,7 @@
     "Check": "Prüfen",
     "Check failed": "Prüfung fehlgeschlagen",
     "Choose file": "Datei auswählen",
+    "Close": "Schließen",
     "Configuration Editor": "Konfigurationseditor",
     "Configuration service": "Konfigurationsdienst",
     "Does not exist yet, can be created": "Noch nicht vorhanden, kann angelegt werden",
@@ -16,6 +18,7 @@
     "Edit existing translation": "Vorhandene Übersetzung bearbeiten",
     "Editing": "Bearbeitung von",
     "End session": "Sitzung beenden",
+    "Entries nothing uses any more: {langs}.": "Einträge, die nirgends mehr verwendet werden: {langs}.",
     "Exit admin mode": "Admin-Modus verlassen",
     "File exists": "Datei vorhanden",
     "File name not allowed": "Dateiname nicht zulässig",
@@ -75,5 +78,6 @@
     "no response to ping": "keine Antwort auf Ping",
     "then": "dann",
     "translated": "übersetzt",
-    "{app} Configuration Editor": "{app} Konfigurationseditor"
+    "{app} Configuration Editor": "{app} Konfigurationseditor",
+    "{n} translations; still incomplete: {langs}.": "{n} Übersetzungen; noch unvollständig: {langs}."
 }

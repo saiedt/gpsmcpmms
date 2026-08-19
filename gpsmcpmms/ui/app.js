@@ -46,6 +46,8 @@ const S = {
     langNames: {},           // code -> name; the app's list, or endonyms
     langPanel: null,         // null | "new" | "edit"
     langForm: {},            // what the open panel has been told so far
+    coverage: null,          // {total, done:{lang:n}}; admins only
+    orphans: null,           // lang -> keys nothing registers; admins only
     edit: {},                // moduleId -> working value (deep copy)
     dirty: {},               // moduleId -> bool
     adopted: {},             // moduleId -> Set of likely_val fields filled in
@@ -1389,11 +1391,59 @@ async function uploadTranslation(file, remove, code, name) {
    conflating the two would mean improving the Turkish translation only while
    reading the whole editor in Turkish -- which is precisely backwards for the
    normal case, somebody polishing a language they do not speak. */
+/* How the translations stand, as the panel's opening line.
+
+   It lives in here and nowhere else, for the reason that decides its
+   visibility: a reader who may not upload a dictionary can do nothing with
+   the answer. This panel is the one place only an admin ever sees, so putting
+   the report here needs no rule about who may look -- the place is the rule.
+
+   The numbers come from /api/lang/info, which withholds them from everybody
+   else. The source language is left out of both the count and the list: it has
+   no dictionary and is complete by construction, so naming it would only
+   invite the question why it never moves. */
+function langStatusNodes() {
+    const cov = S.coverage;
+    if (!cov || !cov.total || !cov.done) return [];
+    const langs = Object.keys(cov.done).filter(l => l !== S.sourceLang);
+    const byName = (a, b) => langName(a).localeCompare(langName(b));
+    const short = langs.filter(l => cov.done[l] < cov.total).sort(byName)
+                       .map(l => `${langName(l)} (${cov.done[l]}/${cov.total})`);
+    const out = [el("span", {}, short.length
+        ? xl("{n} translations; still incomplete: {langs}.")
+              .replace("{n}", langs.length).replace("{langs}", short.join(", "))
+        : xl("All {n} translations are complete.")
+              .replace("{n}", langs.length))];
+
+    // Orphans were computed and sent for a long time without anybody rendering
+    // them. They belong in the same sentence-place: an entry nothing uses any
+    // more is offered to a translator as work, and only an admin can clear it.
+    const stale = Object.keys(S.orphans || {})
+        .filter(l => (S.orphans[l] || []).length).sort(byName)
+        .map(l => `${langName(l)} (${S.orphans[l].length})`);
+    if (stale.length)
+        out.push(el("span", {class: "hint-inline"},
+            xl("Entries nothing uses any more: {langs}.")
+                .replace("{langs}", stale.join(", "))));
+    return out;
+}
+
 function renderLangPanel(mode) {
     // everything except the source language: translating it into itself is
     // the one row nobody can fill in
     const active = S.languages.filter(l => l !== S.sourceLang);
     const st = S.langForm || (S.langForm = {});
+
+    // row 0 -- the standing of things, and the way out. The panel could always
+    // be closed by pressing the button that opened it again, but nothing said
+    // so: that button reads as a command and merely turns blue, and inside the
+    // panel there was no exit at all.
+    const row0 = el("div", {class: "lang-panel-row"},
+        ...langStatusNodes(),
+        el("span", {class: "spacer"}),
+        el("button", {class: "small", type: "button",
+                      onclick: () => { S.langPanel = null; renderAll(); }},
+           xl("Close")));
 
     // row 1 -- the only row that differs between the two panels
     let row1, targetOf;
@@ -1496,7 +1546,8 @@ function renderLangPanel(mode) {
                               mode === "new" ? (st.newName || "").trim() : null);
         }}, xl("Upload the selected CSV")));
 
-    const panel = el("div", {class: "lang-panel"}, row1, row1b, row2, row3);
+    const panel = el("div", {class: "lang-panel"},
+                     row0, row1, row1b, row2, row3);
     limit();
     return panel;
 }
@@ -1519,9 +1570,15 @@ function renderAll() {
     langSel.value = S.languages.includes(S.lang) ? S.lang : S.sourceLang;
     general.append(el("span", {}, xl("Language") + ":"), langSel);
     if (S.admin) {
-        const toggle = (mode) => {
+        const toggle = async (mode) => {
             S.langPanel = S.langPanel === mode ? null : mode;
             S.langForm = {};              // a fresh panel starts empty
+            // Asked for again on the way in, for two reasons: the standing of
+            // the translations is only sent to an admin, so the answer fetched
+            // at start-up carries none of it -- and a report about how things
+            // stand should be true at the moment somebody looks, not at the
+            // moment the page was loaded.
+            if (S.langPanel) await loadLangList();
             renderAll();
         };
         // adding comes first: it is the rarer and the more consequential of
@@ -1602,6 +1659,10 @@ async function loadLangList() {
     if (r.data && typeof r.data.app_title === "string")
         S.appTitle = r.data.app_title;
     if (r.data && r.data.options) S.langNames = r.data.options;
+    // Both are admin-only at the source and simply absent for anybody else,
+    // which is what keeps the panel's report out of reach without a rule here.
+    S.coverage = (r.data && r.data.coverage) || null;
+    S.orphans = (r.data && r.data.orphans) || null;
     // The browser may name a language no dictionary here covers. What would
     // show then are the keys themselves -- readable, but the dropdown would
     // stand on something that does not appear in it.
