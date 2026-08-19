@@ -153,6 +153,16 @@ button:disabled { opacity: .45; cursor: default; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button.primary:hover:not(:disabled) { background: #185d9a; }
 button.small { padding: 3px 9px; font-size: 13px; }
+/* A switch that is currently on. Deliberately not the accent: inside the
+   translation panel that same blue sits on "Download CSV", where it means
+   "do this" -- and a button meaning "this is showing" must not look like a
+   button meaning "press me". So: pressed rather than coloured, sunk into the
+   page's own ground, with the accent kept to the outline. */
+button.toggled {
+  background: var(--bg); border-color: var(--accent); font-weight: 600;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, .18);
+}
+button.toggled:hover:not(:disabled) { background: var(--accent-soft); }
 
 .save-row { margin-top: 10px; text-align: right; }
 

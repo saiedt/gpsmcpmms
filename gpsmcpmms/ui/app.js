@@ -1583,13 +1583,20 @@ function renderAll() {
         };
         // adding comes first: it is the rarer and the more consequential of
         // the two, and putting it second invites reaching for it by mistake
+        //
+        // Both are switches, and they say so twice: 'toggled' draws them
+        // pressed rather than accented -- the accent on this same panel means
+        // "do this", on "Download CSV" -- and aria-pressed says the same to a
+        // reader who cannot see either.
+        const switchAttrs = (mode) => ({
+            class: "small" + (S.langPanel === mode ? " toggled" : ""),
+            "aria-pressed": S.langPanel === mode ? "true" : "false",
+        });
         general.append(
-            el("button", {class: "small" + (S.langPanel === "new"
-                                                ? " primary" : ""),
+            el("button", {...switchAttrs("new"),
                           onclick: () => toggle("new")},
                xl("Add new translation")),
-            el("button", {class: "small" + (S.langPanel === "edit"
-                                                ? " primary" : ""),
+            el("button", {...switchAttrs("edit"),
                           disabled: S.languages.length < 2 ? "" : null,
                           title: S.languages.length < 2
                                      ? xl("No translation exists yet")
