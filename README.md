@@ -383,11 +383,11 @@ string, in the library and in every host — and at that moment every existing
 dictionary is dead, because a dictionary's keys are the old strings. There is
 no re-keying path in the code; nothing migrates a dictionary when the constant moves.
 
-The DECL_LANG (English) and the set of dictionaries `ui_dir/lang/<code>.json`
+The `DECL_LANG` (English) and the set of dictionaries `ui_dir/lang/<code>.json`
 determine the set of languages offered. The config-editor
 has a mechanism for adding new dictionaries. Applications can intervene to
 **qualify or disqualify a language** from being offered or added in two ways
-(DECL_LANG — English — is automatically always qualified):
+(`DECL_LANG` — English — is automatically always qualified):
 
 1. **An allow-list**, `{code: endonym}`, seeded into **`ui_dir/languages.json`**
    may declare the deployment's upper bound with two effects: a) shipped dictionaries
@@ -471,9 +471,11 @@ a human or an AI):
    - `speech` (read aloud — abbreviations and punctuation are heard, not seen) and
    - `ui` (the editor's own chrome).
    
-   A string can be several at once and then says so: a service name shown in a list *and* spoken in an
-   announcement reads `label, speech`. Everything but `speech` derives itself
-   from the Declaration the string came from; it is the responsibility of the host to announce `speech` with
+   A string can be several at once; e.g., the `kind` of a wording shown in a list
+   *and* spoken in an announcement reads `label, speech`.
+   
+   Everything but `speech` derives itself from the Declaration the string came from;
+   it is the responsibility of the host to announce `speech` with
    `note_xlation_keys(*keys, kind="speech")`, as nothing in GPSMCPMMS could know that.
 
    The reference languages may help to resolve ambiguity in English wording,
@@ -488,16 +490,16 @@ a human or an AI):
 
 Not every display string is written by the host. A module may take them from
 elsewhere — the categories of a remote catalogue, the fields of a foreign
-schema — and such a string arrives in whatever language its source speaks.
+schema — and such a string arrives in whatever language its source speaks,
+probably different from the `DECL_LANG` of this library (English).
 
-Registering it as it stands would make a key in that language, which is the one
-thing this library cannot represent: the completeness count would call it
-translated for a language it is merely *written* in, a reader of `DECL_LANG`
-would be shown a word from another language, and nothing in the template would
-say which row is which. So the module settles on a `DECL_LANG` wording and notes
-that as the key — and then supplies the original as a translation, because the
-original is better than anything derived back out of the wording that replaced
-it:
+Registering a non-English wording as it stands would make a key in that language,
+leading to mixed languages in the key set, which is the one thing this library
+cannot represent: e.g., nothing in the CSV template would say which row is which.
+So the module has to settle on a `DECL_LANG` (English) wording and tell the library
+to note that as the key; the module may then supply the original as a translation,
+because the original is better than anything derived back out of the wording that
+replaced it:
 
 ```python
 config_mgr.note_xlation_keys("Companionship", "Transport services",
@@ -511,8 +513,8 @@ config_mgr.add_original_xlations("de", {
 Two calls, because they are two things: the first decides what the software
 uses, the second fills a dictionary. `add_original_xlations()` works for any
 registered key, including one that came from a Declaration. After the above two statements, the keys are
-ordinary `DECL_LANG` keys — they appear in every template, are translated like
-anything else, and the German reading is there from the start.
+ordinary `DECL_LANG` keys — they appear in every template (hence can be translated like
+anything else) and the original reading (in this example, German) is there from the start.
 
 Three rules hold, and each has a reason:
 
