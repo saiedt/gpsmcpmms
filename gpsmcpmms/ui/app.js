@@ -1446,11 +1446,26 @@ function renderLangPanel(mode) {
                                                   renderAll(); }},
                       "×");
 
-    // row 0 -- how the translations stand. Left out where there is nothing to
-    // report, so that an empty line never pushes the panel open by itself.
+    // row 0 -- how the translations stand, with a way to ask again.
+    //
+    // The asking is not decoration. It would be, if an upload were the only
+    // thing that moved these numbers -- an upload refreshes them by itself.
+    // But translate() notes a key on the way past, every time, and
+    // note_xlation_keys() is open to the application at any moment: a string
+    // first spoken or first shown while this panel stands open raises the
+    // total, and every language's standing drops with it, silently. Nothing
+    // downstream is harmed, because a template is always cut from the key set
+    // as it is at that second -- but the line would be reporting a past.
+    //
+    // Left out entirely where there is nothing to report, so that an empty
+    // line never pushes the panel open by itself.
     const status = langStatusNodes();
-    const row0 = status.length ? el("div", {class: "lang-panel-row"}, ...status)
-                               : null;
+    const row0 = status.length ? el("div", {class: "lang-panel-row"}, ...status,
+        el("button", {class: "small lang-refresh", type: "button",
+                      title: xl("Reload"), "aria-label": xl("Reload"),
+                      onclick: async () => { await loadLangList();
+                                             renderAll(); }},
+           "↻")) : null;
 
     // row 1 -- the only row that differs between the two panels
     let row1, targetOf;

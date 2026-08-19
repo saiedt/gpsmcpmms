@@ -189,6 +189,15 @@ button.toggled:hover:not(:disabled) { background: var(--accent-soft); }
 .lang-panel .panel-close:hover:not(:disabled) {
   background: var(--accent-soft); color: var(--text);
 }
+/* Asking again, beside the sentence it refreshes -- quiet, because it reports
+   rather than acts, and nothing is lost by never pressing it. */
+.lang-panel .lang-refresh {
+  padding: 0 6px; border: none; background: none;
+  color: var(--muted); font-size: 15px;
+}
+.lang-panel .lang-refresh:hover:not(:disabled) {
+  background: var(--accent-soft); color: var(--text);
+}
 .lang-panel .lang-code { width: 60px; }
 .lang-panel .ref-box { display: inline-flex; align-items: center; gap: 3px; }
 .lang-panel .sep { color: var(--line); margin: 0 4px; }
