@@ -132,12 +132,10 @@ class ConfigManager:
     WEB_ASSETS = ("index.html", "style.css", "app.js")
     ASSET_STAMP = ".staged.json"
     # column separator of the translation CSVs: a pipe is chosen because it is
-    # very unlikely to occur inside a German key or a translation, so cells
+    # very unlikely to occur inside a key or a translation, so cells
     # never need quoting and no delimiter collision can arise
     CSV_DELIMITER = "|"
 
-    # German display strings internal to config.py and its editor; they act
-    # as keys into the translation dictionaries (spec 4.3)
     # The editor's own display strings, in the language this library is written
     # in. They are keys like any other, so a deployment that wants the editor in
     # German takes it from the shipped de.json -- see DECL_LANG.
@@ -224,8 +222,8 @@ class ConfigManager:
         "As of", "Refresh",
     )
 
-    # Declaration keys whose string values are German display strings and
-    # hence translation keys
+    # Declaration keys whose string values are display strings in DECL_LANG
+    # and hence translation keys
     XLATION_DECL_KEYS = (
         "acquire_button", "hint", "label", "placeholder", "test_func_msg",
         "tooltip"
@@ -1292,7 +1290,7 @@ class ConfigManager:
         if not (isinstance(lang, str) and re.fullmatch(r"[a-z]{2,3}", lang)):
             return "invalid_lang"
         # an empty dict is allowed: it just means "all entries fall back to
-        # German" -- a language may legitimately be only partially translated
+        # DECL_LANG" -- a language may legitimately be only partially translated
         if not (isinstance(lang_dict, dict) and all(
                     isinstance(k, str) and isinstance(v, str)
                     for k, v in lang_dict.items()
@@ -1333,8 +1331,8 @@ class ConfigManager:
         return None
 
     # ------------------------------------------------------------------
-    # CSV round-trip for translations (spec 4.5): a template with the German
-    # source and up to MAX_TEMPLATE_REFS reference columns is downloaded,
+    # CSV round-trip for translations (spec 4.5): a template with the
+    # DECL_LANG source and up to MAX_TEMPLATE_REFS reference columns is downloaded,
     # filled offline (a human or an AI assistant), and uploaded again; the
     # backend answers with the same rows plus a status column.
     # ------------------------------------------------------------------
@@ -1380,7 +1378,8 @@ class ConfigManager:
     def _translation_of(self, lang, key):
         """The stored translation of `key` in `lang`, or "" if there is none.
 
-        An entry that reads like the German is one of them: somebody decided
+        An entry that reads like the source language is one of them: somebody
+        decided
         this string stays as it is -- because the word is the same in both
         languages, or because it is not really a word, like the placeholder
         showing the shape of a phone number.
@@ -1479,14 +1478,14 @@ class ConfigManager:
                         key=first_line.count)
         return list(csv.reader(io.StringIO(text), delimiter=delimiter))
 
-    def _apply_lang_csv(self, target, raw, remove=None):
+    def _apply_lang_csv(self, target, raw):
         """Applies an uploaded translation CSV to `target`. Returns
         (report_bytes, translated, total) on success, or (None, error, None)
         where error is a string tag or a dict for the removal prompt."""
         if not (isinstance(target, str) and re.fullmatch(r"[a-z]{2,3}", target)):
             return None, "invalid_lang", None
         if target == self.DECL_LANG:
-            return None, "cannot_edit_de", None
+            return None, "cannot_edit_source_lang", None
         if raw[:4] == b"PK\x03\x04":
             # an .xlsx/.ods workbook (a ZIP), not a text CSV
             return None, "not_a_csv_file", None
@@ -1543,7 +1542,8 @@ class ConfigManager:
         # the uploaded rows edit only the keys they contain: a non-empty cell
         # sets a translation, a blank cell clears one; keys absent from the
         # file keep whatever translation they already had.
-        # A cell repeating the German is a translation like any other, and the
+        # A cell repeating the source language is a translation like any other,
+        # and the
         # only way to say "this one stays as it is" -- refusing it left every
         # such string looking untranslated for ever.
         for key, value in uploaded.items():
@@ -2297,7 +2297,6 @@ class ConfigManager:
                 return jsonify({"error": "admin_required"}), 403
             upload = request.files.get("file")
             target = (request.form.get("lang") or "").strip().lower()
-            remove = (request.form.get("remove") or "").strip().lower() or None
             name = (request.form.get("name") or "").strip()
             if upload is None or not target:
                 abort(400)
@@ -2312,10 +2311,8 @@ class ConfigManager:
             if not exists and not name:
                 return jsonify({"error": "name_required"}), 400
             report, result, total = self._apply_lang_csv(
-                    target, upload.read(), remove)
+                    target, upload.read())
             if report is None:
-                if isinstance(result, dict):
-                    return jsonify(result), 409     # removal choice required
                 return jsonify({"error": result}), 400
             # Recorded after the rows are applied, and only if they were. The
             # name now lives inside the dictionary it names, so there is

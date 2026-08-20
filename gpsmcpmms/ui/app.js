@@ -535,7 +535,7 @@ function acquireButton(node, input, commit) {
         } else if (data && data.timeout) {
             msg(xl("Timeout"), "error");
         } else {
-            // the device answers refusals with the German key, so that the
+            // the device answers refusals with the DECL_LANG key, so that the
             // session's own language decides how they read
             msg(data && data.error ? xl(data.error)
                                    : xl("No answer from the device."),
@@ -1304,7 +1304,7 @@ async function switchLanguage(lang) {
 }
 
 /* Translations are managed by a CSV round-trip (spec 4.5): download a
- * template (German source + chosen reference columns + the target column),
+ * template (DECL_LANG source + chosen reference columns + the target column),
  * fill it offline -- a human or an AI assistant -- and upload it again; the
  * backend answers with a report file. The slow work happens off-session, so
  * nothing can be lost to a token timeout. */
@@ -1342,7 +1342,7 @@ function targetFromFileName(file) {
     return /^[a-z]{2,3}$/.test(stem) ? stem.toLowerCase() : null;
 }
 
-async function uploadTranslation(file, remove, code, name) {
+async function uploadTranslation(file, code, name) {
     // The panel knows which language this is -- the target was chosen or
     // typed before the template was even downloaded. Guessing it from the
     // file name is only the fallback for a file that arrived another way.
@@ -1358,7 +1358,6 @@ async function uploadTranslation(file, remove, code, name) {
     fd.append("file", file);
     fd.append("lang", target);
     if (S.token) fd.append("token", S.token);
-    if (remove) fd.append("remove", remove);
     // a language nobody can name would show up in every dropdown as a code
     if (name) fd.append("name", name);
 
@@ -1526,10 +1525,8 @@ function renderLangPanel(mode) {
             el("span", {}, xl("New language") + ":"), pick, code, name);
     }
 
-    const row1b = null, replaceOf = () => null;
-
-    // row 2 -- context languages: everything active except German, and except
-    // the one being worked on
+    // row 2 -- context languages: everything active except the source
+    // language, and except the one being worked on
     const boxes = active.map(l => {
         const cb = el("input", {type: "checkbox", value: l});
         return {l, cb,
@@ -1571,13 +1568,13 @@ function renderLangPanel(mode) {
         el("span", {}, xl("finally")),
         el("button", {class: "small", type: "button", onclick: () => {
             if (!picker.files.length) return;
-            uploadTranslation(picker.files[0], replaceOf(),
+            uploadTranslation(picker.files[0],
                               mode === "new" ? targetOf() : null,
                               mode === "new" ? (st.newName || "").trim() : null);
         }}, xl("Upload the selected CSV")));
 
     const panel = el("div", {class: "lang-panel"},
-                     closeX, row0, row1, row1b, row2, row3);
+                     closeX, row0, row1, row2, row3);
     limit();
     return panel;
 }

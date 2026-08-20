@@ -1167,8 +1167,8 @@ class CvvNode:
 
     @classmethod
     def get_hint(cls, holder, path):
-        """The hint declared for the node at `path` -- a German sentence, or
-        the name of the provider that produces one."""
+        """The hint declared for the node at `path` -- a sentence in DECL_LANG,
+        or the name of the provider that produces one."""
         node = cls._get_single_node(holder, path)
         return node._ui_props.get("hint") if node is not None else None
 
