@@ -128,19 +128,17 @@ config_mgr.register_params(
 **Value priority** (highest wins): `fixed_val` → saved user input → `default_val`
 → *no value* (`None`).
 
-Other API methods:
+Core API methods of config_mgr disposed to client modules:
 
 | Method | Purpose |
 |--------|---------|
-| `query(path)` | Returns a map with items `{absolute_path: value}` for the nodes the path matches (module-rooted; wildcards allowed). |
 | `config_ready(path=None)` | Returns `True` if no *relevant* leaf under the match is still unset. `None`/`""`/`"*"` = whole tree. Skips empty min-0 lists and fields whose relevance condition is false. |
-| `protected_params_ready()` | Like `config_ready`, restricted to `protected` parameters. |
-| `handle_value_event(value, alt_target_paths)` | Deliver a backend-captured value to a waiting editor; `True` if one took it (see 4.9.3). |
-| `note_xlation_keys(*keys, kind=None)` | Register display strings a module only uses at runtime, so they reach the translation templates. `kind` says what they are — pass `"speech"` for anything read aloud, which nothing else could tell a translator. |
-| `add_original_xlations(xlation_lang, xlations)` | Supply translations for keys already noted, taken from where their wording came: `xlations` maps each key to its reading in `xlation_lang`. Never overwrites, never invents a language, refuses unregistered keys. See [Strings that arrive in another language](#strings-that-arrive-in-another-language). |
-| `translate(key, lang)` | Returns the `lang` rendering of such a string, falling back to the key itself. Accepts `de` or `de-DE`. |
-| `set_app_context(logger, title="")` | Tell the library which application it serves: its logger (once per run), and what it is called. The title prefaces the editor's heading and browser tab — `MyApp Configuration Editor` — and left out, the editor is simply the `Configuration Editor`. |
 | `discard_module(module_id)` | The module has no parameters any more: the declaration is dropped and everything persisted for it is deleted. See [Giving up a module's parameters](#giving-up-a-modules-parameters). |
+| `handle_value_event(value, alt_target_paths)` | Deliver a backend-captured value to a waiting editor; `True` if one took it (see 4.9.3). |
+| `query(path)` | Returns a map with items `{absolute_path: value}` for the nodes the path matches (module-rooted; wildcards allowed). |
+| `protected_params_ready()` | Like `config_ready`, restricted to `protected` parameters. |
+| `register_params(...)` | See [Registering parameters](#registering-parameters) above. |
+| `set_app_context(logger, title="")` | Tell the library which application it serves: its logger (once per run), and what it is called. The title prefaces the editor's heading and browser tab — `MyApp Configuration Editor` — and left out, the editor is simply the `Configuration Editor`. |
 
 ---
 
@@ -363,6 +361,18 @@ label:
 ---
 
 ## Multi-linguality
+
+| Method | Purpose |
+|--------|---------|
+| `add_original_xlations(xlation_lang, xlations)` | Supply translations for keys already noted, taken from where their wording came: `xlations` maps each key to its reading in `xlation_lang`. Never overwrites, never invents a language, refuses unregistered keys. See [Strings that arrive in another language](#strings-that-arrive-in-another-language). |
+| `language_name(lang)` | What to call a language on screen. Three places, and the first answer is the answer: the application's `languages.json`, then the dictionary's own `lang_name`, then `DECL_LANG_NAME`. The bare code is the fourth answer and an honest one — it means nobody has said what this language is called. |
+| `language_options()` | The languages the application permits, as `{code: endonym}`, or `None` where it permits any. Not the ones this deployment *has* — that is `supported_languages()`. |
+| `note_xlation_keys(*keys, kind=None)` | Register display strings a module only uses at runtime, so they reach the translation templates. `kind` says what they are — pass `"speech"` for anything read aloud, which nothing else could tell a translator. |
+| `protected_langs()` | The languages that cannot be discarded: `DECL_LANG`, and nothing else. Every key is written in it and every dictionary against it, so a deployment without it has no source to translate from. |
+| `set_language_name(lang, name)` | Record what a language calls itself, into that language's dictionary under a reserved key, written through at once; `True` where it took. Anyone adding a language this release has no name for has to say what it is called: the editor shows names and never codes. |
+| `supported_languages()` | The languages this deployment can be read in, sorted. Where the application ships `ui_dir/languages.json`, that list narrows what the dictionaries offer; where it does not, every dictionary counts. `DECL_LANG` is always among them, with or without a dictionary. A host that addresses its users in one of these has to offer exactly this set and no more — offer a language the dictionaries do not cover and `translate()` falls back to the key without saying so. |
+| `translate(key, lang)` | Returns the `lang` rendering of such a string, falling back to the key itself. Accepts `de` or `de-DE`. |
+| `translation_status(lang, keys=None)` | How far a language has got, as `(done, total)`. `keys` narrows the question to a subset, which is what makes the answer useful to a host: "are the service names translated" is a different question from "is anything left to translate", and only the host knows which strings are its service names. An entry counts as soon as it exists, whatever it says — absence is what "untranslated" looks like. `DECL_LANG` is complete by construction. |
 
 A display string **is** its own translation key: the `label`/`tooltip`/
 `placeholder` text as written. Dictionaries live at `ui_dir/lang/<code>.json`;
