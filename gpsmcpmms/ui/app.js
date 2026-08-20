@@ -307,7 +307,7 @@ function hintFor(node, ctx) {
 /* Choosing a file does not transfer it. It joins the options and gets
    selected, and nothing leaves the browser until the module is saved -- so a
    file parameter behaves like every other field, where nothing is committed
-   until Save and "Rückgängig" really does undo. Sending it at once also wrote
+   until Save and Undo really does undo. Sending it at once also wrote
    to the device on the strength of a click that the user might never confirm. */
 function pendingFilesFor(path) {
     return S.pendingFiles[path] || (S.pendingFiles[path] = []);

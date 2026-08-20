@@ -1990,10 +1990,13 @@ class ConfigManager:
                 self._capture_waiters[path] = waiter
             if event.wait(self.CAPTURE_TIMEOUT):
                 if waiter["error"]:
-                    # the German key itself: the editor runs it through its
-                    # own translation, which is where the session's language
-                    # is known
-                    return jsonify({"error": "Wert bereits vergeben"}), 409
+                    # The key itself, not a sentence: the editor runs it
+                    # through its own translation, which is where the
+                    # session's language is known. It stood here in German
+                    # until the key set moved to English, and then matched no
+                    # key at all -- so an English reader was answered in
+                    # German, by a library that had already been translated.
+                    return jsonify({"error": "Value already taken"}), 409
                 return jsonify({"value": waiter["value"]})
             with self._lock:
                 if self._capture_waiters.get(path) is waiter:

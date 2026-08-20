@@ -242,9 +242,9 @@ button.toggled:hover:not(:disabled) { background: var(--accent-soft); }
   max-width: 480px; padding: 18px; box-shadow: 0 8px 30px rgba(0,0,0,.25);
 }
 #modal-root .modal p { margin: 0 0 12px; }
-/* Der Ausgang eines Tests, in derselben Sprache wie die Meldungen über dem
-   Formular: derselbe Kasten, dieselben zwei Farben. Der Satz allein trüge die
-   Aussage auch — aber ob jemand überhaupt hinsieht, entscheidet die Farbe. */
+/* How a test came out, speaking the same visual language as the messages
+   above the form: same box, same two colours. The sentence alone would carry
+   the meaning -- but whether anybody looks at all is decided by the colour. */
 #modal-root .modal p.outcome {
   padding: 6px 10px; border-radius: var(--radius);
 }
@@ -260,8 +260,8 @@ button.toggled:hover:not(:disabled) { background: var(--accent-soft); }
 #modal-root .modal.busy p { margin: 0; animation: busy-pulse 1.2s ease-in-out infinite; }
 @keyframes busy-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
 
-/* Der technische Grund unter einem gescheiterten Test: kleiner und blasser,
-   denn er ist für die Fehlersuche da und nicht für die Person am Gerät. */
+/* The technical reason under a failed test: smaller and paler, because it is
+   there for fault-finding and not for the person standing at the device. */
 #modal-root .modal p.detail {
   font-size: 0.85em; color: var(--muted); word-break: break-word;
 }
