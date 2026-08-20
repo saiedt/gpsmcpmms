@@ -652,18 +652,21 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /api/cvv_data[?passwd=…]` | Tree dump; issues/refreshes the session token; strips protected subtrees unless unlocked. |
-| `POST /api/config/update` | Apply `{module, value}`; returns `{rejected: […]}`. |
-| `GET /api/schema[/<lang>]` | Translation dictionary for a language (defaults to `de`). |
-| `GET /api/lang/info` | Language list (plus orphan keys for admins). |
-| `GET /api/lang/template?lang=&refs=` | Download a translation template (admin): the protected languages, `kind`, chosen references, then the target column. |
-| `POST /api/lang/upload` | Upload a filled translation CSV (admin); returns the report, or `409` asking which language to replace. |
 | `GET /api/config/enum-options?path=[&arg=]` | Resolve a dynamic enum's options; `arg` is the JSON-encoded value of the `values_for` sibling. |
-| `GET /api/value/capture?path=` | Long-poll (≤ 30 s) for a backend-captured value. |
-| `POST /api/config/test` | Run the `test_func` for `{path, value}`. |
+| `POST /api/config/file` | Upload a file for a parameter of type `file` (multipart: `path`, `file`); stores it in the host's `file_dir` and sets the parameter to its name. |
+| `GET /api/config/hint?path=[&lang=]` | The current text of a provider-backed `hint`, with the moment it was established. The stamp is the point: a hint asserts something about the present, and an undated assertion goes on claiming it. |
 | `POST /api/config/probe` | Verify `{path, value}` on the device; only for `path`/`pingable` params. |
-| `POST /api/session/takeover` | Take the editing session from its holder, on proof of `ui_passwd`. |
+| `POST /api/config/test` | Run the `test_func` for `{path, value}`. |
+| `POST /api/config/update` | Apply `{module, value}`; returns `{rejected: […]}` referring by path to config elements not updated. |
+| `GET /api/cvv_data[?passwd=…]` | Retrieves the whole content to be merged by app.js into index.html while using style.css in order to render the editor in a browser; issues/refreshes the session token; strips protected subtrees unless unlocked by valid password. |
 | `POST /api/end_session` | Release the editing token. |
+| `GET /api/lang/info` | Which languages exist here, what they are called, whether an allow-list bounds them, and the application's name. For admins additionally the orphan keys and how far each language is translated. |
+| `GET /api/lang/template?lang=&refs=` | Download a translation template (admin): the source language (en), `kind`, chosen reference languages, then the target language. |
+| `POST /api/lang/update` | Replace a dictionary wholesale (admin): `{lang, dict, replace?}`. `replace` renames — the old code's dictionary is dropped. |
+| `POST /api/lang/upload` | Upload a filled translation CSV (admin); returns the report. |
+| `GET /api/schema[/<lang>]` | Translation dictionary for a language (defaults to `en`). |
+| `POST /api/session/takeover` | Take the editing session from its holder, on proof of `ui_passwd`. |
+| `GET /api/value/capture?path=` | Long-poll (≤ 30 s) for a backend-captured value. |
 
 ---
 
@@ -693,7 +696,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   language, reload, and only then see the voices that speak it.
 
   It is not a condition — no operator, no value — and it is not `relevance`,
-  which decides whether a field is on screen at all. A field may carry both,
+  which decides whether a field is on screen at all. A field may carry both `values_for` and `relevance`,
   naming different siblings. `register_params` refuses at startup if the named
   sibling is not in the same dict, if it is the field itself, if the field is not
   a dynamic enum, or if the provider does not take an argument.
@@ -718,7 +721,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   ```python
   "card_uids": {
       "distinct_values": [["abort_card_uid", "reboot_card_uid",
-                         "h4h_sr_cards.*.rfid"]],
+                         "service_cards.*.rfid"]],
       …
   }
   ```
@@ -735,7 +738,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 
   *Test* and *Check* are two different buttons, and the difference is who is
   responsible. **Test is declared**: only the host knows that a voice can be
-  heard or a number dialled, so without `test_func` there is no button, and
+  heard or a number dialed, so without `test_func` there is no button, and
   pressing it *does* something — it speaks, it rings, it lights up. **Check is
   not declared.** It belongs to validation, which is the editor's own work, and
   it appears by itself wherever validation cannot be finished in the browser.
@@ -772,7 +775,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   |---------|---------|--------|
   | `reachable` / `file` / `directory` | it is there | accepted |
   | `silent` | the host resolves but does not answer | accepted, reported |
-  | `creatable` | the path is absent, its parent folder is not | accepted, reported |
+  | `creatable` | the path is absent, its parent folder exists | accepted, reported |
   | `unresolvable` | the name resolves to nothing | **field marked, save refused** |
   | `missing` | not even the parent folder exists | **field marked, save refused** |
 
@@ -807,7 +810,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 
   ```python
   "ring_tone": {"label": "Ring tone", "type": "file",
-                "file_dir": "/etc/freeswitch/audio",
+                "file_dir": "/opt/sip/audio",
                 "bound_to": r".+\.wav",          # fullmatch, not a suffix search
                 "values": "get_ring_tone_list"}
   ```
