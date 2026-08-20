@@ -36,11 +36,11 @@ pip install .          # from a checkout of this repo (Python 3.10+; pulls in Fl
 > the commit. If an update in the repository leaves the version number unchanged,
 > a deployment over git reads the metadata and then quietly does nothing, leaving
 > the old code in place and no error to notice.
-> 
+>
 > To reinstall the same version on purpose, use `--force-reinstall --no-deps`.
-> 
-> Good to know for contributors: The version lives in `gpsmcpmms/__init__.py`;
-> `pyproject.toml` reads it from there, so there is one place to change. 
+>
+> Good to know for contributors: the version lives in `gpsmcpmms/__init__.py`;
+> `pyproject.toml` reads it from there, so there is one place to change.
 
 Register a parameter and launch the editor:
 
@@ -145,7 +145,7 @@ config_mgr.register_params(
 **Value priority** (highest wins): `fixed_val` → saved user input → `default_val`
 → *no value* (`None`).
 
-Core API methods of `config_mgr` disposed to client modules:
+Core API methods of `config_mgr` available to client modules:
 
 | Method | Purpose |
 |--------|---------|
@@ -155,7 +155,7 @@ Core API methods of `config_mgr` disposed to client modules:
 | `query(path)` | Returns a map with items `{absolute_path: value}` for the nodes the path matches (module-rooted; wildcards allowed). |
 | `protected_params_ready()` | Like `config_ready`, restricted to `protected` parameters. |
 | `register_params(...)` | See [Registering parameters](#registering-parameters) above. |
-| `set_app_context(logger, title="")` | Tell the library which application it serves: its logger (once per run), and what it is called. The title prefaces the editor's heading and browser tab — `MyApp Configuration Editor` — and left out, the editor is simply the `Configuration Editor`. |
+| `set_app_context(logger, title="")` | Tell the library which application it serves: its logger (once per run), and what it is called. The title prefaces the editor's heading and browser tab — `MyApp Configuration Editor` — and where it is left out, the editor is simply the `Configuration Editor`. |
 
 ---
 
@@ -171,7 +171,7 @@ A Declaration is a dict with any of these keys (`type` is mandatory):
 | `placeholder` | HTML-style placeholder for an input field. |
 | `default_val` | Initial value; may be overwritten by the user. |
 | `fixed_val` | Constant, protected from change. On a dict/list it locks only the structure/length — inner leaves stay editable unless they lock themselves. |
-| `init_only` | Once set (by user or an inherited `fixed_val`), never changes. Only allowed if neither `fixed_val` nor `default_val` is present. |
+| `init_only` | Once set (by a user or an inherited `fixed_val`), never changes. Only allowed if neither `fixed_val` nor `default_val` is present. |
 | `likely_val` | A proposal. Like `default_val`, but the backend does not adopt it: the parameter stays unset, so `config_ready()` stays false until someone confirms it. The editor fills the field in, and saving the module is that confirmation. |
 | `relevance` | `"<sibling><op><value>"`. When false, this parameter is hidden and need not have a value. |
 | `hidden` | Hide from the editor. |
@@ -343,7 +343,7 @@ payload (not a JSON object, unknown module) yields `400`.
 
 ## The config-editor (web UI)
 
-Beside serving as the interface between client modules and the system,
+Besides serving as the interface between client modules and the system,
 `gpsmcpmms/config.py` houses the Flask application backend that exposes the REST
 API summarized further below. The assets `index.html`, `style.css`, `app.js` are
 served from `ui_dir`, into which `start_editor()` stages the packaged copies from
@@ -387,19 +387,20 @@ removed to make room for another. A dictionary file that cannot be read or parse
 is set aside at startup so it cannot stop the editor; that language then falls
 back to the source language until a dictionary is uploaded again.
 
-**Every key in the tree is written in `DECL_LANG`** — by default, English.
-The set of keys is extensible by modules using this library (see [Overview of the Multi-linguality API](#overview-of-the-multi-linguality-api)); the set of keys
-added by client modules is referred to as **host keys**. Host keys must be in
-the same language as the library's own keys (English).
+**Every key in the tree is written in `DECL_LANG`** — by default, English. The
+set of keys is extensible by modules using this library
+(see [Overview of the Multi-linguality API](#overview-of-the-multi-linguality-api));
+the set of keys added by client modules is referred to as **host keys**. Host
+keys must be in the same language as the library's own keys (English).
 
-It is recommended to keep English
-as the `DECL_LANG`, as changing it alone is never harmless. Changing it truthfully means rewriting
-every registered display string in the new language — every label, tooltip,
-placeholder, hint, test_func_msg, acquire_button, and every string passed to `note_xlation_keys()` 
+It is recommended to keep English as the `DECL_LANG`, because changing it alone
+is never harmless. Changing it properly means rewriting every registered display
+string in the new language — every label, tooltip, placeholder, hint,
+test_func_msg, acquire_button, and every string passed to `note_xlation_keys()`
 (see [Overview of the Multi-linguality API](#overview-of-the-multi-linguality-api)),
-in the library and in every host — and at that moment every existing
-dictionary is dead, because a dictionary's keys are the old strings. There is
-no re-keying path in the code; nothing migrates a dictionary when the constant moves.
+in the library and in every host — and at that moment every existing dictionary
+is dead, because a dictionary's keys are the old strings. There is no re-keying
+path in the code; nothing migrates a dictionary when the constant moves.
 
 The `DECL_LANG` (English) and the set of dictionaries `ui_dir/lang/<code>.json`
 determine the set of languages offered. The config-editor
@@ -407,19 +408,19 @@ has a mechanism for adding new dictionaries. Applications can intervene to
 **qualify or disqualify a language** from being offered or added in two ways
 (`DECL_LANG` — English — is always qualified automatically):
 
-1. **An allow-list**, `{code: endonym}`, seeded into **`ui_dir/languages.json`**
+1. **An allow-list**, `{code: endonym}`, shipped as **`ui_dir/languages.json`**
    may declare the deployment's upper bound with two effects: a) shipped dictionaries
    will not be offered if the corresponding language code is not included in this
    file, and b) new dictionaries can only be added for languages whose codes are
    included in this file. There is no such file in releases of GPSMCPMMS itself;
-   it is absolutely a deployment decision due to the host's and its application's
-   constraints. For instance, if the application has a voice interface for
+   it is a deployment decision, driven by the host and its
+   application. For instance, if the application has a voice interface for
    interacting with users, its capability in TTS or Speech Recognition may
    force such an upper bound.
 2. **A validator the host registers** — `set_language_validator(fn)`, where
    `fn(code)` returns whether that language is acceptable. Use this as the dynamic
-   counterpart to the static way of `ui_dir/languages.json`. A validator that raises
-   an error counts as consent: Refusing to qualify a language because a check was
+   counterpart to the static list in `ui_dir/languages.json`. A validator that raises
+   an error counts as consent: refusing to qualify a language because a check was
    itself unavailable is the worse failure.
 
 Both handles govern which languages are **offered**, not which dictionaries are
@@ -437,19 +438,17 @@ If the host does not intervene — i.e., there is no `languages.json` in `ui_dir
 dictionaries for arbitrary languages and all languages with a dictionary in
 `ui_dir/lang/` will be offered in addition to English.
 
-The sources where keys to translate come into life are:
-1. The config-editor's own chrome are displayed to end users and hence may need a
+The sources where keys to translate come into being are:
+1. The config-editor's own chrome is displayed to end users and hence may need a
    translation. These are a fixed set of keys for each release of GPSMCPMMS,
-   certainly static at the load time in each run. And, they are known to
-   the multi-linguality framework per se and hence are automatically recognized
-   as keys.
+   certainly static at the load time in each run. They are known to the multi-linguality framework itself and hence are
+   automatically recognized as keys.
 2. Every registration of parameter declarations by the client modules with the
    `config_mgr` bears wordings, such as labels, tooltips and placeholders, that are
    fed into the config-editor and hence may need a translation. These are also a
    fixed set of keys for each release of the app using GPSMCPMMS, and again
-   certainly static at the load time in each run. And, as part of the contract
-   between `config_mgr` and the client modules, they are also recognized as keys
-   automatically.
+   certainly static at the load time in each run. As part of the contract between `config_mgr` and the client modules, they
+   are also recognized as keys automatically.
 3. Applications may depend on some external sources that may deliver info to
    be communicated with human users. They are not part of the application release
    and are probably fetched at runtime. There are then two issues to be resolved
@@ -458,7 +457,7 @@ The sources where keys to translate come into life are:
      but the application should know. Therefore, there is `note_xlation_keys()` in
      API so that client modules can explicitly add further wordings as keys that
      can be translated into other languages.
-   - The external source may provide the info in another language than English;
+   - The external source may provide the info in a language other than English;
      in that case, the related module has to establish an internal, probably manual
      mechanism for a translation into English first, and then add those English
      translations as keys, as if they were the original wordings. Then, the
@@ -467,7 +466,7 @@ The sources where keys to translate come into life are:
 
 In any case, identical strings from different sources are one key, whoever registered them.
 
-As a matter of fact, `DECL_LANG` is complete by construction, with or without a dictionary: the keys
+`DECL_LANG` is complete by construction, with or without a dictionary: the keys
 are already written in it. For every other language **an absent entry means
 untranslated and any entry counts as translated** — including one that reads exactly like the key, which is
 how a translator records that a string stays as it is. Some words are the same in
@@ -480,7 +479,7 @@ a human or an AI):
 
 1. **Download a template** for the target language — columns: `en` (source/key),
    `kind`, up to three chosen reference languages, and the target column. Where
-   target already has a dictionary, its column arrives pre-filled with whatever
+   the target already has a dictionary, its column arrives pre-filled with whatever
    was stored at the moment of download — a snapshot, not a live view. The file
    is UTF-8 (with BOM), **pipe-separated (`|`)** and every field is **fully
    quoted** (RFC 4180), so embedded `,`/`;` can never split a row.
@@ -492,16 +491,16 @@ a human or an AI):
    - `placeholder` (a format example, usually taken over as it is),
    - `speech` (read aloud — abbreviations and punctuation are heard, not seen) and
    - `ui` (the editor's own chrome).
-   
+
    A string can be several at once; e.g., the `kind` of a wording shown in a list
    *and* spoken in an announcement reads `label, speech`.
-   
-   Everything but `speech` derives itself from the Declaration the string came from;
+
+   Everything but `speech` is derived from the Declaration the string came from;
    it is the responsibility of the host to announce `speech` with
    `note_xlation_keys(*keys, kind="speech")`, as nothing in GPSMCPMMS could know that.
 
    The reference languages may help to resolve ambiguity in English wording,
-   esp. when translating by AI assistance.
+   especially when translating with AI assistance.
 2. **Fill it offline**, then **upload** it. Rows are applied one by one
    (non-empty sets, blank clears, absent keeps; unknown keys skipped). A cell
    repeating the key is a translation like any other — that is how "take this
@@ -570,7 +569,6 @@ Translation key 'Voice sample' appeared after the editor started; it was in no
 template cut before now.
 ```
 
-
 That one line marks a moment in time. A template cut before it has no row for
 the key. Whoever fills in that template is never asked for the translation. An
 upload changes only the keys the file contains, so the gap stays. A template
@@ -600,7 +598,7 @@ and on a host that declares everything up front the line never appears at all.
 the standing it reports, are admin-only — rightly, since only an admin can
 upload a dictionary. But that leaves the person in front of the device unable
 to see that anything is missing, and the person who could see it is not there.
-The host may have any of the following two possible answers:
+The host has two answers:
 
 * **Say it where an ordinary session can see it.** A `hint` on a parameter that
   is *not* protected reaches every reader. `translation_status()` gives the
