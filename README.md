@@ -71,16 +71,33 @@ demo.)
 ## Deployment model
 
 The device is a rented, zero-maintenance appliance reachable only on the local
-network (no public IP, no login, no user database). Its lifecycle has two phases:
+network (no public IP, no login, no user database). Its lifecycle has three
+phases:
 
 - **Provisioning** — the distributor sets and locks the *protected* first-level
   parameters, then changes the admin password (`ui_passwd`) from its factory
-  default.
-- **Operation** — the customer edits the *unprotected* parameters. Protected
-  parameters stay hidden until the admin password is supplied.
+  default. `protected_params_ready()` becomes true at the end of it.
+- **Personalisation** — the customer edits the *unprotected* parameters.
+  `config_ready()` becomes true at the end of it. Protected parameters stay
+  hidden until the admin password is supplied.
+- **Operation** — the device does its work. Many hosts cannot start before the
+  two phases above are finished, but that is a decision each host makes for
+  itself.
 
-Editing is guarded by a single shared password and an **exclusive single-session
-token** (see [Security & sessions](#security--sessions)).
+The split is not only a description of who does what. A host can read those two
+answers and act on them: show which phase the device is in, or refuse to leave
+one. An appliance with no screen can say it by light or by sound — one colour
+while the distributor's settings are still missing, another while the
+customer's are, and a third when nothing is.
+
+A host may add conditions of its own: complete translations, a reachable
+server, a paired accessory. The library reports the parameters; what counts as
+ready is the host's decision.
+
+Editing is guarded by an **exclusive single-session token**. The shared admin
+password does three things: it reveals the protected parameters, it opens the
+translation panel, and it lets one session take the lock from another (see
+[Security & sessions](#security--sessions)).
 
 ---
 
@@ -128,7 +145,7 @@ config_mgr.register_params(
 **Value priority** (highest wins): `fixed_val` → saved user input → `default_val`
 → *no value* (`None`).
 
-Core API methods of config_mgr disposed to client modules:
+Core API methods of `config_mgr` disposed to client modules:
 
 | Method | Purpose |
 |--------|---------|
@@ -362,18 +379,6 @@ label:
 
 ## Multi-linguality
 
-| Method | Purpose |
-|--------|---------|
-| `add_original_xlations(xlation_lang, xlations)` | Supply translations for keys already noted, taken from where their wording came: `xlations` maps each key to its reading in `xlation_lang`. Never overwrites, never invents a language, refuses unregistered keys. See [Strings that arrive in another language](#strings-that-arrive-in-another-language). |
-| `language_name(lang)` | What to call a language on screen. Three places, and the first answer is the answer: the application's `languages.json`, then the dictionary's own `lang_name`, then `DECL_LANG_NAME`. The bare code is the fourth answer and an honest one — it means nobody has said what this language is called. |
-| `language_options()` | The languages the application permits, as `{code: endonym}`, or `None` where it permits any. Not the ones this deployment *has* — that is `supported_languages()`. |
-| `note_xlation_keys(*keys, kind=None)` | Register display strings a module only uses at runtime, so they reach the translation templates. `kind` says what they are — pass `"speech"` for anything read aloud, which nothing else could tell a translator. |
-| `protected_langs()` | The languages that cannot be discarded: `DECL_LANG`, and nothing else. Every key is written in it and every dictionary against it, so a deployment without it has no source to translate from. |
-| `set_language_name(lang, name)` | Record what a language calls itself, into that language's dictionary under a reserved key, written through at once; `True` where it took. Anyone adding a language this release has no name for has to say what it is called: the editor shows names and never codes. |
-| `supported_languages()` | The languages this deployment can be read in, sorted. Where the application ships `ui_dir/languages.json`, that list narrows what the dictionaries offer; where it does not, every dictionary counts. `DECL_LANG` is always among them, with or without a dictionary. A host that addresses its users in one of these has to offer exactly this set and no more — offer a language the dictionaries do not cover and `translate()` falls back to the key without saying so. |
-| `translate(key, lang)` | Returns the `lang` rendering of such a string, falling back to the key itself. Accepts `de` or `de-DE`. |
-| `translation_status(lang, keys=None)` | How far a language has got, as `(done, total)`. `keys` narrows the question to a subset, which is what makes the answer useful to a host: "are the service names translated" is a different question from "is anything left to translate", and only the host knows which strings are its service names. An entry counts as soon as it exists, whatever it says — absence is what "untranslated" looks like. `DECL_LANG` is complete by construction. |
-
 A display string **is** its own translation key: the `label`/`tooltip`/
 `placeholder` text as written. Dictionaries live at `ui_dir/lang/<code>.json`;
 missing keys fall back to the key itself, so a language may stay partially
@@ -383,13 +388,16 @@ is set aside at startup so it cannot stop the editor; that language then falls
 back to the source language until a dictionary is uploaded again.
 
 **Every key in the tree is written in `DECL_LANG`** — by default, English.
-The set of keys is extensible by modules using this library; the set of keys
+The set of keys is extensible by modules using this library (see [Overview of the Multi-linguality API](#overview-of-the-multi-linguality-api)); the set of keys
 added by client modules is referred to as **host keys**. Host keys must be in
-the same language as the library's own keys. It is recommended to keep English
+the same language as the library's own keys (English).
+
+It is recommended to keep English
 as the `DECL_LANG`, as changing it alone is never harmless. Changing it truthfully means rewriting
 every registered display string in the new language — every label, tooltip,
-placeholder, hint, test_func_msg, acquire_button, and every note_xlation_keys()
-string, in the library and in every host — and at that moment every existing
+placeholder, hint, test_func_msg, acquire_button, and every string passed to `note_xlation_keys()` 
+(see [Overview of the Multi-linguality API](#overview-of-the-multi-linguality-api)),
+in the library and in every host — and at that moment every existing
 dictionary is dead, because a dictionary's keys are the old strings. There is
 no re-keying path in the code; nothing migrates a dictionary when the constant moves.
 
@@ -397,7 +405,7 @@ The `DECL_LANG` (English) and the set of dictionaries `ui_dir/lang/<code>.json`
 determine the set of languages offered. The config-editor
 has a mechanism for adding new dictionaries. Applications can intervene to
 **qualify or disqualify a language** from being offered or added in two ways
-(`DECL_LANG` — English — is automatically always qualified):
+(`DECL_LANG` — English — is always qualified automatically):
 
 1. **An allow-list**, `{code: endonym}`, seeded into **`ui_dir/languages.json`**
    may declare the deployment's upper bound with two effects: a) shipped dictionaries
@@ -415,10 +423,14 @@ has a mechanism for adding new dictionaries. Applications can intervene to
    itself unavailable is the worse failure.
 
 Both handles govern which languages are **offered**, not which dictionaries are
-loaded: a dictionary on disk for a language nobody allows is read, kept and simply
-not offered — it costs nothing and is ready the day somebody allows it. Discarding a
-deployment's translations at startup because a rule changed later would destroy work
-nobody can get back.
+loaded. **Which languages are offered** is the intersection, not the union: the
+dictionaries present in `ui_dir/lang` narrowed by `ui_dir/languages.json` where
+the application ships one, plus `DECL_LANG`, which is added last and therefore
+survives a list that omits it. A dictionary for a language nobody permits is
+read, kept and simply not offered — it costs nothing and is ready the day
+somebody permits it. The set is built at start-up: a `.json` copied into the
+directory by hand appears after a restart, while one uploaded through the
+editor takes effect at once.
 
 If the host does not intervene — i.e., there is no `languages.json` in `ui_dir`
 *and* `set_language_validator(fn)` was never called — then administrators can add
@@ -432,18 +444,18 @@ The sources where keys to translate come into life are:
    the multi-linguality framework per se and hence are automatically recognized
    as keys.
 2. Every registration of parameter declarations by the client modules with the
-   config_mgr bears wordings, such as labels, tooltips and placeholders, that are
+   `config_mgr` bears wordings, such as labels, tooltips and placeholders, that are
    fed into the config-editor and hence may need a translation. These are also a
    fixed set of keys for each release of the app using GPSMCPMMS, and again
    certainly static at the load time in each run. And, as part of the contract
-   between config_mgr and the client modules, they are also recognized as keys
+   between `config_mgr` and the client modules, they are also recognized as keys
    automatically.
 3. Applications may depend on some external sources that may deliver info to
    be communicated with human users. They are not part of the application release
    and are probably fetched at runtime. There are then two issues to be resolved
    in this context:
-   - config_mgr has no way to automatically recognize wordings to serve as keys,
-     but the application should know. Therefore, there is note_xlation_keys() in
+   - `config_mgr` has no way to automatically recognize wordings to serve as keys,
+     but the application should know. Therefore, there is `note_xlation_keys()` in
      API so that client modules can explicitly add further wordings as keys that
      can be translated into other languages.
    - The external source may provide the info in another language than English;
@@ -526,46 +538,111 @@ registered key, including one that came from a Declaration. After the above two 
 ordinary `DECL_LANG` keys — they appear in every template (hence can be translated like
 anything else) and the original reading (in this example, German) is there from the start.
 
-Three rules hold, and each has a reason:
+Three rules hold, and the example above shows what each of them is for:
 
-* **An existing translation is never touched.** These are starting points, not
-  corrections; otherwise every restart would flatten the work of whoever
-  improved on the wording the source happened to use.
-* **A language nothing has a dictionary for is not created.** One would
-  otherwise become a supported language on the strength of a handful of entries,
-  and a host offering its users exactly the supported languages would start
-  offering it.
-* **Keys nobody registered are refused**, with a warning naming how many. An
-  entry for a key the software does not use is an orphan the moment it is
-  written, and would then be offered to a translator as work.
+* **An existing translation stays.** Suppose somebody has since found `Begleitung`
+  too official and changed the German to `Gemeinsame Zeit`. The next start
+  hands `Begleitung` over again; the library skips it and keeps what it has. What arrives here is a
+  starting point, not a correction — without this rule, every restart would
+  quietly undo whoever improved on the wording the source happened to use.
 
-Settling the `DECL_LANG` wording at development time also means the set of these
-keys is **fixed by the release**, not by whatever the source happens to serve
-today — a module is expected to keep that mapping in a file it ships. Something
-the source names later has no key, and the host needs an answer for it that does
-not involve inventing one: the H4H appliance falls back to an announcement that
-names no service at all.
+* **This call never creates a language.** Suppose the device has no `de.json` at
+  all. Both readings are then dropped, a line in the log says so, and German
+  does not become one of this device's languages on the strength of two words.
+  It must not: a host offers its users exactly the languages
+  `supported_languages()` reports, so a German consisting of `Begleitung` and
+  `Fahrdienste` would turn up on the menu and speak English for everything
+  else.
+
+* **A reading needs a registered key.** Suppose `add_original_xlations()` also
+  carried `"Shopping": "Einkaufen"`, while `note_xlation_keys()` names only the
+  two keys above. Then `Einkaufen` is refused, and a warning goes to the log.
+  Otherwise it would stay in `de.json` forever and appear in every template,
+  asking translators for a sentence the software never shows.
 
 ### Keys that turn up late
 
 `start_editor()` takes the key set as it stands, and anything registered after
-that is reported once, by name:
+that is reported once in the log, by name:
 
 ```
 Translation key 'Voice sample' appeared after the editor started; it was in no
 template cut before now.
 ```
 
-Which is the whole problem in one line. A key that only exists once something
-has been rendered was absent from every template downloaded before that, and
-from the count that told somebody their languages were complete — so a set of
-translations goes out believing itself finished, and the gap shows up on a
-device.
+
+That one line marks a moment in time. A template cut before it has no row for
+the key. Whoever fills in that template is never asked for the translation. An
+upload changes only the keys the file contains, so the gap stays. A template
+cut after the line does contain the row. From the outside the two look alike,
+because the key appears without anybody doing anything.
+
+The editor also counts how much of each language is translated. An admin who
+opens the language panel before the key appears sees a report that says every
+dictionary is complete. If a late key goes unnoticed, a release may be built
+with incomplete dictionaries.
+
+The arithmetic is what makes it hard to notice. Every late key raises the
+denominator for **every** language at once, and only one of them keeps its
+count: the language whose readings arrive with `add_original_xlations()` in the
+same breath. So on the machine that built the release the source language is
+complete, because it is, while the language a customer reads is short by one
+string — and the fallback for that string is `DECL_LANG`. On a screen that is
+an English word in a Turkish sentence. In an announcement it is an English word
+spoken by a Turkish voice, to somebody who called for help.
 
 Reported rather than refused: a string that first exists when a provider runs is
 legitimate, and a host cannot always know it earlier. But whoever builds a
 release image should be able to see that the key set is not the one they froze,
 and on a host that declares everything up front the line never appears at all.
+
+**A shipped device cannot repair this by itself.** The translation panel, and
+the standing it reports, are admin-only — rightly, since only an admin can
+upload a dictionary. But that leaves the person in front of the device unable
+to see that anything is missing, and the person who could see it is not there.
+The host may have any of the following two possible answers:
+
+* **Say it where an ordinary session can see it.** A `hint` on a parameter that
+  is *not* protected reaches every reader. `translation_status()` gives the
+  numbers; the sentence should say that an admin session is needed, not what is
+  missing, because only an admin can act on the detail.
+* **Refuse to be shippable while a gap is open.** A host that decides its own
+  readiness can make complete translations a condition for leaving provisioning
+  (see [Deployment model](#deployment-model)). A device with a gap then never
+  reaches the state in which it is handed over, and the distributor meets the
+  problem while an admin is still there.
+
+The second answer only works where the key set is **bounded before the device
+ships**, and that is the harder half. Late keys almost always come from outside:
+a catalogue, a schema, a service that names its own categories. Whatever that
+system adds tomorrow becomes a key here, and no device already in the field can
+be made complete again.
+
+If complete translations are a condition for shipping, do not ask the external
+system at start-up. Freeze its vocabulary into the release: a file of your own,
+read without a network, counted like every other key. This costs a coupling. A
+new category over there means a new release here.
+
+The coupling is real, but you decide what it costs. Plan what the device does
+when the external system has moved ahead. It can still offer a category it does
+not know, and still act on it; only the name it cannot say is missing. It can
+write down what it saw, so that somebody learns a new release is due. A
+limitation you planned for is part of the design. The same limitation by
+accident is a device that speaks English to somebody who needs help.
+
+### Overview of the Multi-linguality API
+
+| Method | Purpose |
+|--------|---------|
+| `add_original_xlations(xlation_lang, xlations)` | Supply translations for keys already noted, taken from where their wording came: `xlations` maps each key to its reading in `xlation_lang`. Never overwrites, never invents a language, refuses unregistered keys. See [Strings that arrive in another language](#strings-that-arrive-in-another-language). |
+| `language_name(lang)` | What to call a language on screen. Three places, and the first answer is the answer: the application's `languages.json`, then the dictionary's own `lang_name`, then `DECL_LANG_NAME`. The bare code is the fourth answer and an honest one — it means nobody has said what this language is called. |
+| `language_options()` | The languages the application permits, as `{code: endonym}`, or `None` where it permits any. Not the ones this deployment *has* — that is `supported_languages()`. |
+| `note_xlation_keys(*keys, kind=None)` | Register display strings a module only uses at runtime, so they reach the translation templates. `kind` says what they are — pass `"speech"` for anything read aloud, which nothing else could tell a translator. |
+| `protected_langs()` | The languages that cannot be discarded: `DECL_LANG`, and nothing else. Every key is written in it and every dictionary against it, so a deployment without it has no source to translate from. |
+| `set_language_name(lang, name)` | Record what a language calls itself, into that language's dictionary under a reserved key, written through at once; `True` where it took. Anyone adding a language this release has no name for has to say what it is called: the editor shows names and never codes. |
+| `supported_languages()` | The languages this deployment can be read in, sorted. Where the application ships `ui_dir/languages.json`, that list narrows what the dictionaries offer; where it does not, every dictionary counts. `DECL_LANG` is always among them, with or without a dictionary. A host that addresses its users in one of these has to offer exactly this set and no more — offer a language the dictionaries do not cover and `translate()` falls back to the key without saying so. |
+| `translate(key, lang)` | Returns the `lang` rendering of such a string, falling back to the key itself. Accepts `de` or `de-DE`. |
+| `translation_status(lang, keys=None)` | How far a language has got, as `(done, total)`. `keys` narrows the question to a subset, which is what makes the answer useful to a host: "are the service names translated" is a different question from "is anything left to translate", and only the host knows which strings are its service names. An entry counts as soon as it exists, whatever it says — absence is what "untranslated" looks like. `DECL_LANG` is complete by construction. |
 
 ---
 
