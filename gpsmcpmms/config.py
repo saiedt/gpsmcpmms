@@ -1281,7 +1281,7 @@ class ConfigManager:
                     lang_dict["lang_cache_modified"] = True
             return dict(lang_dict)
 
-    def _store_translation_dict(self, lang, lang_dict, replace=None):
+    def _store_translation_dict(self, lang, lang_dict):
         """
         Realizes the admin actions on translation dictionaries specified in
         section 4.5 of the spec (add / clean up / align); returns an error
@@ -1319,13 +1319,6 @@ class ConfigManager:
 
             # atomic write-and-update: cache first, then disk (spec 4.3.1)
             self._lang_cache[lang] = lang_dict
-            if replace is not None:
-                self._lang_cache.pop(replace, None)
-                try:
-                    os.remove(os.path.join(self._lang_dir,
-                                           f"{replace}.json"))
-                except OSError:
-                    pass
             if not self._write_translation_file(lang, lang_dict):
                 lang_dict["lang_cache_modified"] = True
         return None
@@ -1480,8 +1473,8 @@ class ConfigManager:
 
     def _apply_lang_csv(self, target, raw):
         """Applies an uploaded translation CSV to `target`. Returns
-        (report_bytes, translated, total) on success, or (None, error, None)
-        where error is a string tag or a dict for the removal prompt."""
+        (report_bytes, translated, total) on success, or (None, tag, None)
+        naming what was wrong with the upload."""
         if not (isinstance(target, str) and re.fullmatch(r"[a-z]{2,3}", target)):
             return None, "invalid_lang", None
         if target == self.DECL_LANG:
@@ -2237,27 +2230,6 @@ class ConfigManager:
                         },
                     }
             return jsonify(info)
-
-        @app.route("/api/lang/update", methods=["POST"])
-        def lang_update():
-            if request.headers.get(self.API_HEADER) != "1":
-                abort(403)
-            payload = request.get_json(silent=True)
-            if not isinstance(payload, dict):
-                abort(400)
-            if self._session_status(request_token()) != "valid":
-                return jsonify({"error": "invalid_token"}), 401
-            self._touch_session()
-            with self._lock:
-                admin = self._session_admin
-            if not admin:
-                return jsonify({"error": "admin_required"}), 403
-            failure = self._store_translation_dict(
-                    payload.get("lang"), payload.get("dict"),
-                    payload.get("replace"))
-            if failure:
-                return jsonify({"error": failure}), 400
-            return jsonify({"stored": payload.get("lang")})
 
         def _csv_download(data, filename):
             # Flask appends "; charset=utf-8" to a text/* mimetype itself

@@ -661,10 +661,9 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 | `GET /api/cvv_data[?passwd=…]` | Retrieves the whole content to be merged by app.js into index.html while using style.css in order to render the editor in a browser; issues/refreshes the session token; strips protected subtrees unless unlocked by valid password. |
 | `POST /api/end_session` | Release the editing token. |
 | `GET /api/lang/info` | Which languages exist here, what they are called, whether an allow-list bounds them, and the application's name. For admins additionally the orphan keys and how far each language is translated. |
-| `GET /api/lang/template?lang=&refs=` | Download a translation template (admin): the source language (en), `kind`, chosen reference languages, then the target language. |
-| `POST /api/lang/update` | Replace a dictionary wholesale (admin): `{lang, dict, replace?}`. `replace` renames — the old code's dictionary is dropped. |
+| `GET /api/lang/template?lang=&refs=` | Download a translation template (admin): the source language (`DECL_LANG`, by default `en`), `kind`, chosen reference languages, then the target language. |
 | `POST /api/lang/upload` | Upload a filled translation CSV (admin); returns the report. |
-| `GET /api/schema[/<lang>]` | Translation dictionary for a language (defaults to `en`). |
+| `GET /api/schema[/<lang>]` | Translation dictionary for a language (defaults to `DECL_LANG`). |
 | `POST /api/session/takeover` | Take the editing session from its holder, on proof of `ui_passwd`. |
 | `GET /api/value/capture?path=` | Long-poll (≤ 30 s) for a backend-captured value. |
 
