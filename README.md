@@ -1079,10 +1079,11 @@ Deliberate trade-offs for a trusted-LAN appliance:
 - **Security is intentionally minimal** — one shared password, first-connect
   session token, no per-user authentication, no TLS assumed, no audit log. Safe
   only inside a trusted network.
-- **A bespoke validation DSL and hand-written UI**, rather than reusing Python's
-  type system with **JSON Schema** and an existing form generator. This trades
-  ecosystem leverage (mature validators, JSON-Schema/OpenAPI interop, tooling) for
-  domain control.
+- **A bespoke declaration language and a hand-written UI**, rather than **JSON
+  Schema** and an existing form generator. This trades ecosystem leverage (mature
+  validators, JSON-Schema/OpenAPI interop, tooling) for the ability to express
+  what an appliance needs — see [Why not JSON
+  Schema](#why-not-json-schema) below.
 - **Single process, single device, single active editor** — no layered config
   sources or `${var}` interpolation, no distributed consistency, no fleet-wide
   hot-reload, and no schema versioning/migration across releases.
@@ -1090,6 +1091,33 @@ Deliberate trade-offs for a trusted-LAN appliance:
   no community behind it. What it *has* been through is one real appliance, whose
   every parameter, hardware capture, test button and spoken announcement in seven
   languages runs through it — which is evidence of fitness, not of hardening.
+
+#### Why not JSON Schema
+
+This is the trade-off readers ask about most, so here is the whole answer. Of
+the keys a Declaration may carry, about a third have a JSON-Schema counterpart:
+
+| Covered | Partly | No counterpart |
+|---------|--------|----------------|
+| `type` (the primitives), `label`→`title`, `tooltip`→`description`, static `values`→`enum`, numeric `bound_to`→`minimum`/`maximum`, string `bound_to`→`pattern`, `list_member`→`items`, `list_size`→`minItems`/`maxItems` | `default_val`→`default`, but without the rules about what a stored value does to it; `fixed_val`→`const`, which cannot say "lock the structure and leave the leaves editable"; `relevance`→`if`/`then`, which decides validity rather than visibility; `list_keys`→`uniqueItems`, which compares whole items and knows no compound key | `placeholder`, `init_only`, `likely_val`, `hidden`, `protected`, `backend_provided`, `acquire_button`, `hint`, dynamic `values`, `values_for`, `s2g_scale`, `test_func`, `test_func_msg` |
+
+The third column is what the appliance is for. A value that is captured by
+holding an NFC card against a reader has no schema counterpart, and neither has
+a field only an administrator may see.
+
+Two structural reasons sit under that list. **A Declaration is not data:**
+`test_func` holds a callable, so a Declaration carrying one cannot be
+serialised at all. And **a Declaration is assembled while the device runs** —
+dynamic enums fetch their options from a server, `note_xlation_keys()`
+registers strings during operation, and `discard_module()` takes parts out
+again — so a static schema would describe a shape that does not exist yet.
+
+Adopting JSON Schema would therefore mean JSON Schema for the first column and
+vendor extensions for the third, plus a form generator with a custom widget for
+nearly every field. That is two vocabularies instead of one, and it gives up
+most of the leverage that makes a standard worth adopting in the first place.
+Where a form really is schema-shaped, JSON Schema with a generator is the
+better tool — see the table below.
 
 ### When to use something else
 
