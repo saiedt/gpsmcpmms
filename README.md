@@ -499,6 +499,29 @@ a human or an AI):
    it is the responsibility of the host to announce `speech` with
    `note_xlation_keys(*keys, kind="speech")`, as nothing in GPSMCPMMS could know that.
 
+   **An empty `kind` cell has two possible causes**, and they are not the same.
+   The host may have registered the string without saying what it is: `kind` is
+   optional in `note_xlation_keys()`, and a module that adds keys at run time
+   may leave it out. Or nothing in this run registered the string at all, and it
+   appears in the file only because some dictionary still holds a translation
+   for it. A string in the second case is called an **orphan**.
+
+   **An orphan is not proof that a string has left the software.** Two things
+   can bring it back. It may still be registered later in the same run, by a
+   code path that has not executed yet — the set of registered strings grows
+   while the device works, so a key that is orphaned at start-up may not be
+   orphaned an hour later. And it may belong to a module this deployment does
+   not load at the moment, while a later release loads it again.
+
+   **Report orphans rather than deciding about them.** Whoever prepares the
+   release can tell whether a string has really gone; an administrator sees only
+   that nothing used it today. Clearing the target cell does remove the entry,
+   which makes the decision easy to carry out and expensive to undo: the
+   translation is gone, and if the key comes back, the next translator starts
+   from nothing. The editor's translation panel names how many orphans each
+   language has, but not which they are — the template is where they can be
+   found, and the log names them whenever a template is built.
+
    The reference languages may help to resolve ambiguity in English wording,
    especially when translating with AI assistance.
 2. **Fill it offline**, then **upload** it. Rows are applied one by one

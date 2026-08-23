@@ -47,6 +47,14 @@ class ConfigManager:
     # how many existing languages may be included as reference columns in a
     # downloaded translation template (context for the translator/AI)
     MAX_TEMPLATE_REFS = 3
+    # How many orphaned keys a template build names in the log before it stops
+    # counting them out. The realistic case an administrator reports is a
+    # handful, and those are named in full. The unrealistic-looking case is
+    # real too -- a host that has registered nothing yet, or a deployment whose
+    # dictionaries were written against another declaration, orphans hundreds
+    # at once -- and a log line carrying all of them is unreadable and drowns
+    # whatever stands around it.
+    MAX_ORPHANS_LOGGED = 10
     # The language a display string is *written* in when it reaches this
     # library: the key language. A key is its own fallback, so whatever is not
     # translated is shown in this language.
@@ -1441,6 +1449,23 @@ class ConfigManager:
         # code is two or three letters, so the name cannot collide with one.
         columns = leading + ["kind"] + extra + [target]
 
+        keys = self._translatable_keys_sorted()
+        # Which of those nothing registered in this run. The translation panel
+        # gives an admin the count per language and not the names; here they
+        # are, so that a report to whoever prepares the release can say which.
+        # Info rather than a warning: a key whose code path has not run yet is
+        # the ordinary case, and warning on every download wears the level out.
+        with self._lock:
+            active = set(self._active_xlation_keys)
+        orphans = [k for k in keys if k not in active]
+        if orphans:
+            named = orphans[:self.MAX_ORPHANS_LOGGED]
+            rest = len(orphans) - len(named)
+            self._logger.info(
+                    f"Translation template for '{target}' carries "
+                    f"{len(orphans)} key(s) that nothing registered in this "
+                    f"run: {named}" + (f" and {rest} more" if rest else ""))
+
         buf = io.StringIO()
         # QUOTE_ALL: every field is wrapped in double quotes (RFC 4180) so that
         # punctuation embedded in a key or translation -- notably a semicolon,
@@ -1449,7 +1474,7 @@ class ConfigManager:
         writer = csv.writer(buf, delimiter=self.CSV_DELIMITER,
                             quoting=csv.QUOTE_ALL)
         writer.writerow(columns)
-        for key in self._translatable_keys_sorted():
+        for key in keys:
             # in the column of the language it is written in, a key stands for
             # itself
             row = [key if lang == self.DECL_LANG
