@@ -478,7 +478,8 @@ Translations are added/updated through a **CSV round-trip** (no timeouts, easy f
 a human or an AI):
 
 1. **Download a template** for the target language — columns: `en` (source/key),
-   `kind`, up to three chosen reference languages, and the target column. Where
+   `kind`, up to three chosen reference languages (they may help to resolve ambiguity in English wording,
+   especially when translating with AI assistance), and the target column. Where
    the target already has a dictionary, its column arrives pre-filled with whatever
    was stored at the moment of download — a snapshot, not a live view. The file
    is UTF-8 (with BOM), **pipe-separated (`|`)** and every field is **fully
@@ -521,9 +522,6 @@ a human or an AI):
    from nothing. The editor's translation panel names how many orphans each
    language has, but not which they are — the template is where they can be
    found, and the log names them whenever a template is built.
-
-   The reference languages may help to resolve ambiguity in English wording,
-   especially when translating with AI assistance.
 2. **Fill it offline**, then **upload** it. Rows are applied one by one
    (non-empty sets, blank clears, absent keeps; unknown keys skipped). A cell
    repeating the key is a translation like any other — that is how "take this
