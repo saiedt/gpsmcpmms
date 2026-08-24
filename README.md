@@ -1041,7 +1041,7 @@ What a distributor actually does at the device, and what carries it:
 | Read a value off the hardware instead of typing it | `backend_provided` + `acquire_button`, long-polled from the reader |
 | Offer only the choices that exist right now | dynamic enums, and `values_for` for a pair that depends on itself |
 | Prove it works before leaving | `test_func` buttons — hear the ring tone, call the number, watch the LED |
-| Hand the device over in the customer's language | every display string is already a translation key; the CSV round-trip fills seven languages |
+| Hand the device over in the customer's language | every display string is already a translation key; the CSV round-trip fills eight languages |
 | Take the provisioning secrets off the card | `discard_module()` |
 
 None of that is a separate mechanism bolted on: it is one declaration per
@@ -1079,45 +1079,27 @@ Deliberate trade-offs for a trusted-LAN appliance:
 - **Security is intentionally minimal** — one shared password, first-connect
   session token, no per-user authentication, no TLS assumed, no audit log. Safe
   only inside a trusted network.
-- **A bespoke declaration language and a hand-written UI**, rather than **JSON
-  Schema** and an existing form generator. This trades ecosystem leverage (mature
-  validators, JSON-Schema/OpenAPI interop, tooling) for the ability to express
-  what an appliance needs — see [Why not JSON
-  Schema](#why-not-json-schema) below.
-- **Single process, single device, single active editor** — no layered config
-  sources or `${var}` interpolation, no distributed consistency, no fleet-wide
-  hot-reload, and no schema versioning/migration across releases.
+- **A bespoke declaration language**, rather than **JSON Schema** and an existing
+  form generator. This trades ecosystem leverage (mature validators,
+  JSON-Schema/OpenAPI interop, tooling) for the ability to express what an
+  appliance needs. JSON Schema describes data, and a Declaration is not only
+  data: it carries callables — a test button that talks to the hardware, an enum
+  whose options are fetched while the device runs.
+- **Not a configuration loader for everything** — it takes the parameters a
+  person should decide at the device, and leaves the rest where it already was.
+  `config_mgr` draws that line through itself: the paths to its value store and
+  its web assets come from environment variables, settled when a release is
+  made, while the admin password goes through the editor and is set by a
+  technician during provisioning. Every module can divide its own parameters the
+  same way.
+- **No schema versioning or migration across releases** — a stored value that no
+  longer fits its Declaration is dropped and logged, and the parameter goes back
+  to being unset. For a manageable number of parameters, every one of them
+  re-enterable at the device, a migration path would cost more than it saves.
 - **Maturity** — purpose-built rather than battle-tested: no security process and
   no community behind it. What it *has* been through is one real appliance, whose
-  every parameter, hardware capture, test button and spoken announcement in seven
+  every parameter, hardware capture, test button and spoken announcement in eight
   languages runs through it — which is evidence of fitness, not of hardening.
-
-#### Why not JSON Schema
-
-This is the trade-off readers ask about most, so here is the whole answer. Of
-the keys a Declaration may carry, about a third have a JSON-Schema counterpart:
-
-| Covered | Partly | No counterpart |
-|---------|--------|----------------|
-| `type` (the primitives), `label`→`title`, `tooltip`→`description`, static `values`→`enum`, numeric `bound_to`→`minimum`/`maximum`, string `bound_to`→`pattern`, `list_member`→`items`, `list_size`→`minItems`/`maxItems` | `default_val`→`default`, but without the rules about what a stored value does to it; `fixed_val`→`const`, which cannot say "lock the structure and leave the leaves editable"; `relevance`→`if`/`then`, which decides validity rather than visibility; `list_keys`→`uniqueItems`, which compares whole items and knows no compound key | `placeholder`, `init_only`, `likely_val`, `hidden`, `protected`, `backend_provided`, `acquire_button`, `hint`, dynamic `values`, `values_for`, `s2g_scale`, `test_func`, `test_func_msg` |
-
-The third column is what the appliance is for. A value that is captured by
-holding an NFC card against a reader has no schema counterpart, and neither has
-a field only an administrator may see.
-
-Two structural reasons sit under that list. **A Declaration is not data:**
-`test_func` holds a callable, so a Declaration carrying one cannot be
-serialised at all. And **a Declaration is assembled while the device runs** —
-dynamic enums fetch their options from a server, `note_xlation_keys()`
-registers strings during operation, and `discard_module()` takes parts out
-again — so a static schema would describe a shape that does not exist yet.
-
-Adopting JSON Schema would therefore mean JSON Schema for the first column and
-vendor extensions for the third, plus a form generator with a custom widget for
-nearly every field. That is two vocabularies instead of one, and it gives up
-most of the leverage that makes a standard worth adopting in the first place.
-Where a form really is schema-shaped, JSON Schema with a generator is the
-better tool — see the table below.
 
 ### When to use something else
 
