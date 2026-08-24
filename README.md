@@ -1091,18 +1091,23 @@ Deliberate trade-offs for a trusted-LAN appliance:
   appliance needs. JSON Schema describes data, and a Declaration is not only
   data: it carries callables — a test button that talks to the hardware, an enum
   whose options are fetched while the device runs.
-- **Not a configuration loader for everything** — it takes the parameters a
-  person should decide at the device, and leaves the rest where it already was.
-  `config_mgr` draws that line through itself: the admin password goes through
-  the editor and is set by a technician during provisioning, while its working
-  directories, editor port and session timeout are read from the environment,
-  where a launcher sets them on the command line (see [Own configuration
+- **Delegation instead of layered sources** — the library carries the
+  parameters that a person decides *after* the software is finished, and leaves
+  the rest to the modules and their own environment. What it carries then passes
+  from hand to hand: the sales technician provisions the device, the customer
+  personalises it (see [Deployment model](#deployment-model)). `config_mgr` draws
+  that line through itself — working directories, editor port and session timeout
+  come from the environment, set on the command line by whoever launches it,
+  while the admin password goes through the editor (see [Own configuration
   parameters](#own-configuration-parameters)). Every module can divide its own
   parameters the same way.
 - **No schema versioning or migration across releases** — a stored value that no
   longer fits its Declaration is dropped and logged, and the parameter goes back
-  to being unset. For a manageable number of parameters, every one of them
-  re-enterable at the device, a migration path would cost more than it saves.
+  to being unset. Continuity across releases earns its cost where an installation
+  is updated in place and its data is large and interlinked. An appliance may
+  never be updated on site at all, and where it is, the amount is small and each
+  module's parameters stand on their own. Note that the value is dropped before
+  any host code sees it, so a Declaration is better widened than narrowed.
 - **Maturity** — purpose-built rather than battle-tested: no security process and
   no community behind it. What it *has* been through is one real appliance, whose
   every parameter, hardware capture, test button and spoken announcement in eight
