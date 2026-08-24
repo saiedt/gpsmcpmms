@@ -914,6 +914,12 @@ defaults under `~/.config/gpsmcpmms/`), `GPSMCPMMS_UI_PORT` (editor port,
 default 8080) and `GPSMCPMMS_SESSION_TIMEOUT` (session inactivity minutes,
 default 30).
 
+One more belongs to the same group: `GPSMCPMMS_NO_LANG_SEED` skips the copy of
+the packaged dictionaries into `ui_dir/lang/`. That copy happens once, and only
+into a directory that holds no dictionary at all — a deployment shipping its own
+is left alone either way. Set the variable in a short-lived process that imports
+the library for one small job and should not touch the deployment's files.
+
 ---
 
 ## Examples
