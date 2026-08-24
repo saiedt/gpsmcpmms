@@ -5,7 +5,7 @@ who translate it (see the [translation guide](translation-guide.en.md)) and not
 for the people who commission a device.
 
 Everything here is something this project got wrong first. The appliance it grew
-from — an accessible speakerphone that files help requests, seven languages,
+from — an accessible speakerphone that files help requests, eight languages,
 every sentence pre-recorded — is named where a rule needs a story to be
 believable. Read the rules, not the appliance.
 
@@ -454,6 +454,12 @@ can check rather than feel: start the editor, exercise the application, and read
 the log for keys that turned up late. An application that declares everything up
 front produces none.
 
+The log answers the other direction too. Building a template names the keys that
+no registration touched in this run: strings some dictionary still translates
+while nothing uses them. A few of those are only waiting for a code path that has
+not run yet; the rest are the leftovers of a rewording, and they are worth
+settling before a language is called finished.
+
 ### Translate fully, then record
 
 If your application speaks, reads aloud or otherwise renders text into a fixed
@@ -509,6 +515,38 @@ change has to maintain twice.
 unchanged number it clones, reads the metadata, and quietly does nothing —
 leaving the old code installed and no error to notice. This costs an afternoon
 exactly once per person.
+
+### Think twice before narrowing a Declaration
+
+A release carries the Declarations, and those decide what the values already on
+a device are still allowed to be. Tighten a `bound_to`, drop an option from a
+static enum, change a type — and every stored value that no longer fits is
+dropped when the device next starts. The paths are named in the log, and the
+parameter goes back to being unset.
+
+Nothing converts it. The value is dropped while the module's state is loaded,
+before any code of yours has seen it, so there is nowhere to put a migration
+even if you wanted one.
+
+What follows is by design and worth picturing. `config_ready()` turns false, and
+a host that acts on it says so — the appliance this guide comes from falls back
+to a configuration state and changes the colour it shows. The device does not
+quietly run on a wrong value; it stops and asks. That is why no migration
+mechanism is missing here.
+
+The cost of asking, though, is not the same everywhere:
+
+- An **unprotected** value costs its owner a minute. They are standing at the
+  editor anyway.
+- A **protected** one costs a visit. It needs the admin password and the
+  knowledge of whoever provisions devices, multiplied by every device the release
+  reaches.
+
+So treat the two asymmetrically. Widening a Declaration is free, because every
+stored value still fits. Narrowing one on an unprotected parameter is a nuisance
+worth a line in the release notes. Narrowing one on a protected parameter is a
+re-provisioning campaign and should be decided as one — or avoided by leaving
+the Declaration wide and correcting the value where the module receives it.
 
 ### Write down what a device may still change
 

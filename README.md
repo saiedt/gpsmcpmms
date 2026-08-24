@@ -704,6 +704,12 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   Options are re-fetched after every save, since a provider computes them from a
   device state that has just changed.
 
+  An option may carry **`verbatim: True`** where its label is an identifier
+  rather than prose — a file name, a voice name. The label is then shown as it
+  stands and never collected as a translation key, while a `tooltip` beside it
+  still is. Without it, one look at a list of fifty file names puts fifty rows
+  into every template, in every language, for ever.
+
   **`values_for`** names a sibling whose value the options are computed *for*.
   Its current value — the one being edited, not the one last saved — is passed to
   the provider, and the editor re-asks as soon as it changes:
