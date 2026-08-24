@@ -77,12 +77,18 @@ phases:
 - **Provisioning** — the distributor sets and locks the *protected* first-level
   parameters, then changes the admin password (`ui_passwd`) from its factory
   default. `protected_params_ready()` becomes true at the end of it.
-- **Personalisation** — the customer edits the *unprotected* parameters.
-  `config_ready()` becomes true at the end of it. Protected parameters stay
-  hidden until the admin password is supplied.
+- **Personalisation** — the customer, or whoever acts for them, edits the
+  *unprotected* parameters. `config_ready()` becomes true at the end of it.
+  Protected parameters stay hidden until the admin password is supplied.
 - **Operation** — the device does its work. Many hosts cannot start before the
   two phases above are finished, but that is a decision each host makes for
   itself.
+
+These phases are defined by what they require, not by who is present. A
+distributor holding the admin password can do both in one visit, which is what a
+device handed over ready to use looks like; or provision in the workshop and
+leave the personalisation to the customer. The library enforces neither — what it
+enforces is that the protected half needs the password.
 
 The split is not only a description of who does what. A host can read those two
 answers and act on them: show which phase the device is in, or refuse to leave
@@ -1005,14 +1011,14 @@ param_dict={
 
 ## Related work & limitations
 
-What this was built for is **commissioning**: taking an appliance from a bare
-image to a device that is provisioned, tested and personalised for one customer —
-and doing it in a single pass, standing at the device, through a browser. Every
-part of that pass comes out of the same declarations: the validation, the editor
-that collects the values, the verification against the real hardware, the test
-buttons that prove it works, and the language the device will speak to the person
-using it. No build step, no service to run, no separate string table, and no user
-interface to write.
+What this was built for is **commissioning**: taking an appliance from a booted
+device on the network to one that is provisioned, tested and personalised for one
+customer — and doing it in a single pass, standing at the device, through a
+browser. Every part of that pass comes out of the same declarations: the
+validation, the editor that collects the values, the verification against the
+real hardware, the test buttons that prove it works, and the language the device
+will speak to the person using it. No build step, no service to run, no separate
+string table, and no user interface to write.
 
 Python has plenty of configuration tooling, but it is fragmented, and none of it
 covers that arc — framework-agnostic self-registration **plus** an auto-generated
