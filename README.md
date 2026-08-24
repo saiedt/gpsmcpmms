@@ -1087,11 +1087,12 @@ Deliberate trade-offs for a trusted-LAN appliance:
   whose options are fetched while the device runs.
 - **Not a configuration loader for everything** — it takes the parameters a
   person should decide at the device, and leaves the rest where it already was.
-  `config_mgr` draws that line through itself: the paths to its value store and
-  its web assets come from environment variables, settled when a release is
-  made, while the admin password goes through the editor and is set by a
-  technician during provisioning. Every module can divide its own parameters the
-  same way.
+  `config_mgr` draws that line through itself: the admin password goes through
+  the editor and is set by a technician during provisioning, while its working
+  directories, editor port and session timeout are read from the environment,
+  where a launcher sets them on the command line (see [Own configuration
+  parameters](#own-configuration-parameters)). Every module can divide its own
+  parameters the same way.
 - **No schema versioning or migration across releases** — a stored value that no
   longer fits its Declaration is dropped and logged, and the parameter goes back
   to being unset. For a manageable number of parameters, every one of them
