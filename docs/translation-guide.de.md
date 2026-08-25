@@ -266,10 +266,10 @@ Editor zu sehen.
 - Es können **beliebig viele Sprachen** nebeneinander bestehen; eine neue
   verdrängt keine vorhandene. Besonders ist allein **Englisch**: darin sind die
   Schlüssel geschrieben, gegen die jedes Wörterbuch übersetzt.
-- Eine Sprache braucht keine Übersetzung der Schlüssel, die schon in ihr
-  geschrieben sind — die zählen als erledigt. Deshalb meldet ein Gerät, dessen
-  Anwendung deutsch geschrieben ist, Deutsch als vollständig, ohne dass jemand
-  seine Beschriftungen ins Deutsche übersetzt hätte.
+- Die Sprache, in der die Schlüssel geschrieben sind, braucht selbst kein
+  Wörterbuch: Die Schlüssel *sind* ihr Text. Sie gilt deshalb immer als
+  vollständig und taucht in keiner Liste unvollständiger Sprachen auf. Das ist
+  **Englisch**; Anwendungen schreiben ihre Schlüssel in dieser Sprache.
 - Übersetzungen dürfen **unvollständig** bleiben: alles Nichtübersetzte wird im
   Wortlaut seines Schlüssels angezeigt, und ein erneutes Herunterladen der
   Vorlage zeigt Ihren gespeicherten Fortschritt, sodass Sie jederzeit

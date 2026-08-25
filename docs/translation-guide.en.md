@@ -248,9 +248,10 @@ editor.
 - **Any number of languages** can exist side by side; a new one displaces
   none. Only **English** is special: it is what the keys are written in, and
   every dictionary translates against them.
-- A language needs no translation of the keys already written in it — they count
-  as done. That is why a device whose application is written in German reports
-  German as complete without anyone translating its labels into German.
+- The language the keys are written in needs no dictionary of its own: the keys
+  *are* its text. It therefore always counts as complete and never appears in a
+  list of incomplete languages. That language is **English**; applications write
+  their keys in it.
 - Translations may stay **partial**: anything untranslated shows its source
   text, and re-downloading the template shows your saved progress, so you can
   always continue later.
