@@ -95,39 +95,42 @@ innerhalb eines Textes eine Zeile niemals zerreißen können).
 
 ### Die Datei einem KI-Assistenten übergeben
 
-Hängen Sie die heruntergeladene `<code>.csv` an und geben Sie eine Anweisung wie
-die folgende. Ersetzen Sie `<SPRACHE>` durch die gewünschte Sprache und
-`<code>` durch den Spaltennamen, und lassen Sie die Regeln stehen — jede von
-ihnen steht da, weil ihr Fehlen eine Datei erzeugt, die zwar richtig aussieht,
-aber etwas kaputt macht.
+Hängen Sie die heruntergeladene CSV-Datei an und geben Sie die folgende
+Anweisung. Sie füllen darin **genau eine Stelle** aus: die Sprache, in die
+übersetzt werden soll. Alles Übrige liest der Assistent aus der Datei selbst.
+Lassen Sie die Regeln stehen — jede von ihnen steht da, weil ihr Fehlen eine
+Datei erzeugt, die zwar richtig aussieht, aber etwas kaputt macht.
 
-> Du übersetzt die Bedienoberfläche eines Konfigurationseditors ins
-> **\<SPRACHE\>**. Die angehängte `<code>.csv` ist eine UTF-8-Textdatei, eine
-> Zeile je Zeichenkette, Felder durch `|` getrennt, jedes Feld in doppelten
+> **Zielsprache: \_\_\_\_\_\_\_\_.** Überall in dieser Anweisung ist mit
+> „der Zielsprache" genau diese gemeint.
+>
+> Du übersetzt die Bedienoberfläche eines Konfigurationseditors in die
+> Zielsprache. Die angehängte CSV-Datei ist eine UTF-8-Textdatei, eine Zeile je
+> Zeichenkette, Felder durch `|` getrennt, jedes Feld in doppelten
 > Anführungszeichen.
 >
 > Die erste Spalte ist der Quelltext, den du übersetzt. Dann `kind` (was der
 > Text ist), möglicherweise weitere Referenzsprachen als Kontext, und zuletzt
-> die Zielspalte `<code>` — die einzige Spalte, in die du schreiben darfst.
+> die letzte Spalte — die einzige, in die du schreiben darfst. Ihr Kopfeintrag
+> ist der Sprachcode. **Prüfe, ob dieser Code zu der oben genannten Zielsprache
+> passt. Wenn nicht, frage nach, bevor du etwas übersetzt.**
 >
 > 1. Gib die **vollständige** Datei zurück: jede Zeile, in derselben
 >    Reihenfolge, im selben Format, nichts hinzugefügt, nichts weggelassen,
 >    nichts zusammengefasst oder abgekürzt.
 > 2. Fülle **nur die letzte Spalte**. Übernimm alle Spalten links davon
 >    unverändert.
-> 3. Alles in geschweiften Klammern — `{n}`, `{langs}`, `{max}`, `{service}`,
->    `{scope}` — ist ein Platzhalter, den die Software zur Laufzeit einsetzt.
->    Übernimm ihn genau so, samt Klammern und Schreibweise darin. Du darfst ihn
->    im Satz verschieben, wenn die Grammatik von \<SPRACHE\> es verlangt. Für
->    `{scope}` wird eine andere Zeile derselben Datei eingesetzt — lass die
->    runden Klammern darum stehen, wo der Quelltext sie hat, und schreibe die
->    Wörter nicht selbst hinein.
+> 3. Alles in geschweiften Klammern — etwa `{n}`, `{langs}` oder `{service}` —
+>    ist ein Platzhalter, den die Software zur Laufzeit durch einen Wert
+>    ersetzt. Übernimm ihn genau so, samt Klammern und Schreibweise darin. Du
+>    darfst ihn im Satz verschieben, wenn die Grammatik der Zielsprache es
+>    verlangt.
 > 4. Beachte die Spalte `kind`:
 >    - `label` — Beschriftung neben einem Feld oder auf einer Schaltfläche:
 >      **kurz halten**.
 >    - `tooltip` — erklärender Text: ein ganzer Satz ist in Ordnung.
 >    - `placeholder` — ein Formatbeispiel, etwa eine Rufnummer: den Quelltext
->      unverändert wiederholen, es sei denn, das Format ist in \<SPRACHE\>
+>      unverändert wiederholen, es sei denn, das Format ist in der Zielsprache
 >      wirklich ein anderes.
 >    - `speech` — wird von einem Gerät **vorgelesen**, einem älteren Menschen,
 >      der vielleicht gerade um Hilfe bittet. Schreibe es so, wie man es sagt:
@@ -137,12 +140,12 @@ aber etwas kaputt macht.
 >      höflich an.
 >    - `ui` — Schaltflächen und Meldungen des Editors selbst, gelesen von einer
 >      administrierenden Person.
-> 5. Ist ein Text in \<SPRACHE\> schon richtig, wie er dasteht — etwa ein Wort,
+> 5. Ist ein Text in der Zielsprache schon richtig, wie er dasteht — etwa ein Wort,
 >    das genauso lautet —, dann **wiederhole ihn** statt die Zelle leer zu
 >    lassen. Eine leere Zelle heißt „noch nicht übersetzt“.
 > 6. Nutze die anderen Spalten als Kontext, wenn ein Text kurz oder mehrdeutig
 >    ist.
-> 7. Verwende die Anführungszeichen und Satzzeichen, wie sie in \<SPRACHE\>
+> 7. Verwende die Anführungszeichen und Satzzeichen, wie sie in der Zielsprache
 >    üblich sind.
 >
 > Gib zuerst die Datei zurück. Falls du irgendwo raten musstest, nenne diese
