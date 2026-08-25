@@ -15,6 +15,10 @@ as you need and continue later at any point.
 - The editor opens in your browser's language if a translation for it exists, and
   in English otherwise. **Language** in the top row switches it at any time; the
   button names below are the English ones.
+- **Your translation stays on this device.** What you upload applies to this one
+  device. A language reaches future devices only by getting into the image they
+  are built from, so keep the filled-in CSV file — how to go on from there is
+  under **Good to know** at the end.
 
 ---
 
@@ -241,10 +245,9 @@ editor.
 
 ## Good to know
 
-- **Up to seven languages** can exist at once. If you add an eighth, the editor
-  asks which existing language to remove. **English** and **German** cannot be
-  removed: English is what the keys are written in, German is what this project
-  ships for.
+- **Any number of languages** can exist side by side; a new one displaces
+  none. Only **English** is special: it is what the keys are written in, and
+  every dictionary translates against them.
 - A language needs no translation of the keys already written in it — they count
   as done. That is why a device whose application is written in German reports
   German as complete without anyone translating its labels into German.
@@ -255,5 +258,14 @@ editor.
   application writes a label that is word for word what the editor's own text
   already says in that language, the two are one entry: you translate it once,
   and both use your wording. The `kind` column then lists both uses.
+- **How a language reaches future devices.** The dictionaries live on the
+  device under `<ui_dir>/lang/`, one `.json` file per language. The simple route
+  is to keep the filled-in CSV and upload it on every further device. If future
+  devices are to carry the language without anyone doing anything, the `.json`
+  files have to be in the image: mount the master medium on a USB port of the
+  device and copy **only `lang/*.json`** — not the whole of `ui_dir`, because
+  the editor's web files and the application's language list sit beside them,
+  and both belong to the release rather than travelling back from a device. It
+  is settled for good only once the file ships with the next release.
 - When you are finished, click **End session** so that another administrator
   can edit.

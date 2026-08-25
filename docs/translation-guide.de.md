@@ -16,6 +16,11 @@ später weitermachen.
 - Der Editor startet in der Sprache Ihres Browsers, sofern es dafür eine
   Übersetzung gibt, sonst auf Englisch. Über die Sprachauswahl (**Sprache**)
   in der obersten Zeile können Sie jederzeit wechseln.
+- **Ihre Übersetzung bleibt auf diesem Gerät.** Was Sie hochladen, gilt für
+  dieses eine. Auf künftige Geräte kommt eine Sprache nur, wenn sie in das
+  Abbild gelangt, aus dem diese gebaut werden. Heben Sie die ausgefüllte
+  CSV-Datei deshalb auf — wie es weitergeht, steht unter **Gut zu wissen** am
+  Ende.
 
 ---
 
@@ -258,10 +263,9 @@ Editor zu sehen.
 
 ## Gut zu wissen
 
-- Es können **bis zu sieben Sprachen** gleichzeitig bestehen. Fügen Sie eine
-  achte hinzu, fragt der Editor, welche bestehende entfallen soll. **Englisch**
-  und **Deutsch** lassen sich nicht entfernen: in Englisch sind die Schlüssel
-  geschrieben, und Deutsch ist die Sprache, für die dieses Projekt gebaut ist.
+- Es können **beliebig viele Sprachen** nebeneinander bestehen; eine neue
+  verdrängt keine vorhandene. Besonders ist allein **Englisch**: darin sind die
+  Schlüssel geschrieben, gegen die jedes Wörterbuch übersetzt.
 - Eine Sprache braucht keine Übersetzung der Schlüssel, die schon in ihr
   geschrieben sind — die zählen als erledigt. Deshalb meldet ein Gerät, dessen
   Anwendung deutsch geschrieben ist, Deutsch als vollständig, ohne dass jemand
@@ -275,5 +279,15 @@ Editor zu sehen.
   in dieser Sprache ohnehin sagt, sind beide ein Eintrag: Sie übersetzen ihn
   einmal, und beide verwenden Ihre Fassung. Die Spalte `kind` nennt dann beide
   Verwendungen.
+- **Wie eine Sprache in künftige Geräte kommt.** Die Wörterbücher liegen auf
+  dem Gerät unter `<ui_dir>/lang/`, eine `.json`-Datei je Sprache. Der einfache
+  Weg ist, die ausgefüllte CSV aufzuheben und auf jedem weiteren Gerät
+  hochzuladen. Sollen künftige Geräte die Sprache ohne Zutun mitbringen, müssen
+  die `.json`-Dateien ins Abbild: den Master-Datenträger an einem
+  USB-Anschluss des Geräts einhängen und **nur `lang/*.json`** hinüberkopieren
+  — nicht das ganze `ui_dir`, denn daneben liegen die Web-Dateien des Editors
+  und die Sprachliste der Anwendung, die beide zum Release gehören und nicht
+  vom Gerät zurückwandern sollen. Endgültig richtig ist es erst, wenn die Datei
+  bei der nächsten Release-Erstellung mitgeliefert wird.
 - Klicken Sie am Ende auf **Sitzung beenden**, damit ein anderer Administrator
   bearbeiten kann.
