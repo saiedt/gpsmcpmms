@@ -336,8 +336,8 @@ workshop stops travelling to customers.
 
 These all come from the same place: a display string is not an identifier, a key
 is not a translation, and a completeness count is only as honest as the moment
-it was taken. Each is a single decision — cheap in the
-source, and expensive to discover on a device somebody has already been given.
+it was taken. Each is a single decision: cheap to get right in the source, but
+expensive to discover on a device somebody has already been given.
 
 #### Register every display string at startup
 
@@ -346,7 +346,7 @@ that when the module registers; anything else needs `note_xlation_keys()`. Do it
 next to `register_params()`, for everything you know about.
 
 The temptation is to let a string register itself the first time it is used —
-`translate()` notes its key on the way through, so it works. It works and it
+`translate()` notes its key on the way through, so it works. It works, but it
 lies: a template downloaded before that moment does not contain the string, and
 the completeness count that told somebody their languages were finished did not
 count it. The gap appears on a device, in front of a user, in a language nobody
@@ -360,7 +360,7 @@ that name a voice's gender were harvested only when the voice list was rendered,
 so on every device, in every language, that one spot read German. The
 completeness count said 198 of 198 the whole time.
 
-`start_editor()` snapshots the key set, and anything registered afterwards is
+`start_editor()` snapshots the key set, so anything registered after that is
 named once in the log. Read that log during release-making; on an application
 that declares everything up front it stays empty.
 
@@ -400,15 +400,15 @@ The pattern that works:
   device, and the note is a starting point for the next development round.
 - have an answer for the unknown case that does not involve inventing a key.
   Here a service without a key is announced without its name — worse than the
-  full sentence, better than silence, and never a word nobody translated.
+  full sentence, but better than silence, and never a word nobody translated.
 
 Match on the stable identifier where you have one, and on the wording only as a
 fallback. A renamed category is otherwise a category you no longer know.
 
 #### An identifier is not a display string
 
-Dynamic enums return `{value: {"label": …}}`, and the two halves are different
-kinds of thing. The **value** is persisted and compared — never translate it,
+Dynamic enums return `{value: {"label": …}}`. The two halves look alike, but
+they are different kinds of thing. The **value** is persisted and compared — never translate it,
 never let it drift. The **label** is shown and belongs in every template.
 
 When the label is an identifier rather than prose — a file name, a voice name —
@@ -418,15 +418,15 @@ label is still prose and is still collected.
 
 The trap is an option whose value and label are the same word. Keep them apart
 on purpose: `{"none": {"label": "no ring tone"}}`, never `{"Keine": {"label":
-"Keine"}}`. Change the label of the second and you have changed what is stored.
+"Keine"}}`. If you change the label of the second, you have changed what is stored.
 
 #### Declared values are data
 
-`default_val`, `fixed_val` and `likely_val` are values, not display strings, and
+`default_val`, `fixed_val` and `likely_val` are values, not display strings, so
 the library does not collect them as keys. When you write tooling of your own
 that walks declarations — a bulk rename, a source-language flip — draw the same
-line. A default that happens to read like a label will otherwise be translated,
-and what was a device setting becomes a word.
+line. Otherwise a default that happens to read like a label will be translated,
+and a device setting has turned into a word.
 
 #### Do not let your knowledge become the library's rule
 
@@ -437,9 +437,9 @@ question being decided.
 Ours asked the speech service whether it had a voice — a *speaking* question
 applied to a *reading* decision. Somebody reading the editor in Italian needs no
 Italian voice. Worse, the answer was useless exactly where it mattered: with the
-service unreachable every language passed, and on a delivered device without a
-key it is always unreachable. The concern behind it — *"somebody translates five
-hundred strings and none of them can be spoken"* — was better served by a report
+service unreachable, every language passed — and on a delivered device without
+a key, it is always unreachable. The concern behind it — *"somebody translates
+five hundred strings that the device cannot speak"* — was better served by a report
 naming the languages that lack recordings.
 
 #### Derive artefacts from ids, and check they survive
@@ -449,8 +449,8 @@ generated documents — name them after something stable and compare the *conten
 before and after any change to the strings.
 
 Here every announcement is a `.wav` beside an `.rc` holding the text it was made
-from. A single character's difference makes the recording stale, and a delivered
-device has no key to redo it. Both the source-language flip and the catalogue
+from. A single character's difference makes the recording stale. A delivered
+device has no key to make it again. Both the source-language flip and the catalogue
 freeze could have invalidated seventy recordings across seven languages; what
 made them safe was snapshotting all seventy texts first and comparing afterwards,
 not reading the diff and hoping.
@@ -460,8 +460,8 @@ not reading the diff and hoping.
 An off-target test that builds its own empty world tests a device that does not
 exist. Point it at the dictionaries and the language allow-list your image
 carries. Ours seeded the library's own instead, so the announcements came out in
-`DECL_LANG` — and every expectation was written to match, which made the test
-agree with itself and with nothing else.
+`DECL_LANG`. Every expectation was then written to match, so the test agreed
+with itself and with nothing else.
 
 ---
 
