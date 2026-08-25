@@ -23,9 +23,9 @@ There are two parts, because they are two different jobs:
 
 Three worked cases come first, because a shape is easier to copy than a rule is
 to apply. Each is a real problem from a real device, and each is answered by a
-declaration rather than by code. The practices after them are shorter, and
-nearly all of them concern one subject: display strings, and what becomes of
-them once a device speaks more than one language.
+declaration rather than by code. What follows them is shorter: one rule that
+holds for every module, and then a group of practices about display strings and
+what becomes of them once a device speaks more than one language.
 
 ### A worked case: pairing captured identifiers with a live catalogue
 
@@ -286,11 +286,57 @@ before the application has told it anything, must not freeze a list whose
 contents it is guessing. Lock what you know; a lock set on an assumption is
 worse than no lock, because the assumption is now permanent.
 
+### Your device is not the deployment
+
+A module that decides something about itself — whether it can render what it was
+asked to, whether it is finished, whether it may give up its parameters — has to
+measure against the values *this* deployment declared. Never against a literal,
+and never against what happens to be on the desk.
+
+The status display is the plain case. Its declaration says the number of lamps
+is a deployment's decision, and says the range:
+
+```python
+"num_leds": {"label": "Number of LEDs", "type": "int",
+             "bound_to": "24..1000", "default_val": 24},
+```
+
+Twenty-four is the ring most devices carry, and it is the default — so a module
+written on such a device works, and keeps working for as long as nobody tries
+anything else:
+
+```python
+for i in range(24):                       # wrong
+    self.pixels[i] = colour
+```
+
+On a device with a three-hundred-lamp strip the same line lights the first
+twenty-four and leaves the rest dark. Nothing raises and nothing is logged; the
+strip looks broken rather than misconfigured, which sends whoever installed it
+looking for a loose connector. The declaration had already said the number was
+not the code's to know:
+
+```python
+for i in range(self.num_leds):            # right
+    self.pixels[i] = colour
+```
+
+The larger decision works the same way. When a module asks whether it is
+finished, it should ask what is still unset — `config_ready()` takes a path, so
+a module can ask about its own subtree — rather than count what it has done and
+compare the count with a number it chose itself. A count is right for exactly
+one deployment: the one the author had in front of them.
+
+Being finished is worth knowing about in its own right, because a module that
+has nothing left to configure can drop its declaration *and everything stored
+for it* with `discard_module()`. That is how an API key belonging to the
+workshop stops travelling to customers.
+
 ### Tips and tricks for multi-linguality
 
-Nearly all of these come from the same place: a display string is not an
-identifier, a key is not a translation, and a completeness count is only as
-honest as the moment it was taken. Each is a single decision — cheap in the
+These all come from the same place: a display string is not an identifier, a key
+is not a translation, and a completeness count is only as honest as the moment
+it was taken. Each is a single decision — cheap in the
 source, and expensive to discover on a device somebody has already been given.
 
 #### Register every display string at startup
@@ -381,36 +427,6 @@ the library does not collect them as keys. When you write tooling of your own
 that walks declarations — a bulk rename, a source-language flip — draw the same
 line. A default that happens to read like a label will otherwise be translated,
 and what was a device setting becomes a word.
-
-#### Measure against what the deployment has
-
-If a module decides something about itself — whether it is finished, whether it
-can give up its parameters — measure against the deployment, never against a
-constant.
-
-The speech module compared its number of recorded languages with the library's
-ceiling of seven:
-
-```python
-if len(self.voiced_languages()) >= config_mgr.MAX_LANGUAGES:   # wrong
-    config_mgr.discard_module("5tts")
-```
-
-Correct for a device carrying exactly seven languages, and silently fatal for
-every other: a deployment shipping five would have recorded all five and kept
-its API key for ever, because five is less than seven — the provisioning would
-never have completed. The ceiling has since been removed, and the test now asks
-what it actually wants to know:
-
-```python
-if not set(config_mgr.supported_languages()) - set(self.voiced_languages()):
-    config_mgr.discard_module("5tts")
-```
-
-Giving up parameters is worth knowing about in its own right: a module that has
-nothing left to configure can drop its declaration *and everything stored for
-it*. That is how an API key that belonged to the workshop stops travelling to
-customers.
 
 #### Do not let your knowledge become the library's rule
 
