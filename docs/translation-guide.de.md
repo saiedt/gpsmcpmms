@@ -97,7 +97,9 @@ innerhalb eines Textes eine Zeile niemals zerreißen können).
 
 Hängen Sie die heruntergeladene CSV-Datei an und geben Sie die folgende
 Anweisung. Sie füllen darin **genau eine Stelle** aus: die Sprache, in die
-übersetzt werden soll. Alles Übrige liest der Assistent aus der Datei selbst.
+übersetzt werden soll. Schreiben Sie sie so, wie Sie sie selbst nennen —
+„Französisch" genügt, der Eigenname `Français` ist hier nicht nötig, denn diese
+Zeile liest nur der Assistent. Alles Übrige liest er aus der Datei selbst.
 Lassen Sie die Regeln stehen — jede von ihnen steht da, weil ihr Fehlen eine
 Datei erzeugt, die zwar richtig aussieht, aber etwas kaputt macht.
 
