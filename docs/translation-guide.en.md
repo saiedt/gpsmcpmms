@@ -92,12 +92,12 @@ row).
 ### Handing the file to an AI assistant
 
 Attach the downloaded CSV file and give it the prompt below. There is **exactly
-one place** for you to fill in: the language to translate into. Name it the way
-you normally would — "French" is enough, the endonym `Français` is not needed
-here, because only the assistant reads this line. Everything else it reads from
-the file itself. Keep the rules — each one is there
-because leaving it out produces a file that looks correct but breaks
-something.
+one blank** for you to fill in, the one after **Target language:** — and you
+fill it with the language to translate into. Name it the way you normally
+would — "French" is enough, the endonym `Français` is not needed here, because
+only the assistant reads this line. Everything else it reads from the file
+itself. Keep the rules — each one is there because leaving it out produces a
+file that looks correct but breaks something.
 
 > **Target language: \_\_\_\_\_\_\_\_.** Everywhere in this prompt, "the target
 > language" means that one.
