@@ -1,4 +1,4 @@
-# Hub4Help Configuration Editor — Translation Guide
+# Translation Guide
 
 This guide explains how to **add a new interface language** or **update an
 existing translation**. The actual translating happens offline in a small file
@@ -36,6 +36,11 @@ translation**.
 2. For a new language, type a 2–3 letter **Language code** such as `fr`, `it` or
    `es`, and the **Language name** as speakers of it write it — `Français`, not
    `French`. That name is what every language menu will show.
+
+   Both fields accept typing only where the device leaves the choice of language
+   open. Where the application ships a fixed list of permitted languages, pick
+   one from the menu in front of them instead; the two fields then only show the
+   code and the name of what you picked.
 3. On the next row, tick up to three existing languages as helper columns:
    *Translating the source keys, with up to 3 languages as further context*. They
    give a human translator — or an AI assistant — something to compare against.
@@ -81,13 +86,7 @@ row).
   you would think — a word that reads the same in your language ("OK"), and
   fields that are not a sentence at all, such as the format example
   `004961501834300` for a phone number.
-- The two leading columns are the **same text in two languages**, and both are
-  filled. Translate from whichever you read better; you never have to work out
-  which of them the software considers the original, because rewording a
-  source text creates a new row rather than quietly outdating its neighbour.
-- You can translate by hand, or hand the whole file to an AI assistant
-  (e.g. *"please fill the last column with the French translation; rows marked
-  `placeholder` are format examples, rows marked `speech` are read aloud"*). The
+- You can translate by hand, or hand the whole file to an AI assistant. The
   source text, the `kind` and the reference columns give it everything it needs.
 
 ### Handing the file to an AI assistant
@@ -101,10 +100,9 @@ file that looks right and breaks something.
 > **\<LANGUAGE\>**. The attached `<code>.csv` is UTF-8 text, one row per string,
 > fields separated by `|`, every field wrapped in double quotes.
 >
-> The first two columns are the same text in two languages — translate from
-> whichever you handle better, they are equally valid. Then `kind` (what the
-> text is), possibly further reference languages, and last the target column
-> `<code>` — the only column you may write in.
+> The first column is the source text you translate. Then `kind` (what the text
+> is), possibly further reference languages as context, and last the target
+> column `<code>` — the only column you may write in.
 >
 > 1. Return the **complete** file: every row, in the same order, same format,
 >    nothing added, nothing omitted, nothing summarised or abbreviated.

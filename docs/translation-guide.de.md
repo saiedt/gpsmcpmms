@@ -1,4 +1,4 @@
-# Hub4Help Konfigurationseditor — Anleitung zu Übersetzungen
+# Anleitung zu Übersetzungen
 
 Diese Anleitung erklärt, wie Sie eine **neue Sprache hinzufügen** oder eine
 **bestehende Übersetzung aktualisieren**. Das eigentliche Übersetzen geschieht
@@ -39,6 +39,11 @@ Nun erscheinen zwei Schaltflächen: **Neue Übersetzung hinzufügen** und
    ein, z. B. `fr`, `it` oder `es`, und als **Sprachname**, wie die Sprache sich
    selbst nennt — `Français`, nicht `Französisch`. Unter diesem Namen steht sie
    danach in jeder Sprachauswahl.
+
+   Die beiden Felder sind allerdings nur dann beschreibbar, wenn das Gerät neue
+   Sprachen frei zulässt. Bringt die Anwendung eine feste Liste erlaubter
+   Sprachen mit, wählen Sie stattdessen im Auswahlfeld davor eine davon aus; die
+   beiden Felder zeigen dann nur noch Code und Namen der gewählten Sprache an.
 3. Setzen Sie in der Zeile darunter bis zu drei Häkchen bei bestehenden
    Sprachen: *Quellschlüssel übersetzen, mit bis zu 3 Sprachen als weiterem
    Kontext*. Sie geben einem menschlichen Übersetzer — oder einer KI — etwas zum
@@ -85,16 +90,8 @@ innerhalb eines Textes eine Zeile niemals zerreißen können).
   öfter vor, als man denkt — bei einem Wort, das in Ihrer Sprache genauso lautet
   („OK“), und bei Feldern, hinter denen gar kein Satz steckt, etwa dem
   Formatbeispiel `004961501834300` für eine Rufnummer.
-- Die beiden ersten Spalten sind **derselbe Text in zwei Sprachen**, und beide
-  sind gefüllt. Übersetzen Sie aus der, die Sie besser lesen; welche davon die
-  Software für das Original hält, brauchen Sie nie zu wissen — wird ein
-  Quelltext umformuliert, entsteht eine neue Zeile und nicht eine still veraltete
-  daneben.
 - Sie können von Hand übersetzen oder die gesamte Datei einem KI-Assistenten
-  übergeben (z. B. *„Bitte fülle die letzte Spalte mit der französischen
-  Übersetzung; Zeilen mit `placeholder` sind Formatbeispiele, Zeilen mit
-  `speech` werden vorgelesen“*). Quelltext, `kind` und die Referenzspalten
-  liefern alles Nötige.
+  übergeben. Quelltext, `kind` und die Referenzspalten liefern alles Nötige.
 
 ### Die Datei einem KI-Assistenten übergeben
 
@@ -109,10 +106,9 @@ etwas kaputt macht.
 > Zeile je Zeichenkette, Felder durch `|` getrennt, jedes Feld in doppelten
 > Anführungszeichen.
 >
-> Die ersten zwei Spalten sind derselbe Text in zwei Sprachen — übersetze aus
-> der, die du besser beherrschst, beide sind gleichwertig. Dann `kind` (was der
-> Text ist), moeglicherweise weitere Referenzsprachen, und zuletzt die
-> Zielspalte `<code>` — die einzige Spalte, in die du schreiben darfst.
+> Die erste Spalte ist der Quelltext, den du übersetzt. Dann `kind` (was der
+> Text ist), möglicherweise weitere Referenzsprachen als Kontext, und zuletzt
+> die Zielspalte `<code>` — die einzige Spalte, in die du schreiben darfst.
 >
 > 1. Gib die **vollständige** Datei zurück: jede Zeile, in derselben
 >    Reihenfolge, im selben Format, nichts hinzugefügt, nichts weggelassen,
