@@ -21,151 +21,11 @@ There are two parts, because they are two different jobs:
 
 ## Part 1: Writing the application
 
-### Register every display string at startup
-
-A string becomes a translation key when something registers it. Declarations do
-that when the module registers; anything else needs `note_xlation_keys()`. Do it
-next to `register_params()`, for everything you know about.
-
-The temptation is to let a string register itself the first time it is used —
-`translate()` notes its key on the way through, so it works. It works and it
-lies: a template downloaded before that moment does not contain the string, and
-the completeness count that told somebody their languages were finished did not
-count it. The gap appears on a device, in front of a user, in a language nobody
-chose.
-
-Two of these shipped here. The names of the remote service catalogue became keys
-only once somebody opened the dropdown that listed them — which is why the
-commissioning guide had to open with *"first, and without fail, open this field
-once"*, a defect rewritten as prose and handed to a human. And the three words
-that name a voice's gender were harvested only when the voice list was rendered,
-so on every device, in every language, that one spot read German. The
-completeness count said 198 of 198 the whole time.
-
-`start_editor()` snapshots the key set, and anything registered afterwards is
-named once in the log. Read that log during release-making; on an application
-that declares everything up front it stays empty.
-
-### Keys are `DECL_LANG`; a foreign wording is a translation
-
-Sooner or later a module gets its display strings from somewhere else — the
-categories of a remote catalogue, the fields of a foreign schema — and they
-arrive in whatever language that source speaks.
-
-Do not register them as they stand. Settle on a `DECL_LANG` wording, register
-that, and hand the original over as its first translation with
-`add_original_xlations()`. Registering the foreign string makes a key in a
-language the rest of the tree is not written in: the completeness count calls it
-translated for a language it is merely *written* in, a reader of `DECL_LANG` is
-shown a word from another one, and nothing in a template says which row is which.
-
-```python
-config_mgr.note_xlation_keys(*FROZEN.values(), kind="speech")
-config_mgr.add_original_xlations("de", FROZEN)   # {key: how the source said it}
-```
-
-### Freeze what the outside world names
-
-The set of keys belongs to the release, not to whatever a third party's server
-answers today. If the catalogue is the source of your keys, a category added
-over there turns every device in the field incomplete — with no way back,
-because a delivered device cannot translate or record anything.
-
-The pattern that works:
-
-- ship a curated file mapping the outside identifier to your `DECL_LANG` wording
-  and the original;
-- register from that file at startup, needing no network to know what has to be
-  translated;
-- when the source names something the file does not know, **write it to a
-  separate file** and carry on. The shipped artefact stays identical on every
-  device, and the note is a starting point for the next development round.
-- have an answer for the unknown case that does not involve inventing a key.
-  Here a service without a key is announced without its name — worse than the
-  full sentence, better than silence, and never a word nobody translated.
-
-Match on the stable identifier where you have one, and on the wording only as a
-fallback. A renamed category is otherwise a category you no longer know.
-
-### An identifier is not a display string
-
-Dynamic enums return `{value: {"label": …}}`, and the two halves are different
-kinds of thing. The **value** is persisted and compared — never translate it,
-never let it drift. The **label** is shown and belongs in every template.
-
-When the label is an identifier rather than prose — a file name, a voice name —
-mark the option `verbatim`, or every look at that list drops fifty rows into the
-translation templates, in every language, for ever. A tooltip beside a verbatim
-label is still prose and is still collected.
-
-The trap is an option whose value and label are the same word. Keep them apart
-on purpose: `{"none": {"label": "no ring tone"}}`, never `{"Keine": {"label":
-"Keine"}}`. Change the label of the second and you have changed what is stored.
-
-### Declared values are data
-
-`default_val`, `fixed_val` and `likely_val` are values, not display strings, and
-the library does not collect them as keys. When you write tooling of your own
-that walks declarations — a bulk rename, a source-language flip — draw the same
-line. A default that happens to read like a label will otherwise be translated,
-and what was a device setting becomes a word.
-
-### Measure against what the deployment has
-
-If a module decides something about itself — whether it is finished, whether it
-can give up its parameters — measure against the deployment, never against a
-constant.
-
-The speech module compared its number of recorded languages with the library's
-ceiling of seven:
-
-```python
-if len(self.voiced_languages()) >= config_mgr.MAX_LANGUAGES:   # wrong
-    config_mgr.discard_module("5tts")
-```
-
-Correct for a device carrying exactly seven languages, and silently fatal for
-every other: a deployment shipping five would have recorded all five and kept
-its API key for ever, because five is less than seven — the provisioning would
-never have completed. The ceiling has since been removed, and the test now asks
-what it actually wants to know:
-
-```python
-if not set(config_mgr.supported_languages()) - set(self.voiced_languages()):
-    config_mgr.discard_module("5tts")
-```
-
-Giving up parameters is worth knowing about in its own right: a module that has
-nothing left to configure can drop its declaration *and everything stored for
-it*. That is how an API key that belonged to the workshop stops travelling to
-customers.
-
-### Do not let your knowledge become the library's rule
-
-`set_language_validator()` lets a host refuse languages it knows it cannot serve.
-Use it for what you really know, and check that the question it asks is the
-question being decided.
-
-Ours asked the speech service whether it had a voice — a *speaking* question
-applied to a *reading* decision. Somebody reading the editor in Italian needs no
-Italian voice. Worse, the answer was useless exactly where it mattered: with the
-service unreachable every language passed, and on a delivered device without a
-key it is always unreachable. The concern behind it — *"somebody translates five
-hundred strings and none of them can be spoken"* — was better served by a report
-naming the languages that lack recordings.
-
-### Derive artefacts from ids, and check they survive
-
-If your application derives files from display strings — recordings, caches,
-generated documents — name them after something stable and compare the *content*
-before and after any change to the strings.
-
-Here every announcement is a `.wav` beside an `.rc` holding the text it was made
-from. A single character's difference makes the recording stale, and a delivered
-device has no key to redo it. Both the source-language flip and the catalogue
-freeze could have invalidated seventy recordings across seven languages; what
-made them safe was snapshotting all seventy texts first and comparing afterwards,
-not reading the diff and hoping.
+Three worked cases come first, because a shape is easier to copy than a rule is
+to apply. Each is a real problem from a real device, and each is answered by a
+declaration rather than by code. The practices after them are shorter, and
+nearly all of them concern one subject: display strings, and what becomes of
+them once a device speaks more than one language.
 
 ### A worked case: pairing captured identifiers with a live catalogue
 
@@ -245,7 +105,7 @@ that knows about tokens. Everything above is enforced in the backend *and*
 rendered by the editor from the same declaration, which is the point: the two
 cannot disagree, because there is only one statement of the rule.
 
-### Delivering a captured value: what goes in `alt_target_paths`
+#### Delivering a captured value: what goes in `alt_target_paths`
 
 The capture above has a second half. Pressing *Scan* leaves the editor waiting;
 the module then reads its hardware and hands the result over:
@@ -426,7 +286,160 @@ before the application has told it anything, must not freeze a list whose
 contents it is guessing. Lock what you know; a lock set on an assumption is
 worse than no lock, because the assumption is now permanent.
 
-### Test the device, not the sandbox
+### Tips and tricks for multi-linguality
+
+Nearly all of these come from the same place: a display string is not an
+identifier, a key is not a translation, and a completeness count is only as
+honest as the moment it was taken. Each is a single decision — cheap in the
+source, and expensive to discover on a device somebody has already been given.
+
+#### Register every display string at startup
+
+A string becomes a translation key when something registers it. Declarations do
+that when the module registers; anything else needs `note_xlation_keys()`. Do it
+next to `register_params()`, for everything you know about.
+
+The temptation is to let a string register itself the first time it is used —
+`translate()` notes its key on the way through, so it works. It works and it
+lies: a template downloaded before that moment does not contain the string, and
+the completeness count that told somebody their languages were finished did not
+count it. The gap appears on a device, in front of a user, in a language nobody
+chose.
+
+Two of these shipped here. The names of the remote service catalogue became keys
+only once somebody opened the dropdown that listed them — which is why the
+commissioning guide had to open with *"first, and without fail, open this field
+once"*, a defect rewritten as prose and handed to a human. And the three words
+that name a voice's gender were harvested only when the voice list was rendered,
+so on every device, in every language, that one spot read German. The
+completeness count said 198 of 198 the whole time.
+
+`start_editor()` snapshots the key set, and anything registered afterwards is
+named once in the log. Read that log during release-making; on an application
+that declares everything up front it stays empty.
+
+#### Keys are `DECL_LANG`; a foreign wording is a translation
+
+Sooner or later a module gets its display strings from somewhere else — the
+categories of a remote catalogue, the fields of a foreign schema — and they
+arrive in whatever language that source speaks.
+
+Do not register them as they stand. Settle on a `DECL_LANG` wording, register
+that, and hand the original over as its first translation with
+`add_original_xlations()`. Registering the foreign string makes a key in a
+language the rest of the tree is not written in: the completeness count calls it
+translated for a language it is merely *written* in, a reader of `DECL_LANG` is
+shown a word from another one, and nothing in a template says which row is which.
+
+```python
+config_mgr.note_xlation_keys(*FROZEN.values(), kind="speech")
+config_mgr.add_original_xlations("de", FROZEN)   # {key: how the source said it}
+```
+
+#### Freeze what the outside world names
+
+The set of keys belongs to the release, not to whatever a third party's server
+answers today. If the catalogue is the source of your keys, a category added
+over there turns every device in the field incomplete — with no way back,
+because a delivered device cannot translate or record anything.
+
+The pattern that works:
+
+- ship a curated file mapping the outside identifier to your `DECL_LANG` wording
+  and the original;
+- register from that file at startup, needing no network to know what has to be
+  translated;
+- when the source names something the file does not know, **write it to a
+  separate file** and carry on. The shipped artefact stays identical on every
+  device, and the note is a starting point for the next development round.
+- have an answer for the unknown case that does not involve inventing a key.
+  Here a service without a key is announced without its name — worse than the
+  full sentence, better than silence, and never a word nobody translated.
+
+Match on the stable identifier where you have one, and on the wording only as a
+fallback. A renamed category is otherwise a category you no longer know.
+
+#### An identifier is not a display string
+
+Dynamic enums return `{value: {"label": …}}`, and the two halves are different
+kinds of thing. The **value** is persisted and compared — never translate it,
+never let it drift. The **label** is shown and belongs in every template.
+
+When the label is an identifier rather than prose — a file name, a voice name —
+mark the option `verbatim`, or every look at that list drops fifty rows into the
+translation templates, in every language, for ever. A tooltip beside a verbatim
+label is still prose and is still collected.
+
+The trap is an option whose value and label are the same word. Keep them apart
+on purpose: `{"none": {"label": "no ring tone"}}`, never `{"Keine": {"label":
+"Keine"}}`. Change the label of the second and you have changed what is stored.
+
+#### Declared values are data
+
+`default_val`, `fixed_val` and `likely_val` are values, not display strings, and
+the library does not collect them as keys. When you write tooling of your own
+that walks declarations — a bulk rename, a source-language flip — draw the same
+line. A default that happens to read like a label will otherwise be translated,
+and what was a device setting becomes a word.
+
+#### Measure against what the deployment has
+
+If a module decides something about itself — whether it is finished, whether it
+can give up its parameters — measure against the deployment, never against a
+constant.
+
+The speech module compared its number of recorded languages with the library's
+ceiling of seven:
+
+```python
+if len(self.voiced_languages()) >= config_mgr.MAX_LANGUAGES:   # wrong
+    config_mgr.discard_module("5tts")
+```
+
+Correct for a device carrying exactly seven languages, and silently fatal for
+every other: a deployment shipping five would have recorded all five and kept
+its API key for ever, because five is less than seven — the provisioning would
+never have completed. The ceiling has since been removed, and the test now asks
+what it actually wants to know:
+
+```python
+if not set(config_mgr.supported_languages()) - set(self.voiced_languages()):
+    config_mgr.discard_module("5tts")
+```
+
+Giving up parameters is worth knowing about in its own right: a module that has
+nothing left to configure can drop its declaration *and everything stored for
+it*. That is how an API key that belonged to the workshop stops travelling to
+customers.
+
+#### Do not let your knowledge become the library's rule
+
+`set_language_validator()` lets a host refuse languages it knows it cannot serve.
+Use it for what you really know, and check that the question it asks is the
+question being decided.
+
+Ours asked the speech service whether it had a voice — a *speaking* question
+applied to a *reading* decision. Somebody reading the editor in Italian needs no
+Italian voice. Worse, the answer was useless exactly where it mattered: with the
+service unreachable every language passed, and on a delivered device without a
+key it is always unreachable. The concern behind it — *"somebody translates five
+hundred strings and none of them can be spoken"* — was better served by a report
+naming the languages that lack recordings.
+
+#### Derive artefacts from ids, and check they survive
+
+If your application derives files from display strings — recordings, caches,
+generated documents — name them after something stable and compare the *content*
+before and after any change to the strings.
+
+Here every announcement is a `.wav` beside an `.rc` holding the text it was made
+from. A single character's difference makes the recording stale, and a delivered
+device has no key to redo it. Both the source-language flip and the catalogue
+freeze could have invalidated seventy recordings across seven languages; what
+made them safe was snapshotting all seventy texts first and comparing afterwards,
+not reading the diff and hoping.
+
+#### Test the device, not the sandbox
 
 An off-target test that builds its own empty world tests a device that does not
 exist. Point it at the dictionaries and the language allow-list your image
