@@ -279,6 +279,12 @@ Editor zu sehen.
   in dieser Sprache ohnehin sagt, sind beide ein Eintrag: Sie übersetzen ihn
   einmal, und beide verwenden Ihre Fassung. Die Spalte `kind` nennt dann beide
   Verwendungen.
+- **Übersetzen ist nicht Vertonen.** Auch Zeilen mit `speech` sind Text: Nach
+  dem Hochladen zeigt das Gerät Ihre Sprache sofort an, und ob es sie auch
+  *sprechen* kann, ist eine Frage an die Anwendung. Sie braucht dafür eine
+  Aufnahme je Ansage, und die entsteht in einem eigenen Schritt — bei manchen
+  Geräten nur in der Werkstatt, weil ein ausgeliefertes Gerät den Zugang zum
+  Sprachdienst nicht mehr besitzt.
 - **Wie eine Sprache in künftige Geräte kommt.** Die Wörterbücher liegen auf
   dem Gerät unter `<ui_dir>/lang/`, eine `.json`-Datei je Sprache. Der einfache
   Weg ist, die ausgefüllte CSV aufzuheben und auf jedem weiteren Gerät

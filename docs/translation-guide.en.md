@@ -258,6 +258,12 @@ editor.
   application writes a label that is word for word what the editor's own text
   already says in that language, the two are one entry: you translate it once,
   and both use your wording. The `kind` column then lists both uses.
+- **Translating is not recording.** Rows marked `speech` are text like any
+  other: after the upload the device shows your language at once, and whether it
+  can also *speak* it is a question for the application. That needs one
+  recording per announcement, made in a step of its own — on some devices only
+  in the workshop, because a delivered device no longer holds the access to the
+  speech service.
 - **How a language reaches future devices.** The dictionaries live on the
   device under `<ui_dir>/lang/`, one `.json` file per language. The simple route
   is to keep the filled-in CSV and upload it on every further device. If future
