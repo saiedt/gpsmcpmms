@@ -30,7 +30,7 @@ what becomes of them once a device speaks more than one language.
 ### A worked case: pairing captured identifiers with a live catalogue
 
 Most of what an editor has to do is one field at a time. The interesting part
-starts where fields constrain each other, and that is worth one full example —
+starts where fields constrain each other, so that is worth one full example —
 because the answer is a declaration rather than code.
 
 The task: somebody has to pair physical tokens with categories. A token's
@@ -82,7 +82,7 @@ That is the whole specification. What each line buys:
   as the combination was new.
 - The same declaration drives the dropdown: **a category another row already
   uses is not offered.** Only one-column keys do this, and only for an enum —
-  hiding a taken option is possible when the options are known, and impossible
+  hiding a taken option is possible when the options are known, but impossible
   for a value that arrives from hardware. So a captured duplicate is caught the
   other way: the write is refused, the field marked, and *Apply* disabled.
 - **`distinct_values` on the container** covers the rest: two ordinary fields and
@@ -130,8 +130,8 @@ the editor behind a modal, so there is never a second candidate.
 
 **`*` matches exactly one path element**, which is what makes a list row
 reachable — including the row that does not exist yet. Somebody adding a pair
-presses *Scan* before the row has an ordinal, and the same pattern covers both
-that template and every row already there.
+presses *Scan* before the row has an ordinal, and the same pattern still covers
+both that template and every row already there.
 
 **Keep the list beside the declaration.** In the appliance these are the very
 three paths that also form the `distinct_values` group, and that is not a
@@ -259,7 +259,7 @@ param_dict = {
 ```
 
 - **`fixed_val` on a list locks length and composition, not the leaves inside.**
-  Nobody adds a state, nobody removes one, and everybody may change how each
+  Nobody adds a state, nobody removes one, but everybody may change how each
   looks. Without that distinction you would need a second mechanism for "editable
   within, closed without".
 - **`init_only` inside an editable record** freezes the two fields that *are* the
@@ -509,7 +509,7 @@ fresh device should start with; what accumulates in the store during development
 is one machine's state, including whatever secrets were typed into it.
 
 Watch where `file` parameters put their uploads — `file_dir` is yours to choose,
-and an asset inside the store you are about to delete is an asset you are about
+so an asset inside the store you are about to delete is an asset you are about
 to delete.
 
 ### Keep the assets out of the secret store
