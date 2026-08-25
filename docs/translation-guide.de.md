@@ -98,8 +98,8 @@ innerhalb eines Textes eine Zeile niemals zerreißen können).
 Hängen Sie die heruntergeladene `<code>.csv` an und geben Sie eine Anweisung wie
 die folgende. Ersetzen Sie `<SPRACHE>` durch die gewünschte Sprache und
 `<code>` durch den Spaltennamen, und lassen Sie die Regeln stehen — jede von
-ihnen steht da, weil ihr Fehlen eine Datei erzeugt, die richtig aussieht und
-etwas kaputt macht.
+ihnen steht da, weil ihr Fehlen eine Datei erzeugt, die zwar richtig aussieht,
+aber etwas kaputt macht.
 
 > Du übersetzt die Bedienoberfläche eines Konfigurationseditors ins
 > **\<SPRACHE\>**. Die angehängte `<code>.csv` ist eine UTF-8-Textdatei, eine

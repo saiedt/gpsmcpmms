@@ -94,7 +94,7 @@ row).
 Attach the downloaded `<code>.csv` and give it a prompt like the one below.
 Replace `<LANGUAGE>` with the language you want and `<code>` with the column
 name, and keep the rules — each one is there because leaving it out produces a
-file that looks right and breaks something.
+file that looks correct but breaks something.
 
 > You are translating the interface of a configuration editor into
 > **\<LANGUAGE\>**. The attached `<code>.csv` is UTF-8 text, one row per string,
