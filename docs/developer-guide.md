@@ -174,11 +174,12 @@ That is the whole difficulty, and it comes in three parts:
 - **And a category nobody has curated yet must break nothing**, because one
   arrives sooner or later.
 
-For this the library offers two calls and no file format at all.
-`note_xlation_keys()` says *these strings are keys*, and
+For this the library offers three things and no file format at all.
+`note_xlation_keys()` says *these strings are keys*.
 `add_original_xlations()` says *and here is one language's rendering of them
-already*. Everything between the remote service and those two calls is the
-client module's own business.
+already*. And a dynamic enum's provider may mark an option `verbatim`, which
+keeps its label out of the templates altogether. Everything between the remote
+service and those three is the client module's own business.
 
 What this module invented is a file that ships with the release. What it holds
 is easiest seen on one entry at two moments.
