@@ -21,11 +21,11 @@ There are two parts, because they are two different jobs:
 
 ## Part 1: Writing the application
 
-Three worked cases come first, because a shape is easier to copy than a rule is
+Four worked cases come first, because a shape is easier to copy than a rule is
 to apply. Each is a real problem from a real device, and each is answered by a
-declaration rather than by code. What follows them is shorter: one rule that
-holds for every module, and then a group of practices about display strings and
-what becomes of them once a device speaks more than one language.
+declaration or a file rather than by code. What follows them is shorter: one
+rule that holds for every module, and then a group of practices about display
+strings and what becomes of them once a device speaks more than one language.
 
 ### A worked case: pairing captured identifiers with a live catalogue
 
@@ -286,6 +286,91 @@ before the application has told it anything, must not freeze a list whose
 contents it is guessing. Lock what you know; a lock set on an assumption is
 worse than no lock, because the assumption is now permanent.
 
+### A worked case: keys that arrive in a foreign language
+
+The categories this application works with are defined by somebody else — a
+remote service, whose catalogue changes when that party decides. The device
+does not only show their names on screen; it reads some of them aloud, in
+whichever of eight languages the person in the room has chosen.
+
+And the service names them in German.
+
+That is the whole difficulty, and it comes in three parts:
+
+- **The names are keys**, and this library writes every key in `DECL_LANG`,
+  which is English. A German name registered as a key would be a key in a
+  language the rest of the tree is not written in: the completeness count would
+  call it translated for a language it is merely *written* in, a reader of
+  English would be shown a German word, and nothing in a template would say
+  which row is which.
+- **The set of keys belongs to the release**, not to what the server answers
+  today. Were the catalogue the source, a category added over there would turn
+  every device in the field incomplete — with no way back, because a delivered
+  device can neither translate nor record anything.
+- **And a category nobody has curated yet must break nothing**, because one
+  arrives sooner or later.
+
+The answer is a file that ships with the release:
+
+```json
+{
+  "lang": "de",
+  "types": [
+    { "key":      "Companionship",
+      "original": "Begleitung",
+      "id":       "bbde703b-5da1-4fac-b50c-84d4558bc92a",
+      "verbatim": false }
+  ]
+}
+```
+
+Four fields, and each answers one thing:
+
+- **`key`** is *your* wording, in `DECL_LANG`. It is the translation key, and
+  every dictionary translates against it. Choosing it is a human act; nothing
+  derives it from anything.
+- **`original`** is what the service calls the thing. It is handed over as the
+  German translation of that key, so German is complete without anybody
+  translating it:
+
+  ```python
+  config_mgr.note_xlation_keys(*originals, kind="speech")
+  config_mgr.add_original_xlations("de", originals)   # {key: how they said it}
+  ```
+
+  `kind="speech"` because these names are read aloud, and nothing else in the
+  file could tell a translator that.
+- **`id`** is the service's own identifier. Match on it first and on the
+  wording only as a fallback — a renamed category is otherwise a category you
+  no longer know.
+- **`verbatim`** marks an entry nobody has curated. The device writes such an
+  entry itself when the service names something the file does not know, putting
+  the foreign wording in `key`, because that is all it has.
+
+**A `verbatim` entry takes part in nothing.** It names the type in the editor,
+so a card can still be assigned to it — and that is all. It becomes no
+translation key, it carries no original reading, and it demands no recording.
+The next release-making pass therefore has one file to open: give every marked
+entry an English wording, clear the mark, done.
+
+That inaction is also what makes writing into a shipped file safe. Doing so
+sounds like the opposite of freezing it, and it would be, if the added entries
+did anything. Because they do not, two devices of one release can hold
+different files and still behave exactly alike, and nothing a server says can
+make a device in the field incomplete. **That behaviour is what has to be
+protected.** A file that is the same everywhere was never the goal, only one
+way of reaching it.
+
+**Mark, never delete.** A type the service stops naming is marked as no longer
+offered, and a human decides at release time whether it goes. Deleting it on
+the device that serves as the master would carry the deletion into every image
+built from it, and a whole series would lose the name of something that may
+well come back.
+
+**And the uncurated case needs an answer that does not invent a key.** Here a
+service without a key is announced without its name — worse than the full
+sentence, but better than silence, and never a word nobody translated.
+
 ### Your device is not the deployment
 
 A module that decides something about itself — whether it can render what it was
@@ -334,10 +419,10 @@ workshop stops travelling to customers.
 
 ### Tips and tricks for multi-linguality
 
-These all come from the same place: a display string is not an identifier, a key
-is not a translation, and a completeness count is only as honest as the moment
-it was taken. Each is a single decision: cheap to get right in the source, but
-expensive to discover on a device somebody has already been given.
+These all come from the same place: a display string is not an identifier, and
+a completeness count is only as honest as the moment it was taken. Each is a
+single decision: cheap to get right in the source, but expensive to discover on
+a device somebody has already been given.
 
 #### Register every display string at startup
 
@@ -364,74 +449,18 @@ completeness count said 198 of 198 the whole time.
 named once in the log. Read that log during release-making; on an application
 that declares everything up front it stays empty.
 
-#### Keys are `DECL_LANG`; a foreign wording is a translation
-
-Sooner or later a module gets its display strings from somewhere else — the
-categories of a remote catalogue, the fields of a foreign schema — and they
-arrive in whatever language that source speaks.
-
-Do not register them as they stand. Settle on a `DECL_LANG` wording, register
-that, and hand the original over as its first translation with
-`add_original_xlations()`. Registering the foreign string makes a key in a
-language the rest of the tree is not written in: the completeness count calls it
-translated for a language it is merely *written* in, a reader of `DECL_LANG` is
-shown a word from another one, and nothing in a template says which row is which.
-
-```python
-config_mgr.note_xlation_keys(*FROZEN.values(), kind="speech")
-config_mgr.add_original_xlations("de", FROZEN)   # {key: how the source said it}
-```
-
-#### Freeze what the outside world names
-
-The set of keys belongs to the release, not to whatever a third party's server
-answers today. If the catalogue is the source of your keys, a category added
-over there turns every device in the field incomplete — with no way back,
-because a delivered device cannot translate or record anything.
-
-The pattern that works:
-
-- ship a curated file mapping the outside identifier to your `DECL_LANG` wording
-  and the original;
-- register from that file at startup, needing no network to know what has to be
-  translated;
-- when the source names something the file does not know, **write it back into
-  that same file, marked as not yet curated** — here the mark is called
-  `verbatim`, the same word the library uses for an enum option whose label is
-  an identifier. The next release-making pass then has one file to open: give
-  every marked entry a `DECL_LANG` wording, clear the mark, done.
-- have an answer for the unknown case that does not involve inventing a key.
-  Here a service without a key is announced without its name — worse than the
-  full sentence, but better than silence, and never a word nobody translated.
-
-Writing into a shipped artefact sounds like the opposite of freezing it. It
-would be, if the added entries did anything at all. They do not: a marked entry
-names the type in the editor and takes part in nothing else — it becomes no
-translation key, it carries no original reading, and it demands no recording.
-
-So two devices of one release can hold different files and still behave exactly
-alike, and nothing a server says can make a device in the field incomplete.
-**That behaviour is what has to be protected.** A file that is the same
-everywhere was never the goal, only one way of reaching it.
-
-**Mark, never delete.** A type the source stops naming is marked as no longer
-offered. Deleting it on the device that serves as the master would carry the
-deletion into every image built from it, and a whole series would lose the name
-of something that may well come back.
-
-Match on the stable identifier where you have one, and on the wording only as a
-fallback. A renamed category is otherwise a category you no longer know.
-
 #### An identifier is not a display string
 
 Dynamic enums return `{value: {"label": …}}`. The two halves look alike, but
 they are different kinds of thing. The **value** is persisted and compared — never translate it,
 never let it drift. The **label** is shown and belongs in every template.
 
-When the label is an identifier rather than prose — a file name, a voice name —
-mark the option `verbatim`, or every look at that list drops fifty rows into the
-translation templates, in every language, for ever. A tooltip beside a verbatim
-label is still prose and is still collected.
+When the label is an identifier rather than prose — a file name, a voice name,
+or the wording of a category nobody has curated yet — mark the option
+`verbatim`, or every look at that list drops fifty rows into the translation
+templates, in every language, for ever. A tooltip beside a verbatim label is
+still prose and is still collected. The fourth worked case above turns that
+mark into a workflow.
 
 The trap is an option whose value and label are the same word. Keep them apart
 on purpose: `{"none": {"label": "no ring tone"}}`, never `{"Keine": {"label":
