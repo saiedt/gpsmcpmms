@@ -175,16 +175,26 @@ That is the whole difficulty, and it comes in three parts:
 - **And a category nobody has curated yet must break nothing**, because one
   arrives sooner or later.
 
-For this the library offers three things and no file format at all.
-`note_xlation_keys()` says *these strings are keys*.
-`add_original_xlations()` says *and here is one language's rendering of them
-already*. And a dynamic enum's provider may mark an option `verbatim`, which
-keeps its label out of the translation templates altogether. Everything between
-the remote
-service and those three is the client module's own business.
+The module already knew the library's two calls: `note_xlation_keys()` for
+strings that are keys, and `add_original_xlations()` for a rendering of them
+that somebody else supplied. What it did not have was the road from one to the
+other — from a German name the service hands over, to an English key somebody
+has to choose.
 
-What this module invented is a file that ships with the release. What it holds
-is easiest seen on one entry at two moments.
+Two things make that road long. The names **arrive late**: a category the
+service invents next month is not there when the module registers today. And
+nobody can say **for how many runs** a name stays foreign, because it turns
+English only when a person decides it — at the next release, or the one after.
+
+So the module leans on the one thing here that outlives a run, a file, and on a
+third feature of the library: a provider may mark an enum option `verbatim`, and
+a marked label is never taken as a translation key. Without that mark, the first
+look at the list would turn a German word into a key, and every language would
+count as incomplete for as long as nobody had curated it — which is precisely
+the span nobody can predict.
+
+The file ships with the release, and what it holds is easiest seen on one entry
+at two moments.
 
 **When the service first names the category**, the device writes this by itself:
 
