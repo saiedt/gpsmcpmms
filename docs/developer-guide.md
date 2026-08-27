@@ -228,7 +228,13 @@ Four fields, and each answers one thing:
   wording only as a fallback — a renamed category is otherwise a category you
   no longer know.
 - **`verbatim`** marks an entry nobody has curated yet, as in the first of the
-  two above.
+  two above. The name is borrowed from the library, which has a `verbatim` flag
+  for an enum option whose label is an identifier and must not be translated
+  (see [An identifier is not a display
+  string](#an-identifier-is-not-a-display-string)). The two are not the same
+  thing — one is a field in this module's file, the other a flag on an option —
+  but an uncurated entry produces exactly such an option, which is why they
+  share a word.
 
 **A `verbatim` entry takes part in nothing.** It names the type in the editor,
 so a card can still be assigned to it — and that is all. It becomes no
