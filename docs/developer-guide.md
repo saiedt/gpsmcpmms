@@ -151,6 +151,103 @@ nobody — and a path that can never wait is dead weight at best; at worst, if t
 module captures more than one kind of value, an overlapping list lets the wrong
 one satisfy the wrong field.
 
+### A worked case: keys that arrive in a foreign language
+
+The categories of the case above — the ones a token gets paired with — come
+from a remote service, and that service names them in its own language. Here that is
+German. The device, meanwhile, does not only show those names on screen: it
+reads some of them aloud, in whichever of eight languages the person in the room
+has chosen. And this library writes every key in `DECL_LANG`, which is
+English.
+
+That is the whole difficulty, and it comes in three parts:
+
+- **The names are keys.** A German name registered as one would be a key in a
+  language the rest of the tree is not written in: the completeness count would
+  call it translated for a language it is merely *written* in, a reader of
+  English would be shown a German word, and nothing in a template would say
+  which row is which.
+- **The set of keys belongs to the release**, not to what the server answers
+  today. Were the catalogue the source, a category added over there would turn
+  every device in the field incomplete — with no way back, because a delivered
+  device can neither translate nor record anything.
+- **And a category nobody has curated yet must break nothing**, because one
+  arrives sooner or later.
+
+The answer is a file that ships with the release. What it holds is easiest seen
+on one entry at two moments.
+
+**When the service first names the category**, the device writes this by itself:
+
+```json
+{ "key":      "Begleitung",
+  "original": "Begleitung",
+  "id":       "bbde703b-5da1-4fac-b50c-84d4558bc92a",
+  "verbatim": true }
+```
+
+It has the identifier and the foreign wording and nothing else, so the foreign
+wording stands in both fields — and `verbatim` says: this entry takes part in
+nothing.
+
+**At the next release**, somebody decides what the thing is called in English:
+
+```json
+{ "key":      "Companionship",
+  "original": "Begleitung",
+  "id":       "bbde703b-5da1-4fac-b50c-84d4558bc92a",
+  "verbatim": false }
+```
+
+One field written by hand, one mark cleared. `original` did not move: it is what
+the service says, not what you decided.
+
+Four fields, and each answers one thing:
+
+- **`key`** is *your* wording, in `DECL_LANG`. It is the translation key, and
+  every dictionary translates against it. Choosing it is a human act; nothing
+  derives it from anything.
+- **`original`** is what the service calls the thing. It is handed over as the
+  German translation of that key, so German is complete without anybody
+  translating it:
+
+  ```python
+  config_mgr.note_xlation_keys(*originals, kind="speech")
+  config_mgr.add_original_xlations("de", originals)   # {key: how they said it}
+  ```
+
+  `kind="speech"` because these names are read aloud, and nothing else in the
+  file could tell a translator that.
+- **`id`** is the service's own identifier. Match on it first and on the
+  wording only as a fallback — a renamed category is otherwise a category you
+  no longer know.
+- **`verbatim`** marks an entry nobody has curated yet, as in the first of the
+  two above.
+
+**A `verbatim` entry takes part in nothing.** It names the type in the editor,
+so a card can still be assigned to it — and that is all. It becomes no
+translation key, it carries no original reading, and it demands no recording.
+The next release-making pass therefore has one file to open: give every marked
+entry an English wording, clear the mark, done.
+
+That inaction is also what makes writing into a shipped file safe. Doing so
+sounds like the opposite of freezing it, and it would be, if the added entries
+did anything. Because they do not, two devices of one release can hold
+different files and still behave exactly alike, and nothing a server says can
+make a device in the field incomplete. **That behaviour is what has to be
+protected.** A file that is the same everywhere was never the goal, only one
+way of reaching it.
+
+**Mark, never delete.** A type the service stops naming is marked as no longer
+offered, and a human decides at release time whether it goes. Deleting it on
+the device that serves as the master would carry the deletion into every image
+built from it, and a whole series would lose the name of something that may
+well come back.
+
+**And the uncurated case needs an answer that does not invent a key.** Here a
+service without a key is announced without its name — worse than the full
+sentence, but better than silence, and never a word nobody translated.
+
 ### A worked case: trying a value before committing it
 
 Two fields where the first parameterises the second, and the second is only
@@ -285,91 +382,6 @@ written **only if the states are known** — a module registering on its own,
 before the application has told it anything, must not freeze a list whose
 contents it is guessing. Lock what you know; a lock set on an assumption is
 worse than no lock, because the assumption is now permanent.
-
-### A worked case: keys that arrive in a foreign language
-
-The categories this application works with are defined by somebody else — a
-remote service, whose catalogue changes when that party decides. The device
-does not only show their names on screen; it reads some of them aloud, in
-whichever of eight languages the person in the room has chosen.
-
-And the service names them in German.
-
-That is the whole difficulty, and it comes in three parts:
-
-- **The names are keys**, and this library writes every key in `DECL_LANG`,
-  which is English. A German name registered as a key would be a key in a
-  language the rest of the tree is not written in: the completeness count would
-  call it translated for a language it is merely *written* in, a reader of
-  English would be shown a German word, and nothing in a template would say
-  which row is which.
-- **The set of keys belongs to the release**, not to what the server answers
-  today. Were the catalogue the source, a category added over there would turn
-  every device in the field incomplete — with no way back, because a delivered
-  device can neither translate nor record anything.
-- **And a category nobody has curated yet must break nothing**, because one
-  arrives sooner or later.
-
-The answer is a file that ships with the release:
-
-```json
-{
-  "lang": "de",
-  "types": [
-    { "key":      "Companionship",
-      "original": "Begleitung",
-      "id":       "bbde703b-5da1-4fac-b50c-84d4558bc92a",
-      "verbatim": false }
-  ]
-}
-```
-
-Four fields, and each answers one thing:
-
-- **`key`** is *your* wording, in `DECL_LANG`. It is the translation key, and
-  every dictionary translates against it. Choosing it is a human act; nothing
-  derives it from anything.
-- **`original`** is what the service calls the thing. It is handed over as the
-  German translation of that key, so German is complete without anybody
-  translating it:
-
-  ```python
-  config_mgr.note_xlation_keys(*originals, kind="speech")
-  config_mgr.add_original_xlations("de", originals)   # {key: how they said it}
-  ```
-
-  `kind="speech"` because these names are read aloud, and nothing else in the
-  file could tell a translator that.
-- **`id`** is the service's own identifier. Match on it first and on the
-  wording only as a fallback — a renamed category is otherwise a category you
-  no longer know.
-- **`verbatim`** marks an entry nobody has curated. The device writes such an
-  entry itself when the service names something the file does not know, putting
-  the foreign wording in `key`, because that is all it has.
-
-**A `verbatim` entry takes part in nothing.** It names the type in the editor,
-so a card can still be assigned to it — and that is all. It becomes no
-translation key, it carries no original reading, and it demands no recording.
-The next release-making pass therefore has one file to open: give every marked
-entry an English wording, clear the mark, done.
-
-That inaction is also what makes writing into a shipped file safe. Doing so
-sounds like the opposite of freezing it, and it would be, if the added entries
-did anything. Because they do not, two devices of one release can hold
-different files and still behave exactly alike, and nothing a server says can
-make a device in the field incomplete. **That behaviour is what has to be
-protected.** A file that is the same everywhere was never the goal, only one
-way of reaching it.
-
-**Mark, never delete.** A type the service stops naming is marked as no longer
-offered, and a human decides at release time whether it goes. Deleting it on
-the device that serves as the master would carry the deletion into every image
-built from it, and a whole series would lose the name of something that may
-well come back.
-
-**And the uncurated case needs an answer that does not invent a key.** Here a
-service without a key is announced without its name — worse than the full
-sentence, but better than silence, and never a word nobody translated.
 
 ### Your device is not the deployment
 
