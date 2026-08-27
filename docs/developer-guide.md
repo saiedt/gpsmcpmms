@@ -404,13 +404,15 @@ The pattern that works:
   Here a service without a key is announced without its name — worse than the
   full sentence, but better than silence, and never a word nobody translated.
 
-Writing into a shipped artefact sounds like the opposite of freezing it, and it
-would be, were the added entries not **inert**. A marked entry names the thing
-in the editor and takes part in nothing else: it becomes no translation key, it
-carries no original reading, and it demands no recording. Two devices of one
-release can therefore hold different files and still behave identically — and
-the completeness of a device in the field cannot be moved by anything a server
-says. That is the property to protect, not the byte-identity of the file.
+Writing into a shipped artefact sounds like the opposite of freezing it. It
+would be, if the added entries did anything at all. They do not: a marked entry
+names the type in the editor and takes part in nothing else — it becomes no
+translation key, it carries no original reading, and it demands no recording.
+
+So two devices of one release can hold different files and still behave exactly
+alike, and nothing a server says can make a device in the field incomplete.
+**That behaviour is what has to be protected.** A file that is the same
+everywhere was never the goal, only one way of reaching it.
 
 **Mark, never delete.** A type the source stops naming is marked as no longer
 offered. Deleting it on the device that serves as the master would carry the
