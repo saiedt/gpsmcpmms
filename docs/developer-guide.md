@@ -395,12 +395,27 @@ The pattern that works:
   and the original;
 - register from that file at startup, needing no network to know what has to be
   translated;
-- when the source names something the file does not know, **write it to a
-  separate file** and carry on. The shipped artefact stays identical on every
-  device, and the note is a starting point for the next development round.
+- when the source names something the file does not know, **write it back into
+  that same file, marked as not yet curated** — here the mark is called
+  `verbatim`, the same word the library uses for an enum option whose label is
+  an identifier. The next release-making pass then has one file to open: give
+  every marked entry a `DECL_LANG` wording, clear the mark, done.
 - have an answer for the unknown case that does not involve inventing a key.
   Here a service without a key is announced without its name — worse than the
   full sentence, but better than silence, and never a word nobody translated.
+
+Writing into a shipped artefact sounds like the opposite of freezing it, and it
+would be, were the added entries not **inert**. A marked entry names the thing
+in the editor and takes part in nothing else: it becomes no translation key, it
+carries no original reading, and it demands no recording. Two devices of one
+release can therefore hold different files and still behave identically — and
+the completeness of a device in the field cannot be moved by anything a server
+says. That is the property to protect, not the byte-identity of the file.
+
+**Mark, never delete.** A type the source stops naming is marked as no longer
+offered. Deleting it on the device that serves as the master would carry the
+deletion into every image built from it, and a whole series would lose the name
+of something that may well come back.
 
 Match on the stable identifier where you have one, and on the wording only as a
 fallback. A renamed category is otherwise a category you no longer know.
