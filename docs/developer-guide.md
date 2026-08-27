@@ -131,7 +131,7 @@ the editor behind a modal, so there is never a second candidate.
 **`*` matches exactly one path element**, which is what makes a list row
 reachable — including the row that does not exist yet. Somebody adding a pair
 presses *Scan* before the row has an ordinal, and the same pattern still covers
-both that template and every row already there.
+both that empty row and every row already there.
 
 **Keep the list beside the declaration.** In the appliance these are the very
 three paths that also form the `distinct_values` group, and that is not a
@@ -165,8 +165,9 @@ That is the whole difficulty, and it comes in three parts:
 - **The names are keys.** A German name registered as one would be a key in a
   language the rest of the tree is not written in: the completeness count would
   call it translated for a language it is merely *written* in, a reader of
-  English would be shown a German word, and nothing in a template would say
-  which row is which.
+  English would be shown a German word, and nothing in the **translation
+  template** — the CSV a translator downloads, fills in and uploads again —
+  would say which row is which.
 - **The set of keys belongs to the release**, not to what the server answers
   today. Were the catalogue the source, a category added over there would turn
   every device in the field incomplete — with no way back, because a delivered
@@ -178,7 +179,8 @@ For this the library offers three things and no file format at all.
 `note_xlation_keys()` says *these strings are keys*.
 `add_original_xlations()` says *and here is one language's rendering of them
 already*. And a dynamic enum's provider may mark an option `verbatim`, which
-keeps its label out of the templates altogether. Everything between the remote
+keeps its label out of the translation templates altogether. Everything between
+the remote
 service and those three is the client module's own business.
 
 What this module invented is a file that ships with the release. What it holds
@@ -238,7 +240,7 @@ Four fields, and each answers one thing:
   share a word.
 
 **A `verbatim` entry takes part in nothing.** It names the type in the editor,
-so a card can still be assigned to it — and that is all. It becomes no
+so a token can still be paired with it — and that is all. It becomes no
 translation key, it carries no original reading, and it demands no recording.
 The next release-making pass therefore has one file to open: give every marked
 entry an English wording, clear the mark, done.
@@ -267,8 +269,8 @@ before they were understood.
 **Register at startup, not on first use.** The names become keys when the file
 is read, beside `register_params()` — not when somebody first opens the list
 that shows them. `translate()` does note a key on its way through, so letting
-them register themselves works; it works and it lies. A template cut before
-that moment does not contain them, and the count that told somebody their
+them register themselves works; it works and it lies. A translation template
+cut before that moment does not contain them, and the count that told somebody their
 languages were finished had not counted them. Here it ended with a commissioning
 guide that had to open with *"first, and without fail, open this field once"* —
 a defect rewritten as prose and handed to a human.
@@ -277,7 +279,8 @@ a defect rewritten as prose and handed to a human.
 apart: one takes what you decided, the other what somebody else said. Give the
 foreign word to the first, and the completeness count calls a language
 translated that the strings are merely *written* in, a reader of `DECL_LANG`
-meets a word from another language, and no template says which row is which.
+meets a word from another language, and no translation template says which row
+is which.
 That is why `key` and `original` are two fields and not one.
 
 ### A worked case: trying a value before committing it
@@ -476,7 +479,8 @@ next to `register_params()`, for everything you know about.
 
 The temptation is to let a string register itself the first time it is used —
 `translate()` notes its key on the way through, so it works. It works, but it
-lies: a template downloaded before that moment does not contain the string, and
+lies: a translation template downloaded before that moment does not contain the
+string, and
 the completeness count that told somebody their languages were finished did not
 count it. The gap appears on a device, in front of a user, in a language nobody
 chose.
@@ -495,7 +499,8 @@ that declares everything up front it stays empty.
 
 Dynamic enums return `{value: {"label": …}}`. The two halves look alike, but
 they are different kinds of thing. The **value** is persisted and compared — never translate it,
-never let it drift. The **label** is shown and belongs in every template.
+never let it drift. The **label** is shown and belongs in every translation
+template.
 
 When the label is an identifier rather than prose — a file name, a voice name,
 or the wording of a category nobody has curated yet — mark the option
@@ -566,12 +571,14 @@ Do not translate while the strings are still moving. Every rewording invalidates
 work in every language, and a half-translated set is indistinguishable from a
 finished one from the inside.
 
-Cut the templates when the string set has stopped changing — which is a thing you
+Cut the translation templates when the string set has stopped changing — a thing
+you
 can check rather than feel: start the editor, exercise the application, and read
 the log for keys that turned up late. An application that declares everything up
 front produces none.
 
-The log answers the other direction too. Building a template names the keys that
+The log answers the other direction too. Building a translation template names
+the keys that
 no registration touched in this run: strings some dictionary still translates
 while nothing uses them. A few of those are only waiting for a code path that has
 not run yet; the rest are the leftovers of a rewording, and they are worth
