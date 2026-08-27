@@ -174,8 +174,14 @@ That is the whole difficulty, and it comes in three parts:
 - **And a category nobody has curated yet must break nothing**, because one
   arrives sooner or later.
 
-The answer is a file that ships with the release. What it holds is easiest seen
-on one entry at two moments.
+For this the library offers two calls and no file format at all.
+`note_xlation_keys()` says *these strings are keys*, and
+`add_original_xlations()` says *and here is one language's rendering of them
+already*. Everything between the remote service and those two calls is the
+client module's own business.
+
+What this module invented is a file that ships with the release. What it holds
+is easiest seen on one entry at two moments.
 
 **When the service first names the category**, the device writes this by itself:
 
@@ -247,6 +253,25 @@ well come back.
 **And the uncurated case needs an answer that does not invent a key.** Here a
 service without a key is announced without its name — worse than the full
 sentence, but better than silence, and never a word nobody translated.
+
+Two lessons are worth taking out of this one, because both cost something here
+before they were understood.
+
+**Register at startup, not on first use.** The names become keys when the file
+is read, beside `register_params()` — not when somebody first opens the list
+that shows them. `translate()` does note a key on its way through, so letting
+them register themselves works; it works and it lies. A template cut before
+that moment does not contain them, and the count that told somebody their
+languages were finished had not counted them. Here it ended with a commissioning
+guide that had to open with *"first, and without fail, open this field once"* —
+a defect rewritten as prose and handed to a human.
+
+**A key is not the word you were handed.** The two calls above exist to be kept
+apart: one takes what you decided, the other what somebody else said. Give the
+foreign word to the first, and the completeness count calls a language
+translated that the strings are merely *written* in, a reader of `DECL_LANG`
+meets a word from another language, and no template says which row is which.
+That is why `key` and `original` are two fields and not one.
 
 ### A worked case: trying a value before committing it
 
@@ -449,13 +474,11 @@ the completeness count that told somebody their languages were finished did not
 count it. The gap appears on a device, in front of a user, in a language nobody
 chose.
 
-Two of these shipped here. The names of the remote service catalogue became keys
-only once somebody opened the dropdown that listed them — which is why the
-commissioning guide had to open with *"first, and without fail, open this field
-once"*, a defect rewritten as prose and handed to a human. And the three words
-that name a voice's gender were harvested only when the voice list was rendered,
-so on every device, in every language, that one spot read German. The
-completeness count said 198 of 198 the whole time.
+Two of these shipped here. One was the remote service catalogue, told in the
+worked case above. The other: the three words that name a voice's gender were
+harvested only when the voice list was rendered, so on every device, in every
+language, that one spot read German. The completeness count said 198 of 198 the
+whole time.
 
 `start_editor()` snapshots the key set, so anything registered after that is
 named once in the log. Read that log during release-making; on an application
