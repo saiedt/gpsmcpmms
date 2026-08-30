@@ -453,12 +453,26 @@ function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
         if (ctx.usedEnumValues)           // uniqueness filter (spec 4.9.2)
             options = options.filter(o => o.value === cur ||
                                           !ctx.usedEnumValues.has(o.value));
+        // An option's tooltip goes into the visible text, not only into the
+        // title. A title on an <option> is honoured by hardly any browser --
+        // Firefox shows it, Chrome and Edge do not -- and a hint nobody sees
+        // is the same as no hint. It cost somebody an afternoon of listening
+        // to voices they did not want, because the one thing that told male
+        // from female was in that title.
+        //
+        // The two halves are translated differently on purpose: a verbatim
+        // label is an identifier and stays as it is, while the tooltip beside
+        // it is prose. So "de-DE-Wavenet-H (weiblich)" -- the name untouched,
+        // the hint in the reader's language.
         const sel = el("select", {disabled: fixed || backend ? "" : null,
                 onchange: (e) => commit(e.target.value || null)},
             el("option", {value: ""}, ""),
-            ...options.map(o => el("option",
-                {value: o.value, title: o.tooltip ? xl(o.tooltip) : null},
-                o.verbatim ? o.label : xl(o.label))));
+            ...options.map(o => {
+                const text = o.verbatim ? o.label : xl(o.label);
+                const hint = o.tooltip ? xl(o.tooltip) : null;
+                return el("option", {value: o.value, title: hint},
+                          hint ? `${text} (${hint})` : text);
+            }));
         sel.value = cur === null || cur === undefined ? "" : cur;
         return sel;
     }

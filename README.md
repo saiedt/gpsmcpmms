@@ -707,8 +707,11 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   An option may carry **`verbatim: True`** where its label is an identifier
   rather than prose — a file name, a voice name. The label is then shown as it
   stands and never collected as a translation key, while a `tooltip` beside it
-  still is. Without it, one look at a list of fifty file names puts fifty rows
-  into every template, in every language, for ever.
+  still is, and is shown in brackets after the label: `de-DE-Wavenet-H
+  (female)`. Putting it there rather than in the option's `title` is
+  deliberate — most browsers ignore a title on an option, and a hint nobody
+  sees is no hint. Without `verbatim`, one look at a list of fifty file names
+  puts fifty rows into every template, in every language, for ever.
 
   **`values_for`** names a sibling whose value the options are computed *for*.
   Its current value — the one being edited, not the one last saved — is passed to
