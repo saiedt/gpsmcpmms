@@ -173,7 +173,7 @@ class ConfigManager:
         # its own. Not a count and not a list: the language panel already
         # carries both, and a banner that repeats them competes with the panel
         # it is meant to send somebody to.
-        "Some translations are still incomplete.",
+        "Translations: some are still incomplete.",
         "Invalid input", "Apply failed",
         # What is left to say when a request comes back without a reason the
         # editor can show. It claimed "connection lost" once, which is a
@@ -302,11 +302,6 @@ class ConfigManager:
         # is nothing to clear either: the next return value replaces this one,
         # and a callback that returns None takes the entry away.
         self._module_status: dict = {}
-        # Their labels, so a banner can name the module it speaks for without
-        # the editor having to look one up -- this library's own module is not
-        # in the tree the editor receives, and would have none to find.
-        self._module_labels: dict = {self.OWN_MODULE_ID: "Configuration "
-                                     "service"}
         # the language each module writes its display strings in; a tree may
         # hold modules that do not agree, which is why it is per module
 
@@ -443,7 +438,13 @@ class ConfigManager:
         self._module_status[module_id] = found
 
     def _module_status_report(self):
-        """What the editor puts above the panels, keyed by module.
+        """What the editor puts above the panels: the findings, keyed by
+        module.
+
+        Each finding is a whole line. No module name is put in front of it --
+        what a finding is about is often a group inside a module rather than
+        the module itself, and only the module knows which. A heading composed
+        here would be right for some and misleading for the rest.
 
         This library's own entry is computed here rather than stored: nothing
         notifies it when a dictionary is uploaded, and the answer is a walk
@@ -456,10 +457,8 @@ class ConfigManager:
                               *self.translation_status(lang))]
         if incomplete:
             found.setdefault(self.OWN_MODULE_ID, []).append(
-                    "Some translations are still incomplete.")
-        return {m_id: {"label": self._module_labels.get(m_id, m_id),
-                       "messages": msgs}
-                for m_id, msgs in found.items()}
+                    "Translations: some are still incomplete.")
+        return found
 
     def register_params(self, module_id, module_label, param_dict,
                         callback, type_dict=None, module_tooltip=None,
@@ -482,7 +481,6 @@ class ConfigManager:
                              "function names to callables.")
         self._callback_registry[module_id] = callback
         self._func_registry[module_id] = func_dict or {}
-        self._module_labels[module_id] = module_label
         if isinstance(module_label, str) and module_label.strip():
             self._note_xlation_key(module_label.strip(), "label")
         if isinstance(module_tooltip, str) and module_tooltip.strip():
@@ -533,7 +531,6 @@ class ConfigManager:
         self._callback_registry.pop(module_id, None)
         self._func_registry.pop(module_id, None)
         self._module_status.pop(module_id, None)
-        self._module_labels.pop(module_id, None)
         if removed:
             # the schema changed, so the editor's picture of it is stale
             self._invalidate_session(f"module '{module_id}' discarded its "

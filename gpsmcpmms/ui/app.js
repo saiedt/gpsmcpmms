@@ -1676,11 +1676,9 @@ function renderAll() {
     // panels below are in: a device chooses that order by prefixing its ids,
     // and a banner that ignored it would send the reader down the page in the
     // wrong direction.
-    for (const mid of Object.keys(S.moduleStatus).sort()) {
-        const st = S.moduleStatus[mid];
+    for (const mid of Object.keys(S.moduleStatus).sort())
         app.append(el("div", {class: "banner"},
-            `${xl(st.label)}: ${(st.messages || []).map(xl).join("; ")}`));
-    }
+            S.moduleStatus[mid].map(xl).join("; ")));
 
     // sorted by module id, which is how a device controls the order of the
     // groups on screen -- prefix the ids and you have chosen the sequence

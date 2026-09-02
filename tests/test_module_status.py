@@ -28,8 +28,7 @@ def _register(mgr, module_id, callback):
 
 
 def _messages(mgr, module_id):
-    entry = mgr._module_status_report().get(module_id)
-    return entry["messages"] if entry else None
+    return mgr._module_status_report().get(module_id)
 
 
 def test_a_silent_callback_reports_nothing(mgr):
@@ -47,9 +46,13 @@ def test_one_finding_and_several_are_both_allowed(mgr):
     assert _messages(mgr, "many") == ["First thing.", "Second thing."]
 
 
-def test_the_banner_can_name_the_module_it_speaks_for(mgr):
-    _register(mgr, "named", lambda value: "Something is amiss.")
-    assert mgr._module_status_report()["named"]["label"] == "Test module"
+def test_a_finding_is_the_whole_line(mgr):
+    # No module name is put in front of it. What a finding is about is often a
+    # group inside a module -- service cards, say, rather than "Application" --
+    # and a heading composed here would be right for some and wrong for the
+    # rest.
+    _register(mgr, "whole", lambda value: "Service cards: one points nowhere.")
+    assert _messages(mgr, "whole") == ["Service cards: one points nowhere."]
 
 
 def test_a_finding_becomes_a_translation_key(mgr):

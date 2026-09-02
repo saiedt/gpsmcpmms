@@ -155,16 +155,20 @@ config_mgr.register_params(
       self._apply(value)
       found = []
       if self._unknown_types:
-          found.append("Service types this release does not carry.")
+          found.append("H4H services: types this release does not carry.")
       if self._dropped_types:
-          found.append("Service types the server no longer offers.")
+          found.append("H4H services: types the server no longer offers.")
       return found or None
   ```
 
-  The editor gives each module **one line**, its findings joined and the module
-  label in front — *Hub4Help REST interface: Service types this release does
-  not carry; Service types the server no longer offers.* Two banners for one
-  module would read as two problems.
+  The editor gives each module **one line**, its findings joined by `; `. Two
+  banners for one module would read as two problems.
+
+  **Each finding is the whole line**: no module name is put in front of it.
+  What a finding is about is often a group inside a module rather than the
+  module itself — *service cards*, say, inside a module called *Application* —
+  and only the module knows which. Say it in the finding, and say it the same
+  way each time so the joined line reads as one.
 
   Each finding is a **key**, not a finished sentence: the editor renders it in
   whatever language the reader has chosen, and a module cannot know that
