@@ -20,6 +20,8 @@
 
 const S = {
     token: null, readOnly: false, admin: false, factory: false,
+    // what each module last said about itself, keyed by module id
+    moduleStatus: {},
     lockFreeIn: null,        // seconds until the foreign session lapses
     protectedOmitted: false,
     cvv: {},                 // parsed /api/cvv_data dump
@@ -1204,6 +1206,7 @@ async function saveModule(mid) {
             ((r.data && r.data.error) || r.status), "error");
         return;
     }
+    if (r.data.module_status) S.moduleStatus = r.data.module_status;
     const rejected = r.data.rejected;
     await reloadData();
     renderAll();
@@ -1668,6 +1671,11 @@ function renderAll() {
             xl("The device is still using the factory default password"),
             S.admin ? el("button", {class: "small", onclick: exitAdminMode},
                          xl("Exit admin mode")) : null));
+    // Sorted by module id, the same order the panels below are in -- a device
+    // chooses that order by prefixing its ids, and a banner that ignored it
+    // would send the reader down the page in the wrong direction.
+    for (const mid of Object.keys(S.moduleStatus).sort())
+        app.append(el("div", {class: "banner"}, xl(S.moduleStatus[mid])));
 
     // sorted by module id, which is how a device controls the order of the
     // groups on screen -- prefix the ids and you have chosen the sequence
@@ -1740,6 +1748,7 @@ async function reloadData(passwd) {
     S.admin = r.data.admin;
     S.wrongPasswd = r.data.wrong_passwd;
     S.factory = r.data.factory_default_passwd;
+    S.moduleStatus = r.data.module_status || {};
     S.protectedOmitted = r.data.protected_omitted;
     S.cvv = r.data.cvv;
     S.edit = {};

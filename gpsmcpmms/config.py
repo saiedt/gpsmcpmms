@@ -169,6 +169,11 @@ class ConfigManager:
         "after {time}.",
         "Take over session", "Session taken over",
         "The device is still using the factory default password",
+        # This library's own standing, said in the same place a module says
+        # its own. Not a count and not a list: the language panel already
+        # carries both, and a banner that repeats them competes with the panel
+        # it is meant to send somebody to.
+        "Some translations are still incomplete.",
         "Invalid input", "Apply failed",
         # What is left to say when a request comes back without a reason the
         # editor can show. It claimed "connection lost" once, which is a
@@ -290,6 +295,13 @@ class ConfigManager:
         # Central registries: keyed by module_id
         self._callback_registry: dict = {}
         self._func_registry: dict = {}
+        # What each module last said about itself, as a translation key. It is
+        # written from the return value of the module's own callback and from
+        # nowhere else -- that callback already runs at registration and at
+        # every change, so it is the one place that cannot fall behind. There
+        # is nothing to clear either: the next return value replaces this one,
+        # and a callback that returns None takes the entry away.
+        self._module_status: dict = {}
         # the language each module writes its display strings in; a tree may
         # hold modules that do not agree, which is why it is per module
 
@@ -397,6 +409,47 @@ class ConfigManager:
     def query(self, path):
         return CvvNode.query(self, path)
 
+    def _note_module_status(self, module_id, message):
+        """Keeps what a module's callback just said about itself.
+
+        `message` is a key, not a finished sentence. The editor renders it in
+        whatever language the person reading it has chosen, and the module
+        cannot know that language -- a module that returned German would put
+        German in front of seven readers out of eight. So the string is noted
+        as a key like any other and translated on arrival.
+
+        None means there is nothing to report, which is what a callback that
+        returns nothing says: every callback written before this existed keeps
+        working, and says nothing.
+        """
+        if message is None:
+            self._module_status.pop(module_id, None)
+            return
+        if not (isinstance(message, str) and message.strip()):
+            raise ValueError(
+                f"The callback of module '{module_id}' returned "
+                f"{type(message).__name__}; a status must be a non-empty "
+                f"string used as a translation key, or None.")
+        message = message.strip()
+        self._note_xlation_key(message, "ui")
+        self._module_status[module_id] = message
+
+    def _module_status_report(self):
+        """What the editor puts above the panels, keyed by module.
+
+        This library's own entry is computed here rather than stored: nothing
+        notifies it when a dictionary is uploaded, and the answer is a walk
+        over key sets that costs nothing worth caching.
+        """
+        report = dict(self._module_status)
+        incomplete = [lang for lang in self.supported_languages()
+                      if (lambda done, total: done < total)(
+                              *self.translation_status(lang))]
+        if incomplete:
+            report[self.OWN_MODULE_ID] = ("Some translations are still "
+                                          "incomplete.")
+        return report
+
     def register_params(self, module_id, module_label, param_dict,
                         callback, type_dict=None, module_tooltip=None,
                         func_dict=None):
@@ -437,7 +490,7 @@ class ConfigManager:
         # token, forcing the config-editor to re-align (spec 4.8)
         self._invalidate_session(f"module '{module_id}' registered its "
                                  "parameters")
-        callback(config_value)
+        self._note_module_status(module_id, callback(config_value))
 
     def discard_module(self, module_id):
         """
@@ -467,6 +520,7 @@ class ConfigManager:
         removed = CvvNode.discard_module(self, module_id)
         self._callback_registry.pop(module_id, None)
         self._func_registry.pop(module_id, None)
+        self._module_status.pop(module_id, None)
         if removed:
             # the schema changed, so the editor's picture of it is stale
             self._invalidate_session(f"module '{module_id}' discarded its "
@@ -941,7 +995,7 @@ class ConfigManager:
         rejected, value = CvvNode.update_module(self, module_id, config_value)
         callback = self._callback_registry.get(module_id)
         if callable(callback):
-            callback(value)
+            self._note_module_status(module_id, callback(value))
         return rejected
 
     def _probe_host(self, host):
@@ -1889,6 +1943,11 @@ class ConfigManager:
                 "protected_omitted": omitted,
                 "factory_default_passwd":
                     self._current_ui_passwd() == self.FACTORY_DEFAULT_PASSWD,
+                # What the modules have to say, keyed by module. Only to an
+                # administrator: these are notes about work still to be done,
+                # and the person the device stands with can act on none of
+                # them -- for them it would be worry without a remedy.
+                "module_status": self._module_status_report() if admin else {},
                 "cvv": cvv,
             })
 
@@ -1924,7 +1983,12 @@ class ConfigManager:
             except CvvError as exc:
                 self._logger.error(f"Update of '{module}' failed: {exc}")
                 return jsonify({"error": str(exc)}), 500
-            return jsonify({"rejected": rejected})
+            # The callback ran a line ago, so what it said about itself goes
+            # back with the answer to the very save that caused it.
+            return jsonify({
+                "rejected": rejected,
+                "module_status": self._module_status_report() if admin else {},
+            })
 
         @app.route("/api/schema")
         @app.route("/api/schema/<lang_code>")

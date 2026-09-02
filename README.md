@@ -145,6 +145,32 @@ config_mgr.register_params(
   *values* are persisted, never the schema).
 - `callback(value)` is invoked immediately with the module's initial values, and
   again whenever the editor commits a change to that module.
+- **What `callback` returns is the module's status**: a display string the
+  editor shows as a banner above the panels, or `None` for *nothing to report*.
+  A callback written before this existed returns `None` implicitly and keeps
+  working unchanged.
+
+  It is a **key**, not a finished sentence — the editor renders it in whatever
+  language the person reading it has chosen, and a module cannot know that
+  language. Keep it short and fixed; counts and names belong in the log, and a
+  banner that recites them competes with the panel it should be sending
+  somebody to.
+
+  The status is replaced on every call, so nothing has to be cleared: a module
+  that has sorted its problem out returns `None` next time and the banner goes.
+  `discard_module()` takes the status with it. Only administrators see these —
+  they describe work to be done, and the person the device stands with could
+  act on none of it.
+
+  ```python
+  def _config_changed(self, value):
+      self._apply(value)
+      if self._something_is_amiss():
+          return "Some announcements are out of date."   # a registered key
+      return None
+  ```
+
+  The library reports its own standing the same way, under module id `config`.
 - `func_dict` maps function names referenced in Declarations (dynamic enums, see
   [Advanced features](#advanced-features)) to callables.
 
