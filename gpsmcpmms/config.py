@@ -413,11 +413,12 @@ class ConfigManager:
         """Says what a module has to report, from wherever it found out.
 
         The same statement as the one a callback returns, through a second
-        door -- and it is needed because for some modules that callback fires
-        twice in the life of a device and never again. The H4H client learns
-        of an unreachable server when somebody presses a test button or when
-        another module asks it for something, long after its base URL was
-        entered for the last time.
+        door -- and it is needed because that callback fires at the start of a
+        run and then only if somebody edits the module's configuration. On an
+        appliance a run lasts months. The H4H client learns of an unreachable
+        server when somebody presses a test button or when another module asks
+        it for something, and by then the door it was given has been shut for
+        weeks.
 
         What is passed is the module's *whole* standing, not one more item:
         `None`, one finding, or all of them. Both doors therefore say the same

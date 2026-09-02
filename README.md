@@ -190,11 +190,11 @@ config_mgr.register_params(
   multiply, the keys do not.
 
   **Where the finding turns up later**, say it with
-  `update_status(module_id, message)`. For some modules the callback fires
-  twice in the life of a device and never again — the H4H client's base URL is
-  entered once, in the workshop — while what it learns afterwards, when a test
+  `update_status(module_id, message)`. The callback fires at the start of a run
+  and then only if somebody edits that module's configuration — and on an
+  appliance a run lasts months. What a module learns in between, when a test
   button is pressed or another module asks it for something, is exactly what an
-  administrator would want to see.
+  administrator would want to see, and has no other way out.
 
   It takes the same thing the callback returns, and it means the same thing:
   the module's **whole** standing, not one more item. Both doors say everything

@@ -91,10 +91,10 @@ def test_a_callback_returning_something_else_is_refused(mgr):
 
 
 def test_a_module_may_report_between_callbacks(mgr):
-    # For some modules the callback fires twice in the life of a device and
-    # never again -- the H4H client's base URL is entered once, in the
-    # workshop. What it learns afterwards, when a test button is pressed or
-    # another module asks it for something, would otherwise have nowhere to go.
+    # The callback fires at the start of a run and then only if somebody
+    # edits that module's configuration, while a run on an appliance lasts
+    # months. What a module learns in between -- a server that does not answer
+    # a test button -- would otherwise have nowhere to go until the next boot.
     _register(mgr, "later", lambda value: None)
     assert _messages(mgr, "later") is None
 
