@@ -88,3 +88,34 @@ def test_a_callback_returning_something_else_is_refused(mgr):
     # of them would otherwise show up as whatever repr() makes of it.
     with pytest.raises(ValueError):
         _register(mgr, "wrong", lambda value: 42)
+
+
+def test_a_module_may_report_between_callbacks(mgr):
+    # For some modules the callback fires twice in the life of a device and
+    # never again -- the H4H client's base URL is entered once, in the
+    # workshop. What it learns afterwards, when a test button is pressed or
+    # another module asks it for something, would otherwise have nowhere to go.
+    _register(mgr, "later", lambda value: None)
+    assert _messages(mgr, "later") is None
+
+    mgr.update_status("later", "The server cannot be reached.")
+    assert _messages(mgr, "later") == ["The server cannot be reached."]
+
+    mgr.update_status("later", None)
+    assert _messages(mgr, "later") is None
+
+
+def test_reporting_replaces_rather_than_adds(mgr):
+    # Both doors say the same kind of thing: everything the module currently
+    # has to say. Otherwise a module would have to remember which finding it
+    # announced through which, and how to take just that one back.
+    _register(mgr, "both-doors", lambda value: "First thing.")
+    mgr.update_status("both-doors", ["Second thing.", "Third thing."])
+    assert _messages(mgr, "both-doors") == ["Second thing.", "Third thing."]
+
+
+def test_an_unregistered_module_cannot_report(mgr):
+    # A typo would otherwise raise a banner belonging to nothing, which no
+    # later call could take down again.
+    with pytest.raises(ValueError):
+        mgr.update_status("never-registered", "Something is amiss.")

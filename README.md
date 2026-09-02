@@ -189,6 +189,18 @@ config_mgr.register_params(
   short findings beat one sentence assembled from parts: the combinations
   multiply, the keys do not.
 
+  **Where the finding turns up later**, say it with
+  `update_status(module_id, message)`. For some modules the callback fires
+  twice in the life of a device and never again — the H4H client's base URL is
+  entered once, in the workshop — while what it learns afterwards, when a test
+  button is pressed or another module asks it for something, is exactly what an
+  administrator would want to see.
+
+  It takes the same thing the callback returns, and it means the same thing:
+  the module's **whole** standing, not one more item. Both doors say everything
+  currently worth saying, so a module never has to remember which one it used
+  for which finding.
+
   The status is replaced on every call, so nothing has to be cleared: a module
   that has sorted its problem out returns `None` next time and the line goes.
   `discard_module()` takes it with it. Only administrators see any of it —
@@ -212,6 +224,7 @@ Core API methods of `config_mgr` available to client modules:
 | `query(path)` | Returns a map with items `{absolute_path: value}` for the nodes the path matches (module-rooted; wildcards allowed). |
 | `protected_params_ready()` | Like `config_ready`, restricted to `protected` parameters. |
 | `register_params(...)` | See [Registering parameters](#registering-parameters) above. |
+| `update_status(module_id, message)` | What the module has to report, when it finds out between callbacks. Same contract as the callback's return value, and it replaces rather than adds. |
 | `set_app_context(logger, title="")` | Tell the library which application it serves: its logger (once per run), and what it is called. The title prefaces the editor's heading and browser tab — `MyApp Configuration Editor` — and where it is left out, the editor is simply the `Configuration Editor`. |
 
 ---

@@ -409,6 +409,27 @@ class ConfigManager:
     def query(self, path):
         return CvvNode.query(self, path)
 
+    def update_status(self, module_id, message):
+        """Says what a module has to report, from wherever it found out.
+
+        The same statement as the one a callback returns, through a second
+        door -- and it is needed because for some modules that callback fires
+        twice in the life of a device and never again. The H4H client learns
+        of an unreachable server when somebody presses a test button or when
+        another module asks it for something, long after its base URL was
+        entered for the last time.
+
+        What is passed is the module's *whole* standing, not one more item:
+        `None`, one finding, or all of them. Both doors therefore say the same
+        kind of thing, and a module that has sorted one problem out while
+        another remains does not have to remember which door it used for
+        which.
+        """
+        if module_id not in self._callback_registry:
+            raise ValueError(f"update_status(): module '{module_id}' has not "
+                             f"registered any parameters.")
+        self._note_module_status(module_id, message)
+
     def _note_module_status(self, module_id, message):
         """Keeps what a module's callback just said about itself.
 
