@@ -162,8 +162,9 @@ config_mgr.register_params(
       return found or None
   ```
 
-  The editor gives each module **one line**, its findings joined by `; `. Two
-  banners for one module would read as two problems.
+  The editor gives each module **one line**, its findings joined by a space —
+  they are whole sentences, so nothing needs to go between them. Two banners
+  for one module would read as two problems.
 
   **Each finding is the whole line**: no module name is put in front of it.
   What a finding is about is often a group inside a module rather than the

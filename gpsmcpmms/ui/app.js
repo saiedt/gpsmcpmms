@@ -1671,14 +1671,16 @@ function renderAll() {
             xl("The device is still using the factory default password"),
             S.admin ? el("button", {class: "small", onclick: exitAdminMode},
                          xl("Exit admin mode")) : null));
-    // One line per module, its findings joined -- two banners for one module
+    // One line per module, its findings joined by a space -- they are whole
+    // sentences, so nothing has to be put between them, and a semicolon after
+    // a full stop would only look like a mistake. Two banners for one module
     // would read as two problems. Sorted by module id, the same order the
     // panels below are in: a device chooses that order by prefixing its ids,
     // and a banner that ignored it would send the reader down the page in the
     // wrong direction.
     for (const mid of Object.keys(S.moduleStatus).sort())
         app.append(el("div", {class: "banner"},
-            S.moduleStatus[mid].map(xl).join("; ")));
+            S.moduleStatus[mid].map(xl).join(" ")));
 
     // sorted by module id, which is how a device controls the order of the
     // groups on screen -- prefix the ids and you have chosen the sequence
