@@ -154,10 +154,11 @@ config_mgr.register_params(
   def _config_changed(self, value):
       self._apply(value)
       found = []
-      if self._unknown_types:
-          found.append("H4H services: types this release does not carry.")
-      if self._dropped_types:
-          found.append("H4H services: types the server no longer offers.")
+      if self._unknown_types or self._dropped_types:
+          found.append("H4H service: found types unknown locally or no "
+                       "longer offered by the server.")
+      if not self._reachable:
+          found.append("H4H service: the server cannot be reached.")
       return found or None
   ```
 
@@ -167,8 +168,18 @@ config_mgr.register_params(
   **Each finding is the whole line**: no module name is put in front of it.
   What a finding is about is often a group inside a module rather than the
   module itself — *service cards*, say, inside a module called *Application* —
-  and only the module knows which. Say it in the finding, and say it the same
-  way each time so the joined line reads as one.
+  and only the module knows which.
+
+  **One finding covers as much as one sentence can.** Several conditions with
+  the same remedy are one finding, not one each: *found types unknown locally
+  or no longer offered by the server* says in a line what two findings would
+  have said in two, each repeating the same opening. Return a second finding
+  where the second thing is genuinely a second thing — an unreachable server
+  is not a fact about the catalogue.
+
+  This is also what keeps the keys few. A module with four conditions has
+  sixteen states but rarely more than two or three sentences worth writing,
+  because sentences absorb alternatives and states do not.
 
   Each finding is a **key**, not a finished sentence: the editor renders it in
   whatever language the reader has chosen, and a module cannot know that
