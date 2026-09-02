@@ -302,6 +302,11 @@ class ConfigManager:
         # is nothing to clear either: the next return value replaces this one,
         # and a callback that returns None takes the entry away.
         self._module_status: dict = {}
+        # Their labels, so a banner can name the module it speaks for without
+        # the editor having to look one up -- this library's own module is not
+        # in the tree the editor receives, and would have none to find.
+        self._module_labels: dict = {self.OWN_MODULE_ID: "Configuration "
+                                     "service"}
         # the language each module writes its display strings in; a tree may
         # hold modules that do not agree, which is why it is per module
 
@@ -425,14 +430,17 @@ class ConfigManager:
         if message is None:
             self._module_status.pop(module_id, None)
             return
-        if not (isinstance(message, str) and message.strip()):
+        found = [message] if isinstance(message, str) else message
+        if not (isinstance(found, (list, tuple)) and found and
+                all(isinstance(m, str) and m.strip() for m in found)):
             raise ValueError(
                 f"The callback of module '{module_id}' returned "
-                f"{type(message).__name__}; a status must be a non-empty "
-                f"string used as a translation key, or None.")
-        message = message.strip()
-        self._note_xlation_key(message, "ui")
-        self._module_status[module_id] = message
+                f"{type(message).__name__}; a status is a non-empty string, a "
+                f"list of them, or None.")
+        found = [m.strip() for m in found]
+        for m in found:
+            self._note_xlation_key(m, "ui")
+        self._module_status[module_id] = found
 
     def _module_status_report(self):
         """What the editor puts above the panels, keyed by module.
@@ -441,14 +449,17 @@ class ConfigManager:
         notifies it when a dictionary is uploaded, and the answer is a walk
         over key sets that costs nothing worth caching.
         """
-        report = dict(self._module_status)
+        found = {m_id: list(msgs)
+                 for m_id, msgs in self._module_status.items() if msgs}
         incomplete = [lang for lang in self.supported_languages()
                       if (lambda done, total: done < total)(
                               *self.translation_status(lang))]
         if incomplete:
-            report[self.OWN_MODULE_ID] = ("Some translations are still "
-                                          "incomplete.")
-        return report
+            found.setdefault(self.OWN_MODULE_ID, []).append(
+                    "Some translations are still incomplete.")
+        return {m_id: {"label": self._module_labels.get(m_id, m_id),
+                       "messages": msgs}
+                for m_id, msgs in found.items()}
 
     def register_params(self, module_id, module_label, param_dict,
                         callback, type_dict=None, module_tooltip=None,
@@ -471,6 +482,7 @@ class ConfigManager:
                              "function names to callables.")
         self._callback_registry[module_id] = callback
         self._func_registry[module_id] = func_dict or {}
+        self._module_labels[module_id] = module_label
         if isinstance(module_label, str) and module_label.strip():
             self._note_xlation_key(module_label.strip(), "label")
         if isinstance(module_tooltip, str) and module_tooltip.strip():
@@ -521,6 +533,7 @@ class ConfigManager:
         self._callback_registry.pop(module_id, None)
         self._func_registry.pop(module_id, None)
         self._module_status.pop(module_id, None)
+        self._module_labels.pop(module_id, None)
         if removed:
             # the schema changed, so the editor's picture of it is stale
             self._invalidate_session(f"module '{module_id}' discarded its "
