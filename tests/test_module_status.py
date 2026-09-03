@@ -119,3 +119,60 @@ def test_an_unregistered_module_cannot_report(mgr):
     # later call could take down again.
     with pytest.raises(ValueError):
         mgr.update_status("never-registered", "Something is amiss.")
+
+
+# --------------------------------------------------------------------------
+# Retiring without disappearing (discard_module's `revive`)
+# --------------------------------------------------------------------------
+
+def test_a_module_that_left_a_way_back_keeps_its_findings(mgr):
+    # The whole point of the argument. tts retires once everything is voiced,
+    # and a recording can go out of date long afterwards -- with no way back
+    # the finding had nowhere to appear, and the only trace was a line in a
+    # log nobody reads on a shipped device.
+    _register(mgr, "kept", lambda value: "Something is amiss.")
+    mgr.discard_module("kept", revive=lambda: None)
+    assert _messages(mgr, "kept") == ["Something is amiss."]
+
+
+def test_a_resting_module_may_still_report(mgr):
+    _register(mgr, "late-word", lambda value: None)
+    mgr.discard_module("late-word", revive=lambda: None)
+
+    mgr.update_status("late-word", "Found it later.")
+    assert _messages(mgr, "late-word") == ["Found it later."]
+
+
+def test_without_a_way_back_nothing_is_kept(mgr):
+    # Unchanged behaviour for every existing caller: no revive, no trace.
+    _register(mgr, "gone", lambda value: "Something is amiss.")
+    mgr.discard_module("gone")
+    assert _messages(mgr, "gone") is None
+    with pytest.raises(ValueError):
+        mgr.update_status("gone", "Anything at all.")
+
+
+def test_the_editor_is_told_which_modules_are_resting(mgr):
+    # By their heading alone: the tree node went with the parameters, so there
+    # is nothing else left to draw them from.
+    _register(mgr, "listed", lambda value: None)
+    assert "listed" not in mgr._dormant
+    mgr.discard_module("listed", revive=lambda: None)
+    assert mgr._dormant["listed"]["label"] == "Test module"
+
+
+def test_registering_again_is_the_way_out_of_resting(mgr):
+    # What the button does, by way of the module's own callable. Nothing else
+    # clears the standing, so a module that only pretended to register would
+    # leave the editor waiting for a panel that never comes -- which is why
+    # the endpoint checks this and calls it a failure.
+    _register(mgr, "returning", lambda value: None)
+    mgr.discard_module("returning", revive=lambda: None)
+    _register(mgr, "returning", lambda value: None)
+    assert "returning" not in mgr._dormant
+
+
+def test_a_way_back_that_is_not_callable_is_refused(mgr):
+    _register(mgr, "bad-way-back", lambda value: None)
+    with pytest.raises(ValueError):
+        mgr.discard_module("bad-way-back", revive="press here")

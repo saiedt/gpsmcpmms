@@ -22,6 +22,7 @@ const S = {
     token: null, readOnly: false, admin: false, factory: false,
     // what each module last said about itself, keyed by module id
     moduleStatus: {},
+    dormant: {},             // module id -> label, admin only
     lockFreeIn: null,        // seconds until the foreign session lapses
     protectedOmitted: false,
     cvv: {},                 // parsed /api/cvv_data dump
@@ -1216,6 +1217,7 @@ async function saveModule(mid) {
         return;
     }
     if (r.data.module_status) S.moduleStatus = r.data.module_status;
+    if (r.data.dormant) S.dormant = r.data.dormant;
     const rejected = r.data.rejected;
     await reloadData();
     renderAll();
@@ -1225,6 +1227,40 @@ async function saveModule(mid) {
     } else {
         msg(xl("Saved"), "ok");
     }
+}
+
+/* Kept identical to the sentence config.py registers as a key: the editor
+   looks it up, and a rewording on one side alone would show the English. */
+const DORMANT_HINT =
+    "This module has given up its parameters because it does not need " +
+    "them any more. The button brings them back for this session.";
+
+/* A module that has retired keeps its heading, so it stays where the reader
+   last saw it and its absence does not read as a fault. Nothing opens, so
+   nothing offers to: no arrow, no click, and the CSS takes the pointer away.
+   What stands under it is the reason and the way back. */
+function dormantModule(mid) {
+    return el("div", {class: "group module dormant"},
+        el("div", {class: "group-header"}, el("span", {}, xl(S.dormant[mid]))),
+        el("div", {class: "dormant-body"},
+            el("div", {class: "hint"}, xl(DORMANT_HINT)),
+            el("button", {class: "small", onclick: () => reviveModule(mid)},
+                xl("Bring them back"))));
+}
+
+async function reviveModule(mid) {
+    const r = await api("/api/config/revive", {json: {module: mid}});
+    if (r.status !== 200) {
+        msg(`${xl("Apply failed")}: ${xl("No answer from the device.")}`,
+            "error");
+        return;
+    }
+    // Registering parameters ends the editing session, so the device issues a
+    // new token in the same breath; without taking it the next request would
+    // arrive unauthorized, having done nothing wrong.
+    if (r.data && r.data.token) S.token = r.data.token;
+    await reloadData();
+    renderAll();
 }
 
 function renderModule(mid) {
@@ -1693,7 +1729,12 @@ function renderAll() {
 
     // sorted by module id, which is how a device controls the order of the
     // groups on screen -- prefix the ids and you have chosen the sequence
-    for (const mid of Object.keys(S.cvv).sort()) {
+    const ids = Array.from(new Set(Object.keys(S.cvv)
+                                   .concat(Object.keys(S.dormant)))).sort();
+    for (const mid of ids) {
+        // A dormant module has no cvv entry at all -- its tree node went with
+        // its parameters -- so it is drawn from the heading alone.
+        if (S.dormant[mid]) { app.append(dormantModule(mid)); continue; }
         if (!hasVisibleContent(S.cvv[mid], S.edit, [mid])) continue;
         app.append(renderModule(mid));
     }
@@ -1763,6 +1804,7 @@ async function reloadData(passwd) {
     S.wrongPasswd = r.data.wrong_passwd;
     S.factory = r.data.factory_default_passwd;
     S.moduleStatus = r.data.module_status || {};
+    S.dormant = r.data.dormant || {};
     S.protectedOmitted = r.data.protected_omitted;
     S.cvv = r.data.cvv;
     S.edit = {};

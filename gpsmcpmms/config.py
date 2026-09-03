@@ -174,6 +174,13 @@ class ConfigManager:
         # carries both, and a banner that repeats them competes with the panel
         # it is meant to send somebody to.
         "Translations: some are still incomplete.",
+        # Said about a module that retired but left a way back. The sentence
+        # is this library's, not the module's: a module that has given up its
+        # parameters is in no position to explain itself, and the explanation
+        # is the same whichever module it is.
+        "This module has given up its parameters because it does not need "
+        "them any more. The button brings them back for this session.",
+        "Bring them back",
         "Invalid input", "Apply failed",
         # What is left to say when a request comes back without a reason the
         # editor can show. It claimed "connection lost" once, which is a
@@ -302,6 +309,14 @@ class ConfigManager:
         # is nothing to clear either: the next return value replaces this one,
         # and a callback that returns None takes the entry away.
         self._module_status: dict = {}
+        # Modules that gave their parameters up but left a way back:
+        # module_id -> {"label": ..., "revive": callable}. They keep their
+        # findings and their place in the editor; what they no longer have is
+        # anything to configure. See discard_module().
+        self._dormant: dict = {}
+        # Only ever read for a dormant module's heading: once the parameters
+        # are gone, so is the tree node that carried the label.
+        self._module_labels: dict = {}
         # the language each module writes its display strings in; a tree may
         # hold modules that do not agree, which is why it is per module
 
@@ -426,7 +441,8 @@ class ConfigManager:
         another remains does not have to remember which door it used for
         which.
         """
-        if module_id not in self._callback_registry:
+        if not (module_id in self._callback_registry or
+                module_id in self._dormant):
             raise ValueError(f"update_status(): module '{module_id}' has not "
                              f"registered any parameters.")
         self._note_module_status(module_id, message)
@@ -503,6 +519,9 @@ class ConfigManager:
                              "function names to callables.")
         self._callback_registry[module_id] = callback
         self._func_registry[module_id] = func_dict or {}
+        self._module_labels[module_id] = module_label
+        # Registering is the way back from dormancy, so arriving here ends it.
+        self._dormant.pop(module_id, None)
         if isinstance(module_label, str) and module_label.strip():
             self._note_xlation_key(module_label.strip(), "label")
         if isinstance(module_tooltip, str) and module_tooltip.strip():
@@ -524,7 +543,7 @@ class ConfigManager:
                                  "parameters")
         self._note_module_status(module_id, callback(config_value))
 
-    def discard_module(self, module_id):
+    def discard_module(self, module_id, revive=None):
         """
         Declares that a module has no parameters any more, and removes every
         trace of the ones it used to have. Returns True when there was
@@ -545,14 +564,46 @@ class ConfigManager:
         had stored: for the telephony module that would be the credentials of
         the public line. A destructive step should take a sentence that could
         not have been written by mistake.
+
+        `revive` -- a callable of no arguments -- leaves a way back. Without
+        it the module is simply gone from the editor, which is right where
+        nothing could ever bring it back. With it the module stays listed and
+        goes on reporting; what it loses is anything to configure. An
+        administrator sees its heading, a sentence saying the parameters were
+        given up, and a button that calls this callable -- which registers
+        them again.
+
+        Two things wanted that. A module that has retired can still find
+        something worth saying, and until now a finding had nowhere to appear.
+        And putting the parameters back was manual work at a terminal: for
+        speech output the way back was deleting recordings over ssh until
+        something was missing again, which is a great deal to ask of somebody
+        whose actual wish is to record one more language.
+
+        What comes back is the declaration, never the values -- those were
+        deleted here, and that deletion is the point of the call. Speech
+        output's key stays off the card; the field returns empty.
+
+        How long it lasts is the module's own affair. Nothing here puts it
+        back to sleep: it retires again when its own reason to do so returns,
+        which for speech output is the next start.
         """
         if not (module_id and isinstance(module_id, str)):
             raise ValueError(f"Invalid module id: {module_id}.")
+        if revive is not None and not callable(revive):
+            raise ValueError(f"discard_module(): 'revive' must be callable "
+                             f"(got {type(revive).__name__}).")
         module_id = module_id.strip()
         removed = CvvNode.discard_module(self, module_id)
         self._callback_registry.pop(module_id, None)
         self._func_registry.pop(module_id, None)
-        self._module_status.pop(module_id, None)
+        if revive is None:
+            self._module_status.pop(module_id, None)
+            self._dormant.pop(module_id, None)
+        else:
+            self._dormant[module_id] = {
+                    "label": self._module_labels.get(module_id) or module_id,
+                    "revive": revive}
         if removed:
             # the schema changed, so the editor's picture of it is stale
             self._invalidate_session(f"module '{module_id}' discarded its "
@@ -1980,8 +2031,64 @@ class ConfigManager:
                 # and the person the device stands with can act on none of
                 # them -- for them it would be worry without a remedy.
                 "module_status": self._module_status_report() if admin else {},
+                # Modules that gave their parameters up but left a way back.
+                # Only their headings travel: there is nothing to configure,
+                # and the editor draws a sentence and a button. Only to an
+                # administrator, for the same reason as the findings above --
+                # and because only an administrator may press the button.
+                "dormant": ({m_id: d["label"]
+                             for m_id, d in self._dormant.items()}
+                            if admin else {}),
                 "cvv": cvv,
             })
+
+        @app.route("/api/config/revive", methods=["POST"])
+        def config_revive():
+            """Puts a dormant module's parameters back.
+
+            Administrators only, and by POST: it changes what the device
+            offers, which is not something a link should be able to do.
+
+            The session is re-issued afterwards. Registering parameters
+            invalidates the editing session by design -- the schema moved
+            under the editor's feet, so its picture is stale -- but here the
+            person whose session it was is the one who asked for the move, and
+            throwing them out to the password prompt for obeying them would be
+            absurd. They proved themselves a moment ago; the invalidation is a
+            side effect of their own request, not a fresh visitor arriving.
+            """
+            if request.headers.get("X-GPSMCPMMS-Api") != "1":
+                return jsonify({"error": "csrf"}), 403
+            if self._session_status(request_token()) != "valid":
+                return jsonify({"error": "invalid_token"}), 401
+            with self._lock:
+                if not self._session_admin:
+                    return jsonify({"error": "admin_required"}), 403
+            module_id = ((request.get_json(silent=True) or {})
+                         .get("module") or "").strip()
+            entry = self._dormant.get(module_id)
+            if entry is None:
+                return jsonify({"error": "no_such_module"}), 404
+            applicant = request.remote_addr
+            try:
+                entry["revive"]()
+            except Exception as exc:
+                self._logger.error(f"Module '{module_id}' could not put its "
+                                   f"parameters back: {exc}")
+                return jsonify({"error": "revive_failed"}), 500
+            if module_id in self._dormant:
+                # The callable ran and the module is still dormant, so it did
+                # not register anything. Nothing to show, and saying "done"
+                # would send the editor looking for a panel that is not there.
+                self._logger.error(f"Module '{module_id}' was asked to put "
+                                   "its parameters back and did not.")
+                return jsonify({"error": "revive_failed"}), 500
+            self._logger.info(f"Module '{module_id}' put its parameters back "
+                              f"at the request of {applicant}.")
+            token = self._issue_session_token(applicant)
+            with self._lock:
+                self._session_admin = True
+            return jsonify({"token": token})
 
         @app.route("/api/config/update", methods=["POST"])
         def config_update():

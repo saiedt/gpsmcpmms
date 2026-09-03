@@ -204,7 +204,10 @@ config_mgr.register_params(
 
   The status is replaced on every call, so nothing has to be cleared: a module
   that has sorted its problem out returns `None` next time and the line goes.
-  `discard_module()` takes it with it. Only administrators see any of it —
+  `discard_module()` takes it with it, unless it was given a way back (see
+  [Giving up a module's parameters](#giving-up-a-modules-parameters)); a module
+  that retired but can be recalled goes on reporting.
+  Only administrators see any of it —
   these are notes about work to be done, and the person the device stands with
   could act on none of them.
 
@@ -220,7 +223,7 @@ Core API methods of `config_mgr` available to client modules:
 | Method | Purpose |
 |--------|---------|
 | `config_ready(path=None)` | Returns `True` if no *relevant* leaf under the match is still unset. `None`/`""`/`"*"` = whole tree. Skips empty min-0 lists and fields whose relevance condition is false. |
-| `discard_module(module_id)` | The module has no parameters any more: the declaration is dropped and everything persisted for it is deleted. See [Giving up a module's parameters](#giving-up-a-modules-parameters). |
+| `discard_module(module_id, revive=None)` | The module has no parameters any more: the declaration is dropped and everything persisted for it is deleted. A callable as `revive` leaves a way back — the module stays listed, goes on reporting, and an administrator gets a button that calls it. See [Giving up a module's parameters](#giving-up-a-modules-parameters). |
 | `handle_value_event(value, alt_target_paths)` | Deliver a backend-captured value to a waiting editor; `True` if one took it (see 4.9.3). |
 | `query(path)` | Returns a map with items `{absolute_path: value}` for the nodes the path matches (module-rooted; wildcards allowed). |
 | `protected_params_ready()` | Like `config_ready`, restricted to `protected` parameters. |
@@ -746,6 +749,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 |----------|---------|
 | `GET /api/config/enum-options?path=[&arg=]` | Resolve a dynamic enum's options; `arg` is the JSON-encoded value of the `values_for` sibling. |
 | `POST /api/config/file` | Upload a file for a parameter of type `file` (multipart: `path`, `file`); stores it in the host's `file_dir` and sets the parameter to its name. |
+| `POST /api/config/revive` | Puts a dormant module's parameters back by calling the `revive` callable it left. Administrators only, and by POST: it changes what the device offers. Registering ends the editing session, so a fresh token comes back with the answer — the person who pressed the button must not be sent to the password prompt for it. |
 | `GET /api/config/hint?path=[&lang=]` | The current text of a provider-backed `hint`, with the moment it was established. The stamp is the point: a hint asserts something about the present, and an undated assertion goes on claiming it. |
 | `POST /api/config/probe` | Verify `{path, value}` on the device; only for `path`/`pingable` params. |
 | `POST /api/config/test` | Run the `test_func` for `{path, value}`. |
@@ -973,6 +977,35 @@ gives them up at the moment the application hands it the list:
 if not set(config_mgr.supported_languages()) - set(self.voiced_languages()):
     config_mgr.discard_module("5tts")      # …and the API key with it
 ```
+
+#### Leaving a way back
+
+A retired module is gone from the editor, which is right where nothing could
+ever bring it back. Often something can, and then disappearing costs twice.
+
+```python
+config_mgr.discard_module("5tts", revive=self._register_params)
+```
+
+The module stays listed under its own heading, keeps reporting — a recording
+can go out of date long after the last one was made, and the finding had
+nowhere to appear — and an administrator sees a sentence saying the parameters
+were given up, with a button that calls the callable. The callable's job is to
+register them again; the endpoint checks that it did, and calls anything else a
+failure rather than sending the editor looking for a panel that is not there.
+
+What comes back is the declaration, never the values. Those were deleted, which
+was the point of the call: the provisioning key stays off the card and the field
+returns empty.
+
+How long it lasts is the module's own affair. Nothing in the library puts it
+back to sleep — it retires again when its own reason to do so returns, which in
+the appliance means the next start.
+
+Without this the way back was manual work at a terminal. For the speech module
+it meant deleting recordings over ssh until something was missing again, which
+is a great deal to ask of somebody whose actual wish is to record one more
+language.
 
 Measured against the languages this deployment has, never against a number. The
 appliance compared with a ceiling of seven once, and that was right only for a
