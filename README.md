@@ -248,7 +248,7 @@ A Declaration is a dict with any of these keys (`type` is mandatory):
 | `hidden` | Hide from the editor. |
 | `protected` | Hidden until the admin unlocks with the password. |
 | `backend_provided` | Value is captured by backend logic (e.g. an NFC reader), read-only in the editor. Requires `acquire_button`; may combine with `init_only`. |
-| `hint` | A statement about how things stand, shown **above** the field. Either literal text, or the name of a `func_dict` entry making it dynamic — see *Hints* under [Advanced features](#advanced-features). Not a tooltip: a tooltip explains and never expires, a hint reports and can stop being true. |
+| `hint` | A statement about how things stand, shown **above** the thing it is about — a field, or a whole group or list. Either literal text, or the name of a `func_dict` entry making it dynamic — see *Hints* under [Advanced features](#advanced-features). Not a tooltip: a tooltip explains and never expires, a hint reports and can stop being true. |
 
 **Primitive types**
 
@@ -923,12 +923,18 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 
 <a id="hints"></a>
 
-- **Hints** — a `hint` is a statement about the present, rendered above its field
-  rather than behind a question mark, because it says something the reader needs
-  *before* deciding. Literal text behaves like any other display string. Name a
-  `func_dict` entry instead and it becomes dynamic: the editor fetches it from
-  `/api/config/hint`, and the provider — `fn(lang) -> str` — produces the sentence
-  itself.
+- **Hints** — a `hint` is a statement about the present, rendered above the thing
+  it is about rather than behind a question mark, because it says something the
+  reader needs *before* deciding. Literal text behaves like any other display
+  string. Name a `func_dict` entry instead and it becomes dynamic: the editor
+  fetches it from `/api/config/hint`, and the provider — `fn(lang) -> str` —
+  produces the sentence itself.
+
+  A group or a list may carry one, and it is drawn above the collapsible rather
+  than inside it. Inside would be worse than nowhere: a collapsed group is not
+  rendered at all, so the hint would be missing exactly for the reader who has
+  not opened it — and something like the current state of a status display is
+  what you want to read *without* opening anything.
 
   Dynamic is not a luxury. What invalidates a hint is often *not* a configuration
   change: a translator uploads a file, a remote server renames a category, and a

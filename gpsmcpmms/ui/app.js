@@ -749,10 +749,19 @@ function fieldRow(node, container, relKeys, ctx) {
     if (node.ui.test_func && !S.readOnly)
         row.append(testButton(node, () => getIn(container, relKeys)));
 
-    // A hint belongs above its field, close enough that nobody has to work out
-    // which one it is about; the wrapper is what ties the two together.
+    return withHint(node, ctx, row);
+}
+
+/* A hint belongs above the thing it is about, close enough that nobody has to
+   work out which one that is; the wrapper is what ties the two together.
+
+   Above a group rather than inside it, deliberately. A collapsed group is not
+   rendered at all, so a hint in its body would be gone exactly when somebody
+   has not opened it -- and the state of a ring of LEDs is the kind of thing
+   you want to read without opening anything. */
+function withHint(node, ctx, body) {
     const hint = hintFor(node, ctx);
-    return hint ? el("div", {class: "field-block"}, hint, row) : row;
+    return hint ? el("div", {class: "field-block"}, hint, body) : body;
 }
 
 function collapsible(pathKey, labelText, tooltip, renderBody, extraClass,
@@ -832,20 +841,20 @@ function renderNode(node, container, relKeys, ctx) {
                 }]),
             });
         }
-        return collapsible(node.path,
+        return withHint(node, ctx, collapsible(node.path,
             xl(node.ui.label || relKeys[relKeys.length - 1]),
             node.ui.tooltip ? xl(node.ui.tooltip) : null,
             () => renderDictBody(node, container, relKeys, ctx),
-            null, groupTestButton(node, container, relKeys));
+            null, groupTestButton(node, container, relKeys)));
     }
     if (node.item_template) {
         const simple = !node.item_template.children;
-        return collapsible(node.path,
+        return withHint(node, ctx, collapsible(node.path,
             xl(node.ui.label || relKeys[relKeys.length - 1]),
             node.ui.tooltip ? xl(node.ui.tooltip) : null,
             () => simple ? renderListA(node, container, relKeys, ctx)
                          : renderListB(node, container, relKeys, ctx),
-            null, groupTestButton(node, container, relKeys));
+            null, groupTestButton(node, container, relKeys)));
     }
     return fieldRow(node, container, relKeys, ctx);
 }
