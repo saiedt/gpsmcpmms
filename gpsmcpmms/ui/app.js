@@ -439,20 +439,20 @@ function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
                     options.push({value: name, label: name});
         // A dynamic enum's options are settled only at runtime, which is why
         // the core could never check the stored value against them ("defer
-        // the exact check" in cvv_tree). Once the provider stops offering it
-        // -- a German voice, say, after the announcement language moved to
-        // Turkish -- it is no longer a choice but a leftover. The field
-        // already *looked* empty, because no <option> matched it; here that
-        // becomes true, so saving really is rid of it and the device's state
-        // agrees with what is on screen. Dynamic enums only: a static one the
-        // core checks at load time, discarding whatever no longer fits the
-        // declaration.
-        if (Array.isArray(cons.one_of) === false && !fixed && !backend &&
-                cur !== null && cur !== undefined && cur !== "" &&
-                !options.some(o => o.value === cur)) {
-            commitQuiet(null);
-            cur = null;
-        }
+        // the exact check" in cvv_tree). Once the provider stops offering it,
+        // the stored value is a leftover -- and this is where the editor used
+        // to throw it away, quietly, with commitQuiet(null).
+        //
+        // It was meant to make the device's state agree with a field that
+        // already looked empty. But the emptiness was only staged: the store
+        // kept the value until somebody saved that panel for some other
+        // reason, and then a service card lost what it was for. That value is
+        // the one record of it -- 4525e783 can still be looked up and found
+        // to have been "Formalitäten"; a null cannot.
+        //
+        // So it stays, and the field says so instead. The agreement the old
+        // code wanted is restored the other way round: the screen stops
+        // claiming the field is empty.
         if (ctx.usedEnumValues)           // uniqueness filter (spec 4.9.2)
             options = options.filter(o => o.value === cur ||
                                           !ctx.usedEnumValues.has(o.value));
@@ -1277,13 +1277,9 @@ const DORMANT_HINT =
    nothing offers to: no arrow, no click, and the CSS takes the pointer away.
    What stands under it is the reason and the way back. */
 function dormantModule(mid) {
-    // Collapsible like every other module: it is one of the panels, and a
-    // block that behaves differently reads as a different kind of thing.
-    //
-    // Open the first time it appears, though. A module nobody expects to find
-    // is a poor place to hide the only way back to it -- and once somebody
-    // has closed it, it stays closed like any other.
-    if (!(mid in S.open)) S.open[mid] = true;
+    // Collapsible like every other module, and closed like every other
+    // module: it is one of the panels, and a block that behaves differently
+    // reads as a different kind of thing.
     return collapsible(mid, xl(S.dormant[mid]), null,
         () => el("div", {class: "group-body dormant-body"},
             el("div", {class: "hint"}, xl(DORMANT_HINT)),
