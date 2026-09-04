@@ -150,3 +150,24 @@ def test_a_way_back_that_does_not_register_is_reported_as_a_failure(client):
     # send the editor looking for a panel that is not there.
     assert resp.status_code == 500
     assert resp.get_json()["error"] == "revive_failed"
+
+
+def test_an_update_writes_a_line_naming_the_module(client, caplog):
+    # Without it an editing session can only be reconstructed from the
+    # timestamps of the checkpoint files, which is guesswork -- and guesswork
+    # about what somebody did five minutes ago sounds like an answer.
+    token = _fresh_token(client)
+    with caplog.at_level("INFO"):
+        client.post("/api/config/update",
+                    headers={**API, "X-GPSMCPMMS-Token": token},
+                    json={"module": "vtest", "value": {"n": 3}})
+    assert any("Module 'vtest' updated" in r.message for r in caplog.records)
+
+
+def test_a_refused_token_writes_a_line_too(client, caplog):
+    with caplog.at_level("INFO"):
+        client.post("/api/config/update",
+                    headers={**API, "X-GPSMCPMMS-Token": "not-the-token"},
+                    json={"module": "vtest", "value": {"n": 3}})
+    assert any("no longer the current one" in r.message
+               for r in caplog.records)

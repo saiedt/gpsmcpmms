@@ -2113,6 +2113,15 @@ class ConfigManager:
             if not isinstance(payload, dict):
                 abort(400)
             if self._session_status(request_token()) != "valid":
+                # Logged, and named for what it is. A save arriving on a token
+                # the device no longer knows is the visible end of something
+                # that happened earlier -- a module re-registering, a session
+                # taken over, an idle timeout -- and without this line the
+                # only trace was a puzzled person in front of the editor.
+                self._logger.info(
+                        f"Update from {request.remote_addr} refused: the "
+                        "editing session it belongs to is no longer the "
+                        "current one.")
                 return jsonify({"error": "invalid_token"}), 401
             self._touch_session()
 
@@ -2137,6 +2146,19 @@ class ConfigManager:
             except CvvError as exc:
                 self._logger.error(f"Update of '{module}' failed: {exc}")
                 return jsonify({"error": str(exc)}), 500
+            # One line per save. Which module, and what was refused -- paths
+            # only, never values: a protected parameter is protected in the
+            # log as well, and the path is what somebody looking for the
+            # trouble needs anyway.
+            #
+            # Worth its noise. Reconstructing an editing session from the
+            # timestamps of the checkpoint files is guesswork, and guesswork
+            # about what somebody did five minutes ago is worse than no
+            # answer, because it sounds like one.
+            self._logger.info(
+                    f"Module '{module}' updated by {request.remote_addr}"
+                    + (f"; refused: {', '.join(rejected)}" if rejected
+                       else "; nothing refused"))
             # The callback ran a line ago, so what it said about itself goes
             # back with the answer to the very save that caused it.
             return jsonify({
