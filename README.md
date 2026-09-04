@@ -306,7 +306,7 @@ A key in `type_dict` declares either a **dict type** or a **list type**:
   |-----|---------|
   | `list_member` | **required** — a (type-only) Declaration shared by all members. |
   | `list_size` | `"min..max"` inclusive member counts; default `"0..100"`; max 100. |
-  | `list_keys` | uniqueness groups, e.g. `[["a"], ["b","c"]]` (a standalone key `a`, plus a compound key `b+c`). |
+  | `list_keys` | uniqueness groups, e.g. `[["a"], ["b","c"]]` (a standalone key `a`, plus a compound key `b+c`). Every property named here must carry a value: a member known by nothing is refused, logged with its path and its contents, and the editor keeps **Apply** disabled until the keys are filled. Everything *else* in a member may stay open — the rule is about identity, not about being finished. |
 
 Named types can be reused across parameters. `param_dict` itself is merged in as a
 dict type named after the `module_id`.

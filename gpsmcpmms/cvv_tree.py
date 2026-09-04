@@ -582,6 +582,44 @@ class CvvValue:
 
         return cv.value_cond_holds(cond["op"], cond["value"])
 
+    def _without_empty_keys(self, members):
+        """The members whose 'list_keys' groups are all filled in.
+
+        A key is what a member is known by, and a member known by nothing is
+        not a member. It occupies a place in the list, counts towards
+        'list_size', shows in the editor as a finished row -- and whoever
+        reads the list afterwards has to guess what it was meant to be. In
+        the appliance this project grew from, a service card that had lost
+        its id looked configured and did nothing when it was presented.
+
+        Only the key groups. Everything else in a member may stay unfilled,
+        exactly as partial values are allowed elsewhere: a card must be known
+        by its id, but nothing says the rest has to be settled in one sitting.
+
+        The empty string counts as unfilled. It is not the same as None to
+        Python, but it is to a reader, and it is what an editor leaves behind
+        when somebody clears a field -- which is how a key came to be missing
+        without anything noticing.
+        """
+        groups = self._constraints.get("keys")
+        if not groups:
+            return members
+        kept = []
+        for member in members:
+            if not isinstance(member, dict):
+                kept.append(member)
+                continue
+            if any(member.get(prop) in (None, "")
+                   for group in groups for prop in group):
+                # Named in full, because this is the only trace left of it:
+                # the row is about to disappear from a list somebody may not
+                # look at again for months.
+                warn(f"Member without a complete 'list_keys' group dropped "
+                     f"from '{self._owner.get_path()}': {member}")
+                continue
+            kept.append(member)
+        return kept
+
     def _without_repeated_keys(self, members):
         """The members that do not repeat an earlier one on a declared
         'list_keys' group (spec 4.9.2).
@@ -709,6 +747,10 @@ class CvvValue:
                          f"with the constraints on '{self._owner.get_path()}'.")
                     result = False
                     val = list_val
+                named = self._without_empty_keys(val)
+                if len(named) < len(val):
+                    result = False
+                    val = named
                 distinct = self._without_repeated_keys(val)
                 if len(distinct) < len(val):
                     warn(f"Members repeating a 'list_keys' group were dropped "

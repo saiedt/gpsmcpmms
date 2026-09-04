@@ -21,6 +21,7 @@
     "Editing": "Bearbeitung von",
     "End session": "Sitzung beenden",
     "Entries nothing uses any more: {langs}.": "Einträge, die nirgends mehr verwendet werden: {langs}.",
+    "Every key of this entry must be filled in": "Jeder Schlüssel dieses Eintrags muss ausgefüllt sein",
     "File exists": "Datei vorhanden",
     "File name not allowed": "Dateiname nicht zulässig",
     "File too large": "Datei zu groß",

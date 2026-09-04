@@ -63,6 +63,25 @@ def setup_demo_environment():
         callback=lambda value: None,
     )
 
+    # A list whose members are known by their keys, for the rule that a key
+    # may not be left empty. Registered here and not in the test file: modules
+    # have to exist before any other ConfigManager does, or they are built
+    # into whichever tree happens to be rooted at the time.
+    config_mgr.register_params(
+        module_id="klist",
+        module_label="Keyed list",
+        type_dict={
+            "pair": {"rfid": {"label": "RFID", "type": "string"},
+                     "sid": {"label": "Service", "type": "string"},
+                     "note": {"label": "Note", "type": "string"}},
+            "pair_list": {"list_member": {"type": "pair"},
+                          "list_keys": [["rfid"], ["sid"]],
+                          "list_size": "0.."},
+        },
+        param_dict={"cards": {"label": "Cards", "type": "pair_list"}},
+        callback=lambda value: None,
+    )
+
     return config_mgr
 
 

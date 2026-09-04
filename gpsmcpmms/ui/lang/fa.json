@@ -21,6 +21,7 @@
     "Editing": "ویرایش",
     "End session": "پایان نشست",
     "Entries nothing uses any more: {langs}.": "مدخل‌هایی که دیگر جایی به کار نمی‌روند: {langs}.",
+    "Every key of this entry must be filled in": "هر کلید این مدخل باید پر شود",
     "File exists": "فایل موجود است",
     "File name not allowed": "نام فایل مجاز نیست",
     "File too large": "فایل بیش از اندازه بزرگ است",

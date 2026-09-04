@@ -1084,12 +1084,28 @@ function renderListB(node, container, relKeys, ctx) {
                    .has(value);
     });
 
+    // A member is known by its keys, and one that is not known by anything
+    // has no business in the list: it would take a place, count towards the
+    // list's size, and read as a finished row while whoever loads it later
+    // has to guess what it was meant to be. The backend refuses it too --
+    // stopping it here saves the round trip and, more to the point, says so
+    // while the field that is empty is still on screen.
+    //
+    // Only the keys. Everything else in the member may stay open; nothing
+    // says the whole record has to be settled in one sitting.
+    const missingKey = (cons.keys || []).some(group => group.some(key => {
+        const value = (st.draft || {})[key];
+        return value === null || value === undefined || value === "";
+    }));
+
     // ...and the same rule again at the button, not only at the navigator: a
     // position typed straight into the field must not find a way in either.
     const apply = el("button", {class: "primary",
-        disabled: S.readOnly || !st.changed || repeatsKey
+        disabled: S.readOnly || !st.changed || repeatsKey || missingKey
                       || (structureFixed && st.pos > list.length)
-                          ? "" : null},
+                          ? "" : null,
+        title: missingKey ? xl("Every key of this entry must be filled in")
+                          : null},
         xl("Apply"));
     apply.addEventListener("click", () => {
         if (st.pos <= list.length) {

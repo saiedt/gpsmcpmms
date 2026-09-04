@@ -234,6 +234,7 @@ class ConfigManager:
         "Download CSV", "Select completed CSV",
         "Upload the selected CSV",
         "No translation exists yet", "translated", "Translation processed", "Invalid file",
+        "Every key of this entry must be filled in",
         "Value already taken",
         "Choose file", "File type not allowed",
         "File name not allowed", "File too large",
