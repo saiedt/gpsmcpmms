@@ -279,3 +279,11 @@ button.toggled:hover:not(:disabled) { background: var(--accent-soft); }
   gap: 10px; flex-wrap: wrap;
 }
 .dormant-body .hint { margin: 0; }
+
+/* A banner is a flex row, which is right when it holds one sentence and the
+   buttons that belong to it. A module with several findings needs them under
+   one another instead -- run together they read as one muddled thought -- so
+   each takes the full width and is a row of its own for whatever it carries. */
+.banner > .finding {
+  flex: 1 0 100%; display: flex; gap: 10px; align-items: center;
+}

@@ -157,7 +157,7 @@ class ConfigManager:
         "Configuration Editor",
         "Save", "Apply", "Remove", "Undo",
         "End session", "Show protected parameters",
-        "Exit admin mode", "Language",
+        "Change password", "Language",
         "Incorrect password",
         "Read-only mode: another session is active",
         # Without the admin password only waiting is left, and until now
@@ -490,6 +490,13 @@ class ConfigManager:
         """
         found = {m_id: list(msgs)
                  for m_id, msgs in self._module_status.items() if msgs}
+        # The factory password is this library's finding like any other, and
+        # it belongs here rather than in a banner of its own. Changing it is
+        # an administrator's business; the person the device stands with can
+        # do nothing about it and does not need to be told.
+        if self._current_ui_passwd() == self.FACTORY_DEFAULT_PASSWD:
+            found.setdefault(self.OWN_MODULE_ID, []).append(
+                    "The device is still using the factory default password")
         incomplete = [lang for lang in self.supported_languages()
                       if (lambda done, total: done < total)(
                               *self.translation_status(lang))]

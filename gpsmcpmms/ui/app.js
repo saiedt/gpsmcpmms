@@ -1320,20 +1320,29 @@ async function takeOverSession() {
     msg(xl("Session taken over"), "ok");   // after the re-render, or it is lost
 }
 
-async function exitAdminMode() {
-    if (S.factory) {
-        const neu = await modal(xl("New password"),
-                                {input: {type: "password"}});
-        if (neu === null || neu === "") return;
-        const r = await api("/api/config/update",
-            {json: {module: "config", value: {ui_passwd: neu}}});
-        if (r.status !== 200 || r.data.rejected.length) {
-            msg(xl("Apply failed"), "error");
-            return;
-        }
+/* The one finding that comes with something to press. Kept identical to the
+   string config.py reports, because that is what it is matched against. */
+const FACTORY_PASSWD_FINDING =
+    "The device is still using the factory default password";
+
+async function changePassword() {
+    const neu = await modal(xl("New password"), {input: {type: "password"}});
+    if (neu === null || neu === "") return;
+    const r = await api("/api/config/update",
+        {json: {module: "config", value: {ui_passwd: neu}}});
+    if (r.status !== 200 || r.data.rejected.length) {
+        msg(xl("Apply failed"), "error");
+        return;
     }
-    await api("/api/end_session", {json: {}});
-    location.reload();
+    // The session stays. It used to end here, and the button was called
+    // "Exit admin mode" for it -- but ending a session is what the button
+    // marked "End session" is for, and being thrown out for having set a
+    // password is a strange reward. Setting a value does not touch the
+    // session, so reloading the data is enough: the finding goes, and
+    // whoever set the password is still an administrator.
+    await reloadData();
+    renderAll();
+    msg(xl("Saved"), "ok");
 }
 
 const RTL_LANGS = new Set(["fa", "ar", "he", "ur", "ps", "sd"]);
@@ -1711,21 +1720,23 @@ function renderAll() {
             el("button", {class: "small", onclick: takeOverSession},
                xl("Take over session")),
             lockFreeHint()));
-    if (S.factory)
-        app.append(el("div", {class: "banner"},
-            xl("The device is still using the factory default password"),
-            S.admin ? el("button", {class: "small", onclick: exitAdminMode},
-                         xl("Exit admin mode")) : null));
-    // One line per module, its findings joined by a space -- they are whole
-    // sentences, so nothing has to be put between them, and a semicolon after
-    // a full stop would only look like a mistake. Two banners for one module
-    // would read as two problems. Sorted by module id, the same order the
-    // panels below are in: a device chooses that order by prefixing its ids,
-    // and a banner that ignored it would send the reader down the page in the
-    // wrong direction.
+    // One banner per module, and inside it one line per finding. Two banners
+    // for one module would read as two modules; two findings run together on
+    // one line read as one muddled thought. Where two findings could be said
+    // as a single sentence a module says them as one -- what arrives here as
+    // two really is two, and a line of its own is the honest separator.
+    //
+    // Sorted by module id, the same order the panels below are in: a device
+    // chooses that order by prefixing its ids, and a banner that ignored it
+    // would send the reader down the page in the wrong direction.
     for (const mid of Object.keys(S.moduleStatus).sort())
         app.append(el("div", {class: "banner"},
-            S.moduleStatus[mid].map(xl).join(" ")));
+            ...S.moduleStatus[mid].map(m => el("div", {class: "finding"},
+                xl(m),
+                m === FACTORY_PASSWD_FINDING && S.admin
+                    ? el("button", {class: "small", onclick: changePassword},
+                         xl("Change password"))
+                    : null))));
 
     // sorted by module id, which is how a device controls the order of the
     // groups on screen -- prefix the ids and you have chosen the sequence
@@ -1802,7 +1813,6 @@ async function reloadData(passwd) {
     S.lockFreeIn = r.data.lock_free_in;
     S.admin = r.data.admin;
     S.wrongPasswd = r.data.wrong_passwd;
-    S.factory = r.data.factory_default_passwd;
     S.moduleStatus = r.data.module_status || {};
     S.dormant = r.data.dormant || {};
     S.protectedOmitted = r.data.protected_omitted;
