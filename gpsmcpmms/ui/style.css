@@ -270,13 +270,8 @@ button.toggled:hover:not(:disabled) { background: var(--accent-soft); }
    there is nothing under it to open -- so the header must not look clickable.
    The body is always there instead of behind a triangle: the way back is the
    only thing this panel is for. */
-.dormant > .group-header { cursor: default; }
-.dormant > .group-header:hover { background: var(--accent-soft); }
 .dormant-body {
-  border: 1px solid var(--line); border-top: 0;
-  border-radius: 0 0 var(--radius) var(--radius);
-  padding: 8px 10px; display: flex; align-items: center;
-  gap: 10px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
 }
 .dormant-body .hint { margin: 0; }
 

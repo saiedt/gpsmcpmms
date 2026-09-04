@@ -467,9 +467,26 @@ function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
         // label is an identifier and stays as it is, while the tooltip beside
         // it is prose. So "de-DE-Wavenet-H (weiblich)" -- the name untouched,
         // the hint in the reader's language.
+        // A stored value that is no longer among the options keeps its place
+        // in the list, marked. Without this the browser quietly moved the
+        // selection to the empty option: the value was gone from the screen
+        // *and* from the DOM, so anybody who saved that row for an unrelated
+        // reason wrote the emptiness back and lost the assignment -- which is
+        // how a service card came to point at nothing.
+        //
+        // The raw value is shown because there is nothing better to show: the
+        // list it would have been named from no longer carries it. Ugly on
+        // purpose. It says something is set here and it is wrong, which is
+        // the whole message.
+        const orphanedValue = cur !== null && cur !== undefined && cur !== ""
+                              && !options.some(o => o.value === cur);
         const sel = el("select", {disabled: fixed || backend ? "" : null,
                 onchange: (e) => commit(e.target.value || null)},
             el("option", {value: ""}, ""),
+            orphanedValue
+                ? el("option", {value: cur},
+                     `${cur} (${xl("no longer offered")})`)
+                : null,
             ...options.map(o => {
                 const text = o.verbatim ? o.label : xl(o.label);
                 const hint = o.tooltip ? xl(o.tooltip) : null;
@@ -1256,12 +1273,19 @@ const DORMANT_HINT =
    nothing offers to: no arrow, no click, and the CSS takes the pointer away.
    What stands under it is the reason and the way back. */
 function dormantModule(mid) {
-    return el("div", {class: "group module dormant"},
-        el("div", {class: "group-header"}, el("span", {}, xl(S.dormant[mid]))),
-        el("div", {class: "dormant-body"},
+    // Collapsible like every other module: it is one of the panels, and a
+    // block that behaves differently reads as a different kind of thing.
+    //
+    // Open the first time it appears, though. A module nobody expects to find
+    // is a poor place to hide the only way back to it -- and once somebody
+    // has closed it, it stays closed like any other.
+    if (!(mid in S.open)) S.open[mid] = true;
+    return collapsible(mid, xl(S.dormant[mid]), null,
+        () => el("div", {class: "group-body dormant-body"},
             el("div", {class: "hint"}, xl(DORMANT_HINT)),
             el("button", {class: "small", onclick: () => reviveModule(mid)},
-                xl("Bring them back"))));
+                xl("Bring them back"))),
+        "module");
 }
 
 async function reviveModule(mid) {
