@@ -61,6 +61,7 @@
     "Take over session": "تصاحب نشست",
     "Test": "تست",
     "The device is still using the factory default password": "تغییر رمز پیش‌فرض دستگاه به رمزی خصوصی برای حفاظت از پارامترهای حساس ضروری‌ست.",
+    "The editing session has ended.": "نشست ویرایش پایان یافت.",
     "The test could not be started.": "دستور تست اجرا نشد.",
     "The test routine could not carry out the test.": "اجرای دستور تست خطا داد.",
     "The test routine ran without errors.": "اجرای دستور تست خطا نداد.",

@@ -1244,7 +1244,13 @@ async function saveModule(mid) {
     const r = await api("/api/config/update",
         {json: {module: mid, value: S.edit[mid]}});
     if (r.status === 401) {
-        await modal(xl("No answer from the device."), {alert: true});
+        // 401 is the device answering and refusing the token, which is the
+        // opposite of what this used to say. The session has ended -- taken
+        // over, or timed out -- and the reason is in the device's log. There
+        // is no way back but a fresh session, and the password with it: what
+        // makes somebody an administrator is the password, and it is nowhere
+        // kept to be offered again.
+        await modal(xl("The editing session has ended."), {alert: true});
         location.reload();
         return;
     }

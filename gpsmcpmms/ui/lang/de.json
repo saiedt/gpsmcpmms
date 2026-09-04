@@ -61,6 +61,7 @@
     "Take over session": "Sitzung übernehmen",
     "Test": "Test",
     "The device is still using the factory default password": "Das Gerät verwendet noch das werksseitige Standardpasswort",
+    "The editing session has ended.": "Die Bearbeitungssitzung ist beendet.",
     "The test could not be started.": "Der Test konnte nicht gestartet werden.",
     "The test routine could not carry out the test.": "Die Testroutine konnte den Test nicht durchführen.",
     "The test routine ran without errors.": "Die Testroutine wurde ohne Fehler ausgeführt.",

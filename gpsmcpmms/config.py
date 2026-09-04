@@ -160,6 +160,9 @@ class ConfigManager:
         "Change password", "Language",
         "Incorrect password",
         "Read-only mode: another session is active",
+        # Said when the device refuses the token: the session is gone, and a
+        # new one starts without the password that made it an admin session.
+        "The editing session has ended.",
         # Without the admin password only waiting is left, and until now
         # nobody was told what for. {time} is the earliest the lock falls by
         # itself -- earliest, because the holder pushes it out by carrying on
