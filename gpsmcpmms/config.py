@@ -235,8 +235,10 @@ class ConfigManager:
         "Upload the selected CSV",
         "No translation exists yet", "translated", "Translation processed", "Invalid file",
         "Every key of this entry must be filled in",
-        # Shown beside a stored value the list it came from no longer holds.
-        "no longer offered",
+        # Stands in a field for a stored value the list it came from no
+        # longer holds. The value itself is an identifier and says nothing;
+        # this says the one thing that matters.
+        "Value not known",
         "Value already taken",
         "Choose file", "File type not allowed",
         "File name not allowed", "File too large",

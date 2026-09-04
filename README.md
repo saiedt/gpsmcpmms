@@ -925,17 +925,18 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   are size-capped, and a file that fails validation afterwards is removed again
   unless it was already there.
 
-- **A stored value the options no longer hold** stays on screen, marked *no
-  longer offered*, rather than being quietly dropped. A `<select>` given a value
-  none of its options carries moves its selection to the empty one — the value
-  then vanishes from the screen *and* from the DOM, and the next save of that
-  row writes the emptiness back. That is how a service card came to point at
-  nothing: the type had been taken out of the release, the field showed blank,
-  and saving the row for an unrelated reason finished the job.
+- **A stored value the options no longer hold** keeps its place, in red, reading
+  *Value not known* — rather than being quietly dropped. A `<select>` given a
+  value none of its options carries moves its selection to the empty one: the
+  value then vanishes from the screen *and* from the DOM, and the next save of
+  that row writes the emptiness back. That is how a service card came to point
+  at nothing — the type had been taken out of the release, the field showed
+  blank, and saving the row for an unrelated reason finished the job.
 
-  The raw value is shown, because there is nothing better to show: the list it
-  would have been named from no longer carries it. It reads as ugly as it is,
-  which is the message.
+  Said in words rather than by printing the value: what is stored there is an
+  identifier, and an identifier tells a reader nothing. The option still carries
+  the real value, so leaving the field alone leaves it untouched, and the raw id
+  goes in the field's `title` — for whoever is diagnosing rather than deciding.
 
 <a id="hints"></a>
 

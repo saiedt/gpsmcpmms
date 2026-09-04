@@ -474,18 +474,22 @@ function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
         // reason wrote the emptiness back and lost the assignment -- which is
         // how a service card came to point at nothing.
         //
-        // The raw value is shown because there is nothing better to show: the
-        // list it would have been named from no longer carries it. Ugly on
-        // purpose. It says something is set here and it is wrong, which is
-        // the whole message.
+        // Said in words and shown in red, rather than by printing the value
+        // itself: what is stored here is an identifier, and an identifier
+        // tells a reader nothing. What they need to know is that the field
+        // holds something the list cannot account for. The option still
+        // carries the real value, so selecting nothing else leaves it
+        // untouched; the raw id goes in the select's title, for whoever is
+        // diagnosing rather than deciding.
         const orphanedValue = cur !== null && cur !== undefined && cur !== ""
                               && !options.some(o => o.value === cur);
         const sel = el("select", {disabled: fixed || backend ? "" : null,
+                class: orphanedValue ? "invalid" : null,
+                title: orphanedValue ? cur : null,
                 onchange: (e) => commit(e.target.value || null)},
             el("option", {value: ""}, ""),
             orphanedValue
-                ? el("option", {value: cur},
-                     `${cur} (${xl("no longer offered")})`)
+                ? el("option", {value: cur}, xl("Value not known"))
                 : null,
             ...options.map(o => {
                 const text = o.verbatim ? o.label : xl(o.label);
