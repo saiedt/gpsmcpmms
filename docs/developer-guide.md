@@ -568,6 +568,51 @@ with itself and with nothing else.
 
 ---
 
+### Tips and tricks for status messages
+
+These come from the same place too: a standing is only as honest as the moment
+it was taken, and the editor shows it as though it were now.
+
+#### Report from where the fact changes, not from where it is convenient
+
+`update_status()` exists because the callback is rare. That does not help if
+your own call to it is just as rare. A speech module here derived one of its two
+standings — *there are languages without a recording* — from the files in a
+directory, and reported it from the function that decides at start-up whether
+the module still has anything to do. That function runs once per run. So the
+banner kept the answer it had found at boot for months, through exactly the work
+that changes it: somebody voicing a language sees the sentence stay.
+
+Ask where the underlying fact changes, and report from there. If it changes in
+several places, the standing belongs in a small function all of them call, not
+copied into each.
+
+#### A callback that starts work cannot report on its result
+
+Where a configuration change kicks off something asynchronous — a download, a
+worker thread, anything queued — the callback returns long before the work is
+done. Its return value can only describe the world as it was when the button was
+pressed.
+
+The temptation is to report from the callback anyway, because that is where the
+change came in. It reads correctly and is wrong every time: voicing eight
+languages takes minutes, and the callback has already answered. Report at the
+end of the work instead, with `update_status()`, and let the callback say only
+what it can know.
+
+#### One question, one computation
+
+If a banner and a hint answer the same question, they must run the same code.
+Ours did not: the hint above a field counted live at every look, while the
+standing above the panels was remembered. Both were honest, and the page still
+contradicted itself — *there are languages without a recording* above a line
+saying every announcement was voiced.
+
+Two copies of one rule are two answers of different ages. Give the rule a name
+and call it from both.
+
+---
+
 ## Part 2: Release-making
 
 Release-making is a pass of its own, not the last hour of development. It turns
