@@ -54,7 +54,7 @@ def test_every_language_renders_the_whole_editor():
 def test_no_dictionary_carries_anything_but_this_library():
     # The other half, and the one that had to be learnt. These files are the
     # starting kit of every fresh deployment, so whatever stands in them is
-    # handed to strangers: a while ago they carried the whole H4H appliance,
+    # handed to strangers: a while ago they carried a whole appliance,
     # including the service catalogue of somebody's business, and any adopter
     # would have found "Begleitung -> Companionship" in their dictionaries.
     #

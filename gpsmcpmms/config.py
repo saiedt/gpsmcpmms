@@ -400,7 +400,7 @@ class ConfigManager:
         goes there from now on, so a device has one log and not two.
 
         `title` is what the application is called, and it prefaces the
-        editor's heading and its browser tab: "Hub4Help Configuration Editor".
+        editor's heading and its browser tab: "MyApp Configuration Editor".
         Left out, the editor is simply the "Configuration Editor" -- which is
         what it is, for an application that would rather not put its name on
         it. The name is never translated: it is a proper noun, like a voice's
@@ -438,7 +438,7 @@ class ConfigManager:
         The same statement as the one a callback returns, through a second
         door -- and it is needed because that callback fires at the start of a
         run and then only if somebody edits the module's configuration. On an
-        appliance a run lasts months. The H4H client learns of an unreachable
+        appliance a run lasts months. A service client learns of an unreachable
         server when somebody presses a test button or when another module asks
         it for something, and by then the door it was given has been shut for
         weeks.
@@ -916,8 +916,8 @@ class ConfigManager:
         for *and* the allow-list names. DECL_LANG is always among them, with or
         without a dictionary -- it needs none, the keys are already in it.
 
-        A host application that addresses its users in one of these -- the
-        H4H appliance reads its announcements aloud -- has to offer exactly
+        A host application that addresses its users in one of these -- an
+        appliance reading its announcements aloud, say -- has to offer exactly
         this set and no more. Offer a language the dictionaries do not cover
         and translate() falls back to the key without saying so: the text would
         be read in the wrong language by a voice from the right one, and
@@ -1498,7 +1498,7 @@ class ConfigManager:
         software uses now, plus everything any dictionary already holds.
 
         The two are not the same, and the difference is not academic. A
-        runtime string -- the name of an H4H service type -- enters the active
+        runtime string -- the name of a service type -- enters the active
         set only once something has asked the server, so between a restart and
         the first such question the eight names are missing from it while
         their translations sit in every dictionary. A template cut in that
@@ -1686,7 +1686,7 @@ class ConfigManager:
 
         # The same set the template was cut from -- not merely what this run
         # has got round to registering. "Not active right now" is not the same
-        # as "no longer used": the H4H service names enter the active set only
+        # as "no longer used": the service names enter the active set only
         # once somebody has asked the server, so an upload made before that
         # deleted all eight translations of them, silently, for a reason
         # nobody could see. Keys that really have fallen out of the software

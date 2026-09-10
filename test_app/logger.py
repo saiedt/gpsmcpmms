@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Central logger for the H4H app (spec section 5.2).
+"""Central logger for the demo app (spec section 5.2).
 
-Provides the ready-to-use singleton `h4h_logger` and registers the "log"
-config module. The main app injects h4h_logger into config_mgr via
-config_mgr.set_app_context(h4h_logger, "<application name>").
+Provides the ready-to-use singleton `app_logger` and registers the "log"
+config module. The main app injects app_logger into config_mgr via
+config_mgr.set_app_context(app_logger, "<application name>").
 """
 import logging
 import os

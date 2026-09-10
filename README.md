@@ -936,10 +936,10 @@ def _config_changed(self, value):
     self._apply(value)
     found = []
     if self._unknown_types or self._dropped_types:
-        found.append("H4H service: found types unknown locally or no "
+        found.append("Service catalogue: found types unknown locally or no "
                      "longer offered by the server.")
     if not self._reachable:
-        found.append("H4H service: the server cannot be reached.")
+        found.append("Service catalogue: the server cannot be reached.")
     return found or None
 ```
 

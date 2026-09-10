@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Telephony / speakerphone module of the H4H app (spec section 5.4).
+"""Telephony / speakerphone module of the demo app (spec section 5.4).
 
 The actual SIP/PJSIP logic is skipped for the test app; only the config
 params are registered.

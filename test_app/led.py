@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""LED status ring controller for the H4H app (spec section 5.3).
+"""LED status ring controller for the demo app (spec section 5.3).
 
 Declares LEDController with the singleton `ledc`. The config params are
-registered only when ledc.init_supported_states() is called (by h4h_app.py),
+registered only when ledc.init_supported_states() is called (by the main module),
 because the set of supported states is a fixed_val provided at that point.
 The actual LED driving (set_state) is not relevant for the test app.
 """
