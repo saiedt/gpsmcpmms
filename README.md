@@ -168,102 +168,6 @@ Core API methods of `config_mgr` available to client modules:
 
 ---
 
-## Status messages
-
-A module's status is the line the editor shows above the panels, and it answers
-one question: **what should the administrator see to, now that they are here?**
-Not what is wrong with the device in general — what is worth their attention in
-this session, while the editor is open and they could act on it. A service
-catalogue that no longer matches, a server that cannot be reached, a language
-still without a recording: each is a piece of work waiting for somebody, and the
-banner is the only place it is offered to them.
-
-Only administrators see any of it. These are notes about work to be done, and
-the person the device stands with could act on none of them.
-
-### Which door to use
-
-A standing changes for two reasons, and each has its instrument:
-
-| What changed it | How to say it |
-| --- | --- |
-| the module's **own configuration** — somebody edited it | the **return value** of `callback` |
-| **anything else** — a server answered, a file appeared, a test was run | `update_status(module_id, message)` |
-
-Both take the same thing and mean the same thing, so a module never has to
-remember which door it used for which finding.
-
-### The callback's return value
-
-`None` — or nothing at all — means there is nothing to report, so a callback
-written before this existed keeps working unchanged. Otherwise return one
-finding, or a list of them.
-
-```python
-def _config_changed(self, value):
-    self._apply(value)
-    found = []
-    if self._unknown_types or self._dropped_types:
-        found.append("H4H service: found types unknown locally or no "
-                     "longer offered by the server.")
-    if not self._reachable:
-        found.append("H4H service: the server cannot be reached.")
-    return found or None
-```
-
-### When the finding turns up later
-
-Say it with `update_status(module_id, message)`. The callback fires at the
-start of a run and then only if somebody edits that module's configuration —
-and on an appliance a run lasts months. What a module learns in between, when a
-test button is pressed or another module asks it for something, is exactly what
-an administrator would want to see, and has no other way out.
-
-It takes the same thing the callback returns, and it means the same thing: the
-module's **whole** standing, not one more item.
-
-The status is replaced on every call, so nothing has to be cleared: a module
-that has sorted its problem out returns `None` next time and the line goes.
-`discard_module()` takes it with it, unless it was given a way back (see
-[Giving up a module's parameters](#giving-up-a-modules-parameters)); a module
-that retired but can be recalled goes on reporting.
-
-The library reports its own standing the same way, under module id `config`.
-
-### Writing a finding
-
-The editor gives each module **one line**, its findings joined by a space —
-they are whole sentences, so nothing needs to go between them. Two banners for
-one module would read as two problems.
-
-**Each finding is the whole line**: no module name is put in front of it. What a
-finding is about is often a group inside a module rather than the module itself
-— *service cards*, say, inside a module called *Application* — and only the
-module knows which.
-
-**One finding covers as much as one sentence can.** Several conditions with the
-same remedy are one finding, not one each: *found types unknown locally or no
-longer offered by the server* says in a line what two findings would have said
-in two, each repeating the same opening. Return a second finding where the
-second thing is genuinely a second thing — an unreachable server is not a fact
-about the catalogue.
-
-This is also what keeps the keys few. A module with four conditions has sixteen
-states but rarely more than two or three sentences worth writing, because
-sentences absorb alternatives and states do not.
-
-Each finding is a **key**, not a finished sentence: the editor renders it in
-whatever language the reader has chosen, and a module cannot know that language.
-Keep them fixed and free of counts — a number would make every occurrence its
-own key and fill the translation templates with variants, and the log is where
-the numbers belong anyway. Which is also why several short findings beat one
-sentence assembled from parts: the combinations multiply, the keys do not.
-
-Tips drawn from getting this wrong are in the
-[developer guide](docs/developer-guide.md#tips-and-tricks-for-status-messages).
-
----
-
 ## Declaration reference
 
 A Declaration is a dict with any of these keys (`type` is mandatory):
@@ -995,6 +899,100 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   A generated sentence cannot itself be a translation key, so a provider formats
   its own templates and should announce them with `note_xlation_keys()` — otherwise
   they reach no translation template until someone has already seen the hint.
+
+### Status messages
+
+A module's status is the line the editor shows above the panels, and it answers
+one question: **what should the administrator see to, now that they are here?**
+Not what is wrong with the device in general — what is worth their attention in
+this session, while the editor is open and they could act on it. A service
+catalogue that no longer matches, a server that cannot be reached, a language
+still without a recording: each is a piece of work waiting for somebody, and the
+banner is the only place it is offered to them.
+
+Only administrators see any of it. These are notes about work to be done, and
+the person the device stands with could act on none of them.
+
+#### Which door to use
+
+A standing changes for two reasons, and each has its instrument:
+
+| What changed it | How to say it |
+| --- | --- |
+| the module's **own configuration** — somebody edited it | the **return value** of `callback` |
+| **anything else** — a server answered, a file appeared, a test was run | `update_status(module_id, message)` |
+
+Both take the same thing and mean the same thing, so a module never has to
+remember which door it used for which finding.
+
+#### The callback's return value
+
+`None` — or nothing at all — means there is nothing to report, so a callback
+written before this existed keeps working unchanged. Otherwise return one
+finding, or a list of them.
+
+```python
+def _config_changed(self, value):
+    self._apply(value)
+    found = []
+    if self._unknown_types or self._dropped_types:
+        found.append("H4H service: found types unknown locally or no "
+                     "longer offered by the server.")
+    if not self._reachable:
+        found.append("H4H service: the server cannot be reached.")
+    return found or None
+```
+
+#### When the finding turns up later
+
+Say it with `update_status(module_id, message)`. The callback fires at the
+start of a run and then only if somebody edits that module's configuration —
+and on an appliance a run lasts months. What a module learns in between, when a
+test button is pressed or another module asks it for something, is exactly what
+an administrator would want to see, and has no other way out.
+
+It takes the same thing the callback returns, and it means the same thing: the
+module's **whole** standing, not one more item.
+
+The status is replaced on every call, so nothing has to be cleared: a module
+that has sorted its problem out returns `None` next time and the line goes.
+`discard_module()` takes it with it, unless it was given a way back (see
+[Giving up a module's parameters](#giving-up-a-modules-parameters)); a module
+that retired but can be recalled goes on reporting.
+
+The library reports its own standing the same way, under module id `config`.
+
+#### Writing a finding
+
+The editor gives each module **one line**, its findings joined by a space —
+they are whole sentences, so nothing needs to go between them. Two banners for
+one module would read as two problems.
+
+**Each finding is the whole line**: no module name is put in front of it. What a
+finding is about is often a group inside a module rather than the module itself
+— *service cards*, say, inside a module called *Application* — and only the
+module knows which.
+
+**One finding covers as much as one sentence can.** Several conditions with the
+same remedy are one finding, not one each: *found types unknown locally or no
+longer offered by the server* says in a line what two findings would have said
+in two, each repeating the same opening. Return a second finding where the
+second thing is genuinely a second thing — an unreachable server is not a fact
+about the catalogue.
+
+This is also what keeps the keys few. A module with four conditions has sixteen
+states but rarely more than two or three sentences worth writing, because
+sentences absorb alternatives and states do not.
+
+Each finding is a **key**, not a finished sentence: the editor renders it in
+whatever language the reader has chosen, and a module cannot know that language.
+Keep them fixed and free of counts — a number would make every occurrence its
+own key and fill the translation templates with variants, and the log is where
+the numbers belong anyway. Which is also why several short findings beat one
+sentence assembled from parts: the combinations multiply, the keys do not.
+
+Tips drawn from getting this wrong are in the
+[developer guide](docs/developer-guide.md#tips-and-tricks-for-status-messages).
 
 ### Giving up a module's parameters
 
