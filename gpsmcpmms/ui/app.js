@@ -1035,6 +1035,19 @@ function renderListB(node, container, relKeys, ctx) {
         st = S.listsB[node.path] = {pos: 1, draft: null, changed: false};
     }
     if (st.draft === null) {
+        // The record being edited has just become a different one -- a move,
+        // a New, an Undo, a Remove. Every list editor nested inside it is
+        // still holding the previous record's position and draft: those
+        // states are kept under the node's path, and a list inside an item
+        // template has one path for all the records of the enclosing list.
+        //
+        // Left standing, a fresh contact opened with the previous contact's
+        // availabilities on screen -- and saved without them, because nobody
+        // pressed Apply on a window that already looked right. What was shown
+        // was neither what was stored nor what was meant.
+        for (const store of [S.listsA, S.listsB])
+            for (const key of Object.keys(store))
+                if (key.startsWith(node.path + ".")) delete store[key];
         st.draft = st.pos <= list.length ? deepCopy(list[st.pos - 1])
                                          : composeValue(tpl);
         st.changed = false;
