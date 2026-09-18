@@ -1181,19 +1181,33 @@ function renderListB(node, container, relKeys, ctx) {
 }
 
 /* ---------- modules and save (spec 4.5) ---------- */
-function checkModuleLists(node, value, focusErr) {
-    // structural validation before saving: list minimum sizes
+/* Structural validation before saving: list minimum sizes, at every depth.
+
+   A list inside a list member -- the contacts of one help chain, say -- used
+   to be passed over: the walk stopped at a list's own length and never looked
+   into its members, so a member whose own list was too short went to the
+   device without a word. The device takes it, because partial values are
+   valid there; the minimum is enforced here or nowhere.
+
+   `trail` says which member is meant: the label of every list on the way
+   down, with the position of the member taken -- the number its position
+   field shows, so it can be typed straight in. */
+function checkModuleLists(node, value, focusErr, trail = []) {
     if (node.item_template) {
         const list = value || [];
+        const label = `"${xl(node.ui.label || node.path)}"`;
         if (list.length < node.constraints.min_size) {
             focusErr(`${xl("Too few entries in")} ` +
-                     `"${xl(node.ui.label || node.path)}"`);
+                     trail.concat([label]).join(" › "));
             return false;
         }
-        return true;
+        return list.every((member, i) => checkModuleLists(
+            node.item_template, member, focusErr,
+            trail.concat([`${label} ${i + 1}`])));
     }
     for (const [key, child] of Object.entries(node.children || {})) {
-        if (!checkModuleLists(child, value ? value[key] : null, focusErr))
+        if (!checkModuleLists(child, value ? value[key] : null, focusErr,
+                              trail))
             return false;
     }
     return true;
