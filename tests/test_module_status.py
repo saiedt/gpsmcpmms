@@ -27,8 +27,8 @@ def _register(mgr, module_id, callback):
                         param_dict=PARAMS, callback=callback)
 
 
-def _messages(mgr, module_id):
-    return mgr._module_status_report().get(module_id)
+def _messages(mgr, module_id, admin=True):
+    return mgr._module_status_report(admin).get(module_id)
 
 
 def test_a_silent_callback_reports_nothing(mgr):
@@ -176,3 +176,139 @@ def test_a_way_back_that_is_not_callable_is_refused(mgr):
     _register(mgr, "bad-way-back", lambda value: None)
     with pytest.raises(ValueError):
         mgr.discard_module("bad-way-back", revive="press here")
+
+
+# --------------------------------------------------------------------------
+# Findings that name the path they are about
+# --------------------------------------------------------------------------
+
+# Personal settings beside a protected setup, which is the shape of the
+# appliance this grew from: the contacts belong to whoever lives there, the
+# setup to whoever installed it. The cards are open themselves, but what makes
+# a card is protected -- and there are none yet.
+HOUSEHOLD_TYPES = {
+    "personal_t": {"name": {"label": "Name", "type": "string"},
+                   "contacts": {"label": "Contacts", "type": "contact_list"}},
+    "contact": {"phone": {"label": "Phone", "type": "string"}},
+    "contact_list": {"list_member": {"type": "contact"},
+                     "list_keys": [["phone"]], "list_size": "0.."},
+    "setup_t": {"key": {"label": "Key", "type": "string"}},
+    "card": {"rfid": {"label": "RFID", "type": "string", "protected": True},
+             "note": {"label": "Note", "type": "string"}},
+    "card_list": {"list_member": {"type": "card"}, "list_size": "0.."},
+}
+HOUSEHOLD = {
+    "personal": {"label": "Personal", "type": "personal_t",
+                 "default_val": {"contacts": [{"phone": "0151123456"}]}},
+    "setup": {"label": "Setup", "type": "setup_t", "protected": True},
+    "cards": {"label": "Cards", "type": "card_list"},
+}
+
+
+def _household(mgr, module_id, callback):
+    mgr.register_params(module_id=module_id, module_label="Household",
+                        param_dict=HOUSEHOLD, type_dict=dict(HOUSEHOLD_TYPES),
+                        callback=callback)
+
+
+def _about(module_id, rel_path, text):
+    return {"text": text, "path": f"{module_id}.{rel_path}"}
+
+
+def test_a_finding_may_name_the_path_it_is_about(mgr):
+    _household(mgr, "hh-named", lambda value: [
+            _about("hh-named", "personal.contacts", "A contact is incomplete."),
+            "Something else entirely."])
+    # An administrator sees both, as before: the path only ever adds readers.
+    assert _messages(mgr, "hh-named") == ["A contact is incomplete.",
+                                          "Something else entirely."]
+    assert "A contact is incomplete." in mgr._active_xlation_keys
+
+
+def test_a_finding_about_personal_settings_reaches_everybody(mgr):
+    # The whole point. Contacts are kept by whoever lives there, without the
+    # password; a finding about them withheld from that person is a finding
+    # nobody who could act on it will ever read.
+    _household(mgr, "hh-open", lambda value: [
+            _about("hh-open", "personal.contacts", "A contact is incomplete."),
+            "Something only an administrator should hear about."])
+    assert _messages(mgr, "hh-open", admin=False) == [
+            "A contact is incomplete."]
+
+
+def test_without_a_path_nothing_changes(mgr):
+    # Every module written before this keeps its findings where they were.
+    _register(mgr, "no-path", lambda value: "Something is amiss.")
+    assert _messages(mgr, "no-path", admin=False) is None
+
+
+@pytest.mark.parametrize("rel_path", [
+    "setup",                # protected itself
+    "setup.key",            # protected from above
+    "",                     # protected further down
+    "cards",                # protected in every member it will ever have
+])
+def test_a_finding_touching_anything_protected_stays_with_admins(mgr,
+                                                                 rel_path):
+    module_id = f"hh-guarded-{rel_path.replace('.', '-') or 'all'}"
+    path = f"{module_id}.{rel_path}" if rel_path else module_id
+    _household(mgr, module_id,
+               lambda value: {"text": "Look here.", "path": path})
+    assert _messages(mgr, module_id) == ["Look here."]
+    assert _messages(mgr, module_id, admin=False) is None
+
+
+def test_a_path_matching_nothing_stays_with_admins(mgr, caplog):
+    # Nothing can be told about what lies under it, so nothing is assumed --
+    # and a typo is worth a line in the log, or it only shows as a finding
+    # that somebody without the password never gets.
+    with caplog.at_level("WARNING"):
+        _household(mgr, "hh-typo", lambda value:
+                   _about("hh-typo", "personal.contcats", "Look here."))
+    assert _messages(mgr, "hh-typo") == ["Look here."]
+    assert _messages(mgr, "hh-typo", admin=False) is None
+    assert any("matches nothing" in r.message for r in caplog.records)
+
+
+def test_a_path_is_judged_when_asked_not_when_noted(mgr):
+    # A module that retires keeps its findings, while the paths they name go
+    # with its parameters. What is left is a finding about nothing a session
+    # without the password is shown -- the resting module itself is shown to
+    # administrators only.
+    _household(mgr, "hh-resting", lambda value:
+               _about("hh-resting", "personal.contacts", "Look here."))
+    assert _messages(mgr, "hh-resting", admin=False) == ["Look here."]
+    mgr.discard_module("hh-resting", revive=lambda: None)
+    assert _messages(mgr, "hh-resting") == ["Look here."]
+    assert _messages(mgr, "hh-resting", admin=False) is None
+
+
+def test_a_module_speaks_about_its_own_paths_only(mgr):
+    # Who may read a finding follows from the protection of what it names,
+    # and that must not be settled by somebody else's declaration.
+    with pytest.raises(ValueError, match="not a path of its own"):
+        _household(mgr, "hh-foreign",
+                   lambda value: {"text": "Look there.", "path": "vtest.n"})
+
+
+@pytest.mark.parametrize("n, finding", list(enumerate([
+    {"path": "personal"},                         # no text
+    {"text": "", "path": "personal"},             # empty text
+    {"text": "Look here.", "where": "personal"},  # a key it does not know
+    {"text": "Look here.", "path": ""},           # an empty path
+])))
+def test_a_malformed_finding_is_refused(mgr, n, finding):
+    # a module of its own each time, or the second registration would be the
+    # thing refused
+    module_id = f"hh-bad-{n}"
+    _household(mgr, module_id, lambda value: None)
+    with pytest.raises(ValueError, match="finding"):
+        mgr.update_status(module_id, finding)
+
+
+def test_the_librarys_own_findings_stay_with_admins(mgr):
+    # The factory password is an installer's business, and so is an
+    # unfinished translation; neither names a path anybody else is shown.
+    assert mgr._current_ui_passwd() == mgr.FACTORY_DEFAULT_PASSWD
+    assert _messages(mgr, mgr.OWN_MODULE_ID)
+    assert _messages(mgr, mgr.OWN_MODULE_ID, admin=False) is None

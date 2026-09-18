@@ -152,6 +152,49 @@ def test_a_way_back_that_does_not_register_is_reported_as_a_failure(client):
     assert resp.get_json()["error"] == "revive_failed"
 
 
+# --------------------------------------------------------------------------
+# Who is told what a module found
+# --------------------------------------------------------------------------
+
+def test_a_finding_reaches_whoever_is_shown_what_it_is_about(client):
+    from gpsmcpmms.config import ConfigManager
+    config_mgr.register_params(
+        module_id="told", module_label="Told",
+        param_dict={"open": {"type": "int", "label": "Open",
+                             "default_val": 1},
+                    "closed": {"type": "int", "label": "Closed",
+                               "protected": True, "default_val": 1}},
+        callback=lambda value: [
+            {"text": "About the open one.", "path": "told.open"},
+            {"text": "About the closed one.", "path": "told.closed"},
+            "About nothing in particular."])
+    everything = ["About the open one.", "About the closed one.",
+                  "About nothing in particular."]
+
+    body = client.get("/api/cvv_data?passwd="
+                      + ConfigManager.FACTORY_DEFAULT_PASSWD).get_json()
+    assert body["admin"]
+    assert body["module_status"]["told"] == everything
+
+    config_mgr._invalidate_session("the same test, now without password")
+    body = client.get("/api/cvv_data").get_json()
+    assert not body["admin"]
+    assert body["module_status"]["told"] == ["About the open one."]
+
+    # The answer to a save is filtered the same way: it is the same banner.
+    resp = client.post("/api/config/update",
+                       headers={**API, "X-GPSMCPMMS-Token": body["token"]},
+                       json={"module": "told", "value": {"open": 2}})
+    assert resp.get_json()["module_status"]["told"] == ["About the open one."]
+
+    # A read-only viewer is shown the open parameter, so the finding about it
+    # comes along; the lock decides who may change a value, not who may read
+    # what is wrong with it.
+    body = client.get("/api/cvv_data").get_json()
+    assert body["read_only"]
+    assert body["module_status"]["told"] == ["About the open one."]
+
+
 def test_an_update_writes_a_line_naming_the_module(client, caplog):
     # Without it an editing session can only be reconstructed from the
     # timestamps of the checkpoint files, which is guesswork -- and guesswork

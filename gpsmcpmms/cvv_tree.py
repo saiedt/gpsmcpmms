@@ -1259,6 +1259,43 @@ class CvvNode:
             return [n.get_path() for n in collected]
 
     @classmethod
+    def touches_protected(cls, holder, path):
+        """
+        Whether anything protected lies at `path`, above it or below it: True
+        or False -- or None where the path matches nothing, because then
+        nothing can be told about it either way.
+
+        Written for a finding that names the path it is about: it may reach a
+        session without the password only where everything it is about is on
+        that session's screen as well. Above counts because protection covers
+        the whole subtree it is declared on; below counts because a finding
+        about a group is a finding about its members.
+        """
+        cls._check_holder(holder)
+        if not isinstance(path, str) or not path.strip():
+            return None
+        sp = path.strip().split(".", 1)
+        module = sp[0].strip()
+        sub_path = sp[1].strip() if len(sp) == 2 else ""
+        with cls._global_lock:
+            lock = cls._module_locks.get(module)
+            m_node = cls._root_instance.get_child(module)
+        if lock is None or not isinstance(m_node, CvvPathElem):
+            return None
+        with lock:
+            matched = [m_node]
+            if sub_path:
+                matched = []
+                try:
+                    m_node.get_nodes_by_path(sub_path, matched)
+                except CvvError:
+                    return None
+            if not matched:
+                return None
+            return any(n._covered_by_protection() or n._holds_protected()
+                       for n in matched)
+
+    @classmethod
     def init_module(cls, holder, module: str, decl: dict, type_context: dict):
         cls._check_holder(holder)
         if not isinstance(module, str) or not module.strip():
@@ -1515,6 +1552,25 @@ class CvvPathElem(CvvNode):
         elif isinstance(self._children, dict):
             for c in self._children.values():
                 c.collect_protected_nodes(collector)
+
+    def _covered_by_protection(self):
+        # protection covers the whole subtree it is declared on
+        node = self
+        while isinstance(node, CvvPathElem):
+            if node._protected:
+                return True
+            node = node._parent
+        return False
+
+    def _holds_protected(self):
+        # The item template counts among what lies below, although it is no
+        # child: an empty list whose members would be protected is not
+        # harmless, it just has nothing in it yet.
+        below = list((self._children or {}).values())
+        template = self._ui_props.get("item_template")
+        if isinstance(template, CvvPathElem):
+            below.append(template)
+        return any(c._protected or c._holds_protected() for c in below)
 
     def dump_node(self) -> dict:
         d = {

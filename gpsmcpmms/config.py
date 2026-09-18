@@ -310,12 +310,12 @@ class ConfigManager:
         # Central registries: keyed by module_id
         self._callback_registry: dict = {}
         self._func_registry: dict = {}
-        # What each module last said about itself, as a translation key. It is
-        # written from the return value of the module's own callback and from
-        # nowhere else -- that callback already runs at registration and at
-        # every change, so it is the one place that cannot fall behind. There
-        # is nothing to clear either: the next return value replaces this one,
-        # and a callback that returns None takes the entry away.
+        # What each module last said about itself: module_id -> a list of
+        # (translation key, path or None), one pair per finding. Written from
+        # the return value of the module's own callback, which runs at
+        # registration and at every change, and from update_status() for what
+        # a module learns in between. There is nothing to clear: the next
+        # report replaces this one, and None takes the entry away.
         self._module_status: dict = {}
         # Modules that gave their parameters up but left a way back:
         # module_id -> {"label": ..., "revive": callable}. They keep their
@@ -448,6 +448,10 @@ class ConfigManager:
         kind of thing, and a module that has sorted one problem out while
         another remains does not have to remember which door it used for
         which.
+
+        A finding is a string, or a dict naming the path it is about as well:
+        {"text": ..., "path": ...}. See _read_finding() for what the path
+        changes.
         """
         if not (module_id in self._callback_registry or
                 module_id in self._dormant):
@@ -458,11 +462,11 @@ class ConfigManager:
     def _note_module_status(self, module_id, message):
         """Keeps what a module's callback just said about itself.
 
-        `message` is a key, not a finished sentence. The editor renders it in
-        whatever language the person reading it has chosen, and the module
-        cannot know that language -- a module that returned German would put
-        German in front of seven readers out of eight. So the string is noted
-        as a key like any other and translated on arrival.
+        Each finding's text is a key, not a finished sentence. The editor
+        renders it in whatever language the person reading it has chosen, and
+        the module cannot know that language -- a module that returned German
+        would put German in front of seven readers out of eight. So the string
+        is noted as a key like any other and translated on arrival.
 
         None means there is nothing to report, which is what a callback that
         returns nothing says: every callback written before this existed keeps
@@ -471,33 +475,92 @@ class ConfigManager:
         if message is None:
             self._module_status.pop(module_id, None)
             return
-        found = [message] if isinstance(message, str) else message
-        if not (isinstance(found, (list, tuple)) and found and
-                all(isinstance(m, str) and m.strip() for m in found)):
+        found = [message] if isinstance(message, (str, dict)) else message
+        if not (isinstance(found, (list, tuple)) and found):
             raise ValueError(
-                f"The callback of module '{module_id}' returned "
-                f"{type(message).__name__}; a status is a non-empty string, a "
-                f"list of them, or None.")
-        found = [m.strip() for m in found]
-        for m in found:
-            self._note_xlation_key(m, "ui")
-        self._module_status[module_id] = found
+                f"Module '{module_id}' reported {type(message).__name__} as "
+                f"its status; a status is a finding, a list of them, or None.")
+        noted = [self._read_finding(module_id, m) for m in found]
+        for text, _ in noted:
+            self._note_xlation_key(text, "ui")
+        self._module_status[module_id] = noted
 
-    def _module_status_report(self):
+    def _read_finding(self, module_id, finding):
+        """One finding, as a pair of its text and the path it is about.
+
+        A bare string is about no path in particular, and reaches
+        administrators only: nobody can tell what it is about, so nobody can
+        tell whether anybody else could act on it.
+
+        {"text": ..., "path": ...} says what it is about, and then it reaches
+        every session that is shown that path -- provided nothing at it, above
+        it or below it is protected. That is what makes a finding about
+        personal settings reach the person who keeps them, who until now never
+        heard of it: the finding was withheld on the grounds that they could
+        do nothing about it, which is untrue of anything on their own screen.
+
+        A finding about both halves is two findings, each at the most specific
+        path it concerns. Checked when the editor asks rather than here: the
+        tree changes under a noted finding, and a path that matches nothing --
+        a list member that has gone, say -- is then back with administrators.
+        """
+        if isinstance(finding, str):
+            text, path = finding, None
+        elif (isinstance(finding, dict) and "text" in finding and
+                set(finding) <= {"text", "path"}):
+            text, path = finding["text"], finding.get("path")
+        else:
+            raise ValueError(
+                f"Module '{module_id}' reported {finding!r} as a finding; a "
+                f"finding is a non-empty string, or a dict of 'text' and "
+                f"'path'.")
+        if not (isinstance(text, str) and text.strip()):
+            raise ValueError(f"Module '{module_id}' reported a finding "
+                             f"without text: {finding!r}.")
+        if path is None:
+            return text.strip(), None
+        path = path.strip() if isinstance(path, str) else ""
+        # Its own subtree and nothing else: who may see a finding is decided
+        # by the protection of what it names, and that must not be decided by
+        # another module's declaration.
+        if path != module_id and not path.startswith(module_id + "."):
+            raise ValueError(
+                f"Module '{module_id}' reported a finding about "
+                f"{finding.get('path')!r}, which is not a path of its own.")
+        if CvvNode.touches_protected(self, path) is None:
+            self._logger.warning(
+                f"Module '{module_id}' reported a finding about '{path}', "
+                "which matches nothing; it reaches administrators only.")
+        return text.strip(), path
+
+    def _module_status_report(self, admin):
         """What the editor puts above the panels: the findings, keyed by
-        module.
+        module, as far as this session may see them.
 
         Each finding is a whole line. No module name is put in front of it --
         what a finding is about is often a group inside a module rather than
         the module itself, and only the module knows which. A heading composed
         here would be right for some and misleading for the rest.
 
+        An administrator sees them all. Anybody else sees a finding that names
+        a path with nothing protected at, above or below it -- see
+        _read_finding() -- and nothing of this library's own.
+
         This library's own entry is computed here rather than stored: nothing
         notifies it when a dictionary is uploaded, and the answer is a walk
         over key sets that costs nothing worth caching.
         """
-        found = {m_id: list(msgs)
-                 for m_id, msgs in self._module_status.items() if msgs}
+        found = {}
+        # a copy: a module may report from a thread of its own while this runs
+        for m_id, noted in list(self._module_status.items()):
+            texts = [text for text, path in noted
+                     if admin or (path is not None and
+                                  CvvNode.touches_protected(self, path)
+                                  is False)]
+            if texts:
+                found[m_id] = texts
+        if not admin:
+            return found
         # The factory password is this library's finding like any other, and
         # it belongs here rather than in a banner of its own. Changing it is
         # an administrator's business; the person the device stands with can
@@ -2041,11 +2104,13 @@ class ConfigManager:
                 "protected_omitted": omitted,
                 "factory_default_passwd":
                     self._current_ui_passwd() == self.FACTORY_DEFAULT_PASSWD,
-                # What the modules have to say, keyed by module. Only to an
+                # What the modules have to say, keyed by module. Mostly to an
                 # administrator: these are notes about work still to be done,
-                # and the person the device stands with can act on none of
-                # them -- for them it would be worry without a remedy.
-                "module_status": self._module_status_report() if admin else {},
+                # and the person the device stands with can act on few of them
+                # -- for them the rest would be worry without a remedy. The
+                # few are those naming a path this session is shown in full;
+                # see _read_finding().
+                "module_status": self._module_status_report(admin),
                 # Modules that gave their parameters up but left a way back.
                 # Only their headings travel: there is nothing to configure,
                 # and the editor draws a sentence and a button. Only to an
@@ -2163,7 +2228,7 @@ class ConfigManager:
             # back with the answer to the very save that caused it.
             return jsonify({
                 "rejected": rejected,
-                "module_status": self._module_status_report() if admin else {},
+                "module_status": self._module_status_report(admin),
             })
 
         @app.route("/api/schema")

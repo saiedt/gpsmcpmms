@@ -146,7 +146,8 @@ config_mgr.register_params(
 - `callback(value)` is invoked immediately with the module's initial values, and
   again whenever the editor commits a change to that module. It may return a
   value reporting the module's standing, which the editor puts in front of an
-  administrator — see [Status messages](#status-messages).
+  administrator — and a finding about unprotected settings in front of whoever
+  keeps them, too. See [Status messages](#status-messages).
 - `func_dict` maps function names referenced in Declarations (dynamic enums, see
   [Advanced features](#advanced-features)) to callables.
 
@@ -903,15 +904,17 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 ### Status messages
 
 A module's status is the line the editor shows above the panels, and it answers
-one question: **what should the administrator see to, now that they are here?**
+one question: **what should the reader see to, now that they are here?**
 Not what is wrong with the device in general — what is worth their attention in
 this session, while the editor is open and they could act on it. A service
 catalogue that no longer matches, a server that cannot be reached, a language
 still without a recording: each is a piece of work waiting for somebody, and the
 banner is the only place it is offered to them.
 
-Only administrators see any of it. These are notes about work to be done, and
-the person the device stands with could act on none of them.
+Most of it is for administrators. These are notes about work to be done, and the
+person the device stands with could act on few of them. The few are the
+findings about that person's own settings, and a finding that says so reaches
+them too — see [Who sees a finding](#who-sees-a-finding).
 
 #### Which door to use
 
@@ -990,6 +993,44 @@ Keep them fixed and free of counts — a number would make every occurrence its
 own key and fill the translation templates with variants, and the log is where
 the numbers belong anyway. Which is also why several short findings beat one
 sentence assembled from parts: the combinations multiply, the keys do not.
+
+#### Who sees a finding
+
+A finding is a string, or a dict that also names the path it is about:
+
+```python
+found.append({"text": "Contacts: one of them has no phone number.",
+              "path": "app.contacts"})
+```
+
+Without a path, only administrators see it. With one, it reaches every session
+that is shown that path in full — the person the device stands with included,
+provided nothing at the path, above it or below it is `protected`. A finding
+about somebody's own settings used to be withheld from exactly the person who
+keeps them, on the grounds that they could do nothing about it; for anything on
+their own screen that was never true.
+
+- **Split a finding that spans both.** A finding about protected and unprotected
+  parameters at once stays with administrators as a whole. Make it two, each at
+  the most specific path it concerns — which also tells the reader where to
+  look.
+- **Only paths of the module's own.** Anything else is refused: who may read a
+  finding follows from the protection of what it names, and that must not be
+  settled by another module's declaration.
+- **Judged when the editor asks, not when the finding is reported.** The tree
+  moves under a finding, and a path that matches nothing — a typo, a list member
+  that has gone, a module that gave its parameters up — keeps the finding with
+  administrators. One that matches nothing when it is reported is also logged
+  as a warning.
+- A path may use wildcards and predicates like any other (see
+  [Paths, wildcards & queries](#paths-wildcards--queries)); a list's item
+  template counts as lying below it, so an empty list whose members would be
+  protected is not mistaken for an open one.
+- A read-only viewer is shown the unprotected parameters, and the findings about
+  them come along: the lock decides who may change a value, not who may read
+  what is wrong with it.
+- This library's own findings — the factory password, unfinished translations —
+  name no path and stay with administrators.
 
 Tips drawn from getting this wrong are in the
 [developer guide](docs/developer-guide.md#tips-and-tricks-for-status-messages).
