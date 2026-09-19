@@ -61,6 +61,7 @@ const S = {
     listsA: {},              // dump path -> {sel}
     listsB: {},              // dump path -> {pos, draft, changed}
     probeBad: {},            // dump path -> the device refused this value
+    message: null,           // {text, cls} on screen now; see msg()
 };
 
 function xl(key) { return S.xl[key] || key; }
@@ -163,14 +164,32 @@ function freeze(text) {
     return () => overlay.remove();
 }
 
+/* A message is kept in S and not only in its box, because renderAll() builds
+   the page from nothing -- the box included -- and a render follows a message
+   more often than not: the options of a dynamic enum and a fetched hint both
+   arrive after the page is drawn, and draw it again when they do. Kept in the
+   box alone, "Saved" lasted until the panel just saved had its options back,
+   and on the service cards, which ask for theirs on every save, that was no
+   time at all. So every render draws the message anew, and only msg() and
+   its timer decide how long it lives: six seconds for news, until the next
+   message for an error. */
 let msgTimer = null;
 function msg(text, cls = "info") {
+    S.message = {text, cls};
+    showMessage();
+    clearTimeout(msgTimer);
+    if (cls !== "error")
+        msgTimer = setTimeout(() => { S.message = null; showMessage(); }, 6000);
+}
+
+/* Into whichever box the page has now: the one that stood there when the
+   message was given may have been thrown away by a render since. */
+function showMessage() {
     const box = document.getElementById("messages");
     if (!box) return;
     box.innerHTML = "";
-    box.append(el("div", {class: `msg ${cls}`}, text));
-    clearTimeout(msgTimer);
-    if (cls !== "error") msgTimer = setTimeout(() => box.innerHTML = "", 6000);
+    if (S.message)
+        box.append(el("div", {class: `msg ${S.message.cls}`}, S.message.text));
 }
 
 /* ---------- values, scaling, validation ---------- */
@@ -666,8 +685,8 @@ async function probeValue(node, value, rerender) {
     if (refused) S.probeBad[node.path] = text;
     else delete S.probeBad[node.path];
     msg(text, level);
-    // report first, then re-render: the re-render must not overtake the
-    // message, and without it the marking would never appear
+    // without the re-render the marking would never appear; the message
+    // survives it (see msg)
     if (changed && rerender) rerender();
 }
 
@@ -709,8 +728,7 @@ function fieldRow(node, container, relKeys, ctx) {
         setIn(container, relKeys, v);
         ctx.markDirty();
         ctx.rerender();
-        // the answer arrives long after the re-render, so the message survives;
-        // a verdict that refuses the value marks the field on the next one
+        // a verdict that refuses the value marks the field on the next render
         if (PROBE_TYPES.has(cons.type)) probeValue(node, v, ctx.rerender);
     };
     // Withdrawing during a render: no second render, or this goes round in
@@ -1399,7 +1417,7 @@ async function takeOverSession() {
     S.token = r.data.token;
     await reloadData();
     renderAll();
-    msg(xl("Session taken over"), "ok");   // after the re-render, or it is lost
+    msg(xl("Session taken over"), "ok");
 }
 
 /* The one finding that comes with something to press. Kept identical to the
@@ -1527,7 +1545,6 @@ async function uploadTranslation(file, code, name) {
     if (S.lang === target) await loadLang();
     await loadLangList();
     renderAll();
-    // message after the re-render, so renderAll() does not wipe it
     msg(`${xl("Translation processed")}: ` +
         `${translated} / ${total} ${xl("translated")}`, "ok");
 }
@@ -1793,6 +1810,7 @@ function renderAll() {
     app.append(general);
     if (S.admin && S.langPanel) app.append(renderLangPanel(S.langPanel));
     app.append(el("div", {id: "messages"}));
+    showMessage();              // a message outlives the box it was shown in
 
     if (S.readOnly)
         app.append(el("div", {class: "banner readonly"},
