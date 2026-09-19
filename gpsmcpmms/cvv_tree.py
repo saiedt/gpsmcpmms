@@ -332,8 +332,17 @@ class CvvValue:
                     # the API, and a configuration editor able to address files
                     # outside the directory its host declared would be a
                     # different kind of program.
+                    #
+                    # The declared pattern is applied here as well, and for
+                    # the same reason. This method reads one constraint, the
+                    # first, and for a file that is the type -- so the pattern
+                    # behind it was left to the upload, and "x.exe" went
+                    # through the API into a parameter declared "wav only".
+                    pattern = self._constraints.get("patterned_string")
                     return (bool(val) and min(val) > ' ' and
-                            not set(val) & {"/", "\\"} and ".." not in val)
+                            not set(val) & {"/", "\\"} and ".." not in val and
+                            (pattern is None or
+                             bool(re.fullmatch(pattern, val))))
                 if v in ("path", "pingable", "url"):
                     return bool(val) and min(val) > ' '
                 return True
@@ -511,7 +520,9 @@ class CvvValue:
             # otherwise replaced the type constraint entirely, and with it the
             # check that keeps a file name from addressing another directory --
             # so the parameters that bothered to restrict themselves would have
-            # been the unprotected ones.
+            # been the unprotected ones. Recorded first, too: check_simple_val
+            # reads the first constraint alone, and applies the pattern from
+            # the type's branch.
             self._constraints["type"] = "file"
             vals = decl.get("values")
             if isinstance(vals, str) and vals.strip():
@@ -531,7 +542,8 @@ class CvvValue:
                             CvvValue.parse_range(bound_to, True))
                 case "string" | "file":
                     # for a file the pattern bounds the *name*, which is how a
-                    # declaration says "wav only": bound_to r"\.wav$"
+                    # declaration says "wav only": bound_to r".+\.wav". It is
+                    # a fullmatch, so r"\.wav$" would admit ".wav" alone.
                     self._constraints["patterned_string"] = bound_to
                 case _:
                     critical(f"Bounded '{type_str}' rejected.")
@@ -561,6 +573,12 @@ class CvvValue:
                     if len(options) == 0:
                         critical(f"enum has no options.")
                     self._constraints["one_of"] = options
+                case "file":
+                    # Everything a file needs was recorded above. The pattern
+                    # is optional (spec 2.1), and without one any bare name
+                    # will do. With no case here, a file declared without
+                    # bound_to could not be registered at all.
+                    pass
                 case (
                     "boolean" | "color" | "float" | "int" | "password" |
                     "path" | "pingable" | "string" | "url"

@@ -28,6 +28,17 @@ _PROBE = (
     "from gpsmcpmms import config_mgr as c\n"
     "print('P=%s T=%s' % (c._ui_port, c._session_timeout_seconds()))\n"
 )
+_WAV_DEFAULTING_TO_EXE = (
+    "from gpsmcpmms import config_mgr\n"
+    "from gpsmcpmms.cvv_tree import CvvError\n"
+    "try:\n"
+    "    config_mgr.register_params('tone', 'Tone', {'f': {'type': 'file',"
+    " 'label': 'F', 'file_dir': '.', 'bound_to': r'.+\\.wav',"
+    " 'default_val': 'x.exe'}}, lambda v: None)\n"
+    "    print('REGISTERED')\n"
+    "except CvvError:\n"
+    "    print('REFUSED')\n"
+)
 
 
 def _run(code, cvv_dir, ui_dir, **extra):
@@ -60,3 +71,12 @@ def test_env_bad_value_falls_back(tmp_path):
     out = _run(_PROBE, tmp_path / "cvv", tmp_path / "ui",
                GPSMCPMMS_UI_PORT="not-a-port", GPSMCPMMS_SESSION_TIMEOUT="99999")
     assert "P=8080 T=1800" in out.stdout, out.stderr
+
+
+def test_a_file_default_outside_its_own_pattern_is_refused(tmp_path):
+    """A file's bound_to binds the declared values too, as a string's does:
+    a default it contradicts is a declaration error. Run in a fresh
+    interpreter, because a module refused halfway stays half-built in the
+    process-global tree."""
+    out = _run(_WAV_DEFAULTING_TO_EXE, tmp_path / "cvv", tmp_path / "ui")
+    assert "REFUSED" in out.stdout, out.stdout + out.stderr

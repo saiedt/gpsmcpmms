@@ -1,5 +1,7 @@
 """Validation / constraint enforcement — the core value of the library."""
 
+import pytest
+
 from gpsmcpmms.cvv_tree import CvvNode
 
 
@@ -78,3 +80,55 @@ def test_an_emptied_key_counts_as_missing(setup_demo_environment):
                           {"rfid": "", "sid": "s2"}])
     assert rejected == ["klist.cards"]
     assert len(cfg.query("klist.cards")["klist.cards"]) == 1
+
+
+# --------------------------------------------------------------------------
+# A 'file' parameter holds a bare name, and a declared pattern (spec 2.1)
+# --------------------------------------------------------------------------
+
+def _file_param(cfg, module_id, file_dir, **decl):
+    """Registers a module whose one parameter, `f`, is a file. Every test
+    takes an id of its own: a module id is spent the moment it is used."""
+    funcs = {decl["values"]: lambda: {}} if "values" in decl else None
+    cfg.register_params(
+        module_id=module_id, module_label="Files",
+        param_dict={"f": {"type": "file", "label": "File",
+                          "file_dir": str(file_dir), **decl}},
+        callback=lambda value: None, func_dict=funcs)
+
+
+def _set_file(cfg, module_id, name):
+    return CvvNode.update_module(cfg, module_id, {"f": name})[0]
+
+
+def test_a_file_parameter_needs_no_pattern(setup_demo_environment, tmp_path):
+    # bound_to is optional, and yet leaving it out ended the registration:
+    # "Unknown simple type specification file."
+    cfg = setup_demo_environment
+    _file_param(cfg, "fbare", tmp_path)
+    assert _set_file(cfg, "fbare", "notes.txt") == []
+    # without a pattern the name still may not leave the directory
+    assert _set_file(cfg, "fbare", "../notes.txt") == ["fbare.f"]
+    assert cfg.query("fbare.f")["fbare.f"] == "notes.txt"
+
+
+@pytest.mark.parametrize("module_id, provider",
+                         [("fwav", None), ("fwavlist", "list_tones")])
+def test_a_declared_pattern_holds_for_every_value(setup_demo_environment,
+                                                  tmp_path, module_id,
+                                                  provider):
+    # Only the upload applied the pattern. A value set any other way met a
+    # check that looked at the type alone, so "x.exe" went through the API
+    # into a parameter declared "wav only". A provider leaves open which
+    # files are on offer, not what their names may look like.
+    cfg = setup_demo_environment
+    decl = {"bound_to": r".+\.wav"}
+    if provider:
+        decl["values"] = provider
+    _file_param(cfg, module_id, tmp_path, **decl)
+    path = f"{module_id}.f"
+    assert _set_file(cfg, module_id, "bell.wav") == []
+    assert _set_file(cfg, module_id, "x.exe") == [path]
+    # a name the pattern admits still may not leave the directory
+    assert _set_file(cfg, module_id, "../bell.wav") == [path]
+    assert cfg.query(path)[path] == "bell.wav"
