@@ -1,5 +1,7 @@
 """REST API reachability plus the security contract (spec 4.4 / 4.8)."""
 
+import io
+
 import pytest
 from gpsmcpmms import config_mgr
 
@@ -214,3 +216,31 @@ def test_a_refused_token_writes_a_line_too(client, caplog):
                     json={"module": "vtest", "value": {"n": 3}})
     assert any("no longer the current one" in r.message
                for r in caplog.records)
+
+
+# --------------------------------------------------------------------------
+# Uploading into a 'file' parameter (/api/config/file)
+# --------------------------------------------------------------------------
+
+def test_a_refused_upload_says_why_in_a_key(client, tmp_path):
+    # The editor translates the reason, so the reason has to be a key.
+    # "Abgelehnt" stood here after the keys had moved to English, matched
+    # none, and every reader was told in German. A fixed value is simply the
+    # refusal easiest to provoke: whatever is uploaded, the value is not it.
+    from gpsmcpmms.config import ConfigManager
+    config_mgr.register_params(
+        module_id="tones", module_label="Tones",
+        param_dict={"ring": {"type": "file", "label": "Ring tone",
+                             "file_dir": str(tmp_path),
+                             "bound_to": r".+\.wav",
+                             "fixed_val": "bell.wav"}},
+        callback=lambda value: None)
+    token = _fresh_token(client)
+    resp = client.post("/api/config/file",
+                       headers={**API, "X-GPSMCPMMS-Token": token},
+                       data={"path": "tones.ring",
+                             "file": (io.BytesIO(b"RIFF"), "horn.wav")})
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] in ConfigManager.OWN_UI_KEYS
+    # a file the value was refused for does not stay behind (spec 4.9.6)
+    assert not (tmp_path / "horn.wav").exists()

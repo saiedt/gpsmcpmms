@@ -2435,7 +2435,10 @@ class ConfigManager:
                         os.remove(target)
                     except OSError:
                         pass
-                return jsonify({"error": "Abgelehnt", "rejected": rejected}), 400
+                # The key, like the refusals above: the editor translates it.
+                # "Abgelehnt" stood here after the key set had moved to
+                # English, matched no key, and reached every reader in German.
+                return jsonify({"error": "Rejected", "rejected": rejected}), 400
             self._logger.info(f"'{path}' now points at the uploaded "
                               f"'{name}' in {file_dir}.")
             return jsonify({"value": name})

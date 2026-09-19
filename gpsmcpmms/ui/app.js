@@ -388,7 +388,10 @@ async function flushPendingFiles(mid) {
             if (!resp.ok) {
                 let err = resp.status;
                 try { err = (await resp.json()).error || err; } catch (e) {/**/}
-                msg(`${xl("Invalid file")}: ${name}: ${err}`, "error");
+                // xl() for the reason fetchEnumOptions gives: every refusal
+                // of a file is a key, and shown raw it read in English -- or
+                // "Abgelehnt", in German -- whatever language was chosen
+                msg(`${xl("Invalid file")}: ${name}: ${xl(err)}`, "error");
                 return false;
             }
         }
