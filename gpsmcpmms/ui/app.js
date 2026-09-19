@@ -807,7 +807,8 @@ function collapsible(pathKey, labelText, tooltip, renderBody, extraClass,
 /* Which children of a dict actually make it onto the screen: the hidden ones
    and those an unmet relevance rule switches off never do. A protected subtree
    is not even in the dump outside admin mode, so the same walk answers "is
-   there anything here at all" -- see hasVisibleContent. */
+   there anything here at all" -- see hasVisibleContent -- and "which lists
+   must Save hold to their minimum" -- see checkModuleLists. */
 function visibleChildren(node, container, relKeys) {
     const dictValue = getIn(container, relKeys);
     return Object.entries(node.children || {}).filter(([key, child]) => {
@@ -1191,7 +1192,15 @@ function renderListB(node, container, relKeys, ctx) {
 
    `trail` says which member is meant: the label of every list on the way
    down, with the position of the member taken -- the number its position
-   field shows, so it can be typed straight in. */
+   field shows, so it can be typed straight in.
+
+   Only what is on screen is held to its minimum: the walk takes the children
+   visibleChildren() lets through, judged by the value of the dict they sit
+   in -- inside a list member, by that member. A list that is hidden, or that
+   an unmet relevance rule has switched off, can be neither seen nor filled,
+   and a refusal naming it left nothing to do but give up the whole module.
+   The device agrees about the second kind: a subtree whose relevance does
+   not hold counts as ready there. */
 function checkModuleLists(node, value, focusErr, trail = []) {
     if (node.item_template) {
         const list = value || [];
@@ -1205,7 +1214,7 @@ function checkModuleLists(node, value, focusErr, trail = []) {
             node.item_template, member, focusErr,
             trail.concat([`${label} ${i + 1}`])));
     }
-    for (const [key, child] of Object.entries(node.children || {})) {
+    for (const [key, child] of visibleChildren(node, value, [])) {
         if (!checkModuleLists(child, value ? value[key] : null, focusErr,
                               trail))
             return false;

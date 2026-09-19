@@ -241,7 +241,7 @@ A key in `type_dict` declares either a **dict type** or a **list type**:
   | Key | Meaning |
   |-----|---------|
   | `list_member` | **required** — a (type-only) Declaration shared by all members. |
-  | `list_size` | `"min..max"` inclusive member counts; default `"0..100"`; max 100. The backend accepts a list below *min* — partial values are valid, and `config_ready()` stays false — but the editor's **Save** refuses the module while any list is too short, a list inside a list member included, and names the way to it: `Too few entries in "Chains" 2 › "Members"`. |
+  | `list_size` | `"min..max"` inclusive member counts; default `"0..100"`; max 100. The backend accepts a list below *min* — partial values are valid, and `config_ready()` stays false — but the editor's **Save** refuses the module while any list is too short, a list inside a list member included, and names the way to it: `Too few entries in "Chains" 2 › "Members"`. A list that is `hidden`, or that its `relevance` switches off — inside a list member, judged by that member — is exempt: nobody could see it, let alone fill it. |
   | `list_keys` | uniqueness groups, e.g. `[["a"], ["b","c"]]` (a standalone key `a`, plus a compound key `b+c`). Every property named here must carry a value: a member known by nothing is refused, logged with its path and its contents, and the editor keeps **Apply** disabled until the keys are filled. Everything *else* in a member may stay open — the rule is about identity, not about being finished. |
 
 Named types can be reused across parameters. `param_dict` itself is merged in as a
