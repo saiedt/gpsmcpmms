@@ -253,8 +253,8 @@ class ConfigManager:
     # Declaration keys whose string values are display strings in DECL_LANG
     # and hence translation keys
     XLATION_DECL_KEYS = (
-        "acquire_button", "hint", "label", "placeholder", "test_func_msg",
-        "tooltip"
+        "acquire_button", "hint", "label", "placeholder", "test_button",
+        "test_func_msg", "tooltip"
     )
 
     # ------------------------------------------------------------------

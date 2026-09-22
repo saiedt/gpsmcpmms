@@ -606,7 +606,11 @@ function acquireButton(node, input, commit) {
 }
 
 function testButton(node, currentValue) {
-    const btn = el("button", {class: "small"}, xl("Test"));
+    // "Test" unless the declaration says otherwise. A button that records a
+    // name is not testing anything, and the word on it should say what
+    // pressing it does.
+    const btn = el("button", {class: "small"},
+                   xl(node.ui.test_button || "Test"));
     btn.addEventListener("click", async () => {
         const r = await api("/api/config/test",
             {json: {path: node.path, value: currentValue()}});

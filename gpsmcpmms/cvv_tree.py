@@ -1547,7 +1547,7 @@ class CvvPathElem(CvvNode):
         # type-specific sub-properties (see section 2.1, key 3)
         "acquire_button", "bound_to", "file_dir", "values", "values_for",
         # test support (see section 4.9.4 of the spec)
-        "test_func", "test_func_msg",
+        "test_func", "test_func_msg", "test_button",
         # annotations added internally during type resolution
         "is_list", "resolved_type",
     ))
@@ -2062,6 +2062,21 @@ class CvvPathElem(CvvNode):
             if not callable(test_func):
                 critical(f"'test_func' must be callable ({self.get_path()}).")
             self._ui_props["test_func"] = test_func
+        # What the button is to say. The spec calls it "Test" (4.9.4) and
+        # that is what it says when nothing else is asked for; but a button
+        # that records a name is not testing anything, and a word that
+        # describes the wrong act is worse than a generic one. The precedent
+        # is acquire_button, which a backend_provided value has to name for
+        # the same reason.
+        test_button = decl.get("test_button")
+        if test_button is not None:
+            if test_func is None:
+                critical("'test_button' is only applicable together with "
+                         f"'test_func' ({self.get_path()}).")
+            if not (isinstance(test_button, str) and test_button.strip()):
+                critical(f"As value for test_button, {test_button} had to be "
+                         "a non-empty string object.")
+            self._ui_props["test_button"] = test_button.strip()
         test_func_msg = decl.get("test_func_msg")
         if test_func_msg is not None:
             if test_func is None:
