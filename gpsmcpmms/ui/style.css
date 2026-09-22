@@ -203,11 +203,53 @@ button.toggled:hover:not(:disabled) { background: var(--accent-soft); }
 .lang-panel .sep { color: var(--line); margin: 0 4px; }
 .lang-panel input[type="file"] { font: inherit; }
 
-/* ---- list editors (spec 4.6.2) ---- */
+/* ---- list editors (spec 4.6.2) ----
+
+   A list carries its own colour, and everything that acts on the list wears
+   it: the six buttons -- the two arrows, New, Remove, Undo, Apply -- the
+   frame around the body they sit in, and the position field between the
+   arrows. Before this they were the page's plain grey, the same grey as
+   every field inside the record, and nothing said that the buttons under a
+   record belonged to the list rather than to the record. Deliberately not
+   the accent: that blue means "save this module", and a button that applies
+   one record must not look like the one that saves everything.
+
+   The colour is a filled one, because that is what makes a disabled button
+   fade. The save buttons fade because they are blue and go pale; these had
+   no fill to lose, so disabled looked much like enabled.
+
+   Two tones, taken in turn as lists nest (see renderNode). They are set as
+   variables on the list body, so everything inside picks up the nearest
+   one: a list within a record of another list colours itself and its own
+   children without a single selector knowing how deep it is. Both sit
+   beside the accent on the wheel, one on either side, so they read as
+   relatives of it rather than as a second opinion. */
+.tone-1 {
+  --list-fill: #12787f; --list-fill-hover: #0d5f64;
+  --list-line: #7fb9bd; --list-soft: #e2f1f2;
+}
+.tone-2 {
+  --list-fill: #6b4fa8; --list-fill-hover: #573f8b;
+  --list-line: #b2a2d4; --list-soft: #eee9f7;
+}
+.group-body.list-a, .group-body.list-b { border-color: var(--list-line); }
+.list-a > .apply-line > button,
+.list-b > .layout > .nav-block > button,
+.list-b > .action-block > button {
+  background: var(--list-fill); border-color: var(--list-fill); color: #fff;
+}
+.list-a > .apply-line > button:hover:not(:disabled),
+.list-b > .layout > .nav-block > button:hover:not(:disabled),
+.list-b > .action-block > button:hover:not(:disabled) {
+  background: var(--list-fill-hover); border-color: var(--list-fill-hover);
+}
+/* first among the four, without a second colour to say so */
+.list-b > .action-block > button.lead { font-weight: 600; }
+
 .list-a .edit-line { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
 .list-a .pos-field, .list-b .pos-field {
   width: 52px; text-align: center; padding: 5px 4px;
-  border: 1px solid var(--line); border-radius: var(--radius);
+  border: 1px solid var(--list-line); border-radius: var(--radius);
   -moz-appearance: textfield; appearance: textfield; font: inherit;
 }
 .list-a table {
@@ -215,15 +257,15 @@ button.toggled:hover:not(:disabled) { background: var(--accent-soft); }
 }
 .list-a .table-wrap {
   max-height: 96px; overflow-y: auto;
-  border: 1px solid var(--line); border-radius: var(--radius);
+  border: 1px solid var(--list-line); border-radius: var(--radius);
 }
 .list-a td { padding: 5px 10px; border-bottom: 1px solid var(--line); cursor: pointer; }
-.list-a tr.selected td { background: var(--accent-soft); }
+.list-a tr.selected td { background: var(--list-soft); }
 .list-a .apply-line { margin-top: 6px; }
 
 .list-b .layout { display: flex; gap: 10px; align-items: center; }
 .list-b .record-block {
-  flex: 1; border: 1px dashed var(--line); border-radius: var(--radius);
+  flex: 1; border: 1px dashed var(--list-line); border-radius: var(--radius);
   padding: 6px 6px 6px 14px;
 }
 .list-b .nav-block {

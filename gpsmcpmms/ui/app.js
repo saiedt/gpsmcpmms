@@ -893,24 +893,51 @@ function renderNode(node, container, relKeys, ctx) {
     }
     if (node.item_template) {
         const simple = !node.item_template.children;
+        // Nested lists take the two tones in turn. A list inside a record of
+        // another list is the place where it stops being obvious which
+        // "Apply" applies to what: the inner buttons sit inside the outer
+        // record, and both sets look the same. Alternating says which floor
+        // you are on -- and because each tone is set on the body it applies
+        // to, everything inside it picks up its colours by inheritance.
+        const depth = ctx.listDepth || 0;
+        const listCtx = Object.assign({}, ctx, {listDepth: depth + 1});
+        const tone = "tone-" + (depth % 2 + 1);
         return withHint(node, ctx, collapsible(node.path,
             xl(node.ui.label || relKeys[relKeys.length - 1]),
             node.ui.tooltip ? xl(node.ui.tooltip) : null,
-            () => simple ? renderListA(node, container, relKeys, ctx)
-                         : renderListB(node, container, relKeys, ctx),
+            () => simple ? renderListA(node, container, relKeys, listCtx, tone)
+                         : renderListB(node, container, relKeys, listCtx, tone),
             null, groupTestButton(node, container, relKeys)));
     }
     return fieldRow(node, container, relKeys, ctx);
 }
 
 /* ---------- list editor, Case A: simple members (spec 4.6.2 A) ---------- */
-function renderListA(node, container, relKeys, ctx) {
+/* What a member reads as in the table. What is stored is the value; for an
+   enum that is an identifier, and a column of identifiers tells nobody which
+   contact stands in which place. The options may not have arrived yet -- the
+   field beside the table is what asks for them -- and until they do the raw
+   value is still better than a blank. */
+function memberLabel(tpl, v) {
+    const cons = tpl.constraints || {};
+    if (cons.one_of === undefined) return String(v);
+    if (Array.isArray(cons.one_of)) {
+        const hit = cons.one_of.find(o => o.value === v);
+        return hit ? (hit.verbatim ? hit.label : xl(hit.label)) : String(v);
+    }
+    const values = (S.enums[tpl.path] || {}).values;
+    const o = values && values[v];
+    if (!o) return String(v);
+    return o.verbatim ? (o.label || String(v)) : xl(o.label || String(v));
+}
+
+function renderListA(node, container, relKeys, ctx, tone) {
     const list = getIn(container, relKeys) || [];
     const st = S.listsA[node.path] || (S.listsA[node.path] = {sel: null});
     if (st.sel !== null && st.sel >= list.length) st.sel = null;
     const cons = node.constraints, tpl = node.item_template;
     const fixed = S.readOnly || node.configurability === 0;
-    const body = el("div", {class: "group-body list-a"});
+    const body = el("div", {class: "group-body list-a " + (tone || "tone-1")});
 
     const rerenderList = () => ctx.rerender();
     const select = (i) => { st.sel = i; rerenderList(); };
@@ -924,8 +951,8 @@ function renderListA(node, container, relKeys, ctx) {
                                                                  : null);
     });
 
-    const commitVal = async (raw) => {
-        const v = raw === "" ? null : raw;
+    const commitVal = async (v) => {
+        if (v === "") v = null;
         if (v === null) {                                    // A.6, removal
             if (st.sel !== null &&
                     await modal(xl("Really remove this entry?")) !== null) {
@@ -957,17 +984,27 @@ function renderListA(node, container, relKeys, ctx) {
         rerenderList();
     };
 
-    const valInput = el("input", {type: "text",
-        value: st.sel === null ? "" : list[st.sel],
-        disabled: fixed ? "" : null});
-    valInput.addEventListener("keydown",
-        (e) => { if (e.key === "Enter" || e.keyCode === 13)
-                     valInput.blur(); });
-    valInput.addEventListener("change", () => commitVal(valInput.value));
+    // The member's own field, and not a text box. The spec says "an input
+    // field for the value of a list element" (4.6.2 A.2) -- one field, not
+    // one *text* field, and a member that is an enum wants the enum's list.
+    // Typed by hand it was the identifier that had to be typed: a chain
+    // member is stored as a telephone number, so choosing a contact meant
+    // knowing their number by heart and spelling it the way the store spells
+    // it. Everything else a member can be -- a number with a range, a
+    // colour, a checkbox -- was a text box too.
+    //
+    // configurability travels from the list: the template carries its own,
+    // and a list nobody may change must not hand out a field they can.
+    const tplNode = Object.assign({}, tpl,
+                                  {configurability: node.configurability});
+    const valInput = buildInput(tplNode, st.sel === null ? null : list[st.sel],
+                                commitVal, commitVal, ctx,
+                                tpl.constraints.one_of_for === undefined
+                                    ? undefined : null);
 
     const rows = list.map((v, i) => {
         const tr = el("tr", {class: st.sel === i ? "selected" : ""},
-                      el("td", {}, String(v)));
+                      el("td", {}, memberLabel(tpl, v)));
         tr.addEventListener("click", () => { if (!fixed) select(i); });
         return tr;
     });
@@ -977,7 +1014,11 @@ function renderListA(node, container, relKeys, ctx) {
             el("tbody", {}, ...rows))),
         el("div", {class: "apply-line"},
             el("button", {disabled: fixed ? "" : null,
-                onclick: () => commitVal(valInput.value)}, xl("Apply"))));
+                // Through the field's own change handler, so that Apply and
+                // leaving the field are the same act: the handler is where
+                // the value is read in the member's own type and validated.
+                onclick: () => valInput.dispatchEvent(new Event("change"))},
+                xl("Apply"))));
     return body;
 }
 
@@ -1044,7 +1085,7 @@ function usedEnumValuesIn(list, exceptIdx, prop) {
     return used;
 }
 
-function renderListB(node, container, relKeys, ctx) {
+function renderListB(node, container, relKeys, ctx, tone) {
     const list = getIn(container, relKeys) || [];
     const tpl = node.item_template, cons = node.constraints;
     // A fixed list locks its length and composition -- no adding, no removing
@@ -1156,7 +1197,10 @@ function renderListB(node, container, relKeys, ctx) {
 
     // ...and the same rule again at the button, not only at the navigator: a
     // position typed straight into the field must not find a way in either.
-    const apply = el("button", {class: "primary",
+    // Not the module's blue. That blue means "save this module", and a
+    // button inside a list applies a record -- the two must not look alike.
+    // The weight is what keeps it the first among the four.
+    const apply = el("button", {class: "lead",
         disabled: S.readOnly || !st.changed || repeatsKey || missingKey
                       || (structureFixed && st.pos > list.length)
                           ? "" : null,
@@ -1197,7 +1241,7 @@ function renderListB(node, container, relKeys, ctx) {
                       ? "" : null,
         onclick: () => goTo(list.length + 1)}, xl("New"));
 
-    return el("div", {class: "group-body list-b"},
+    return el("div", {class: "group-body list-b " + (tone || "tone-1")},
         el("div", {class: "layout"}, recordBody, nav),
         el("div", {class: "action-block"}, neu, remove, undo, apply));
 }
