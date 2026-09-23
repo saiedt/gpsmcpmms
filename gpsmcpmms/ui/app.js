@@ -547,7 +547,14 @@ function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
                 class: orphanedValue ? "invalid" : null,
                 title: orphanedValue ? cur : null,
                 onchange: (e) => commit(e.target.value || null)},
-            el("option", {value: ""}, ""),
+            // The empty entry is blank wherever it means "not answered":
+            // a field nobody has filled in shows it, and a word there would
+            // read like a value. Inside a list it is the opposite -- the
+            // field always shows the selected member, and the entry is how
+            // that member is cleared away, which nothing on screen said.
+            // Whoever draws the field says which of the two it is.
+            el("option", {value: ""},
+               ctx.emptyOptionLabel ? xl(ctx.emptyOptionLabel) : ""),
             orphanedValue
                 ? el("option", {value: cur}, xl("Value not known"))
                 : null,
@@ -1039,8 +1046,21 @@ function renderListA(node, container, relKeys, ctx, tone) {
     // and a list nobody may change must not hand out a field they can.
     const tplNode = Object.assign({}, tpl,
                                   {configurability: node.configurability});
+    // A list of simple values holds no duplicates (spec 4.9.2), so what is
+    // already in it has no business in the list of choices: offering a
+    // contact who is two rows up is offering something the device would
+    // refuse. The selected member itself stays on offer -- the field has to
+    // be able to show what it is editing.
+    //
+    // The same filter the record navigator uses for a list_keys uniqueness,
+    // for the same reason; here it is the members themselves that are the
+    // key.
+    const memberCtx = Object.assign({}, ctx, {
+        usedEnumValues: new Set(list.filter((v, i) => i !== st.sel)),
+        emptyOptionLabel: "clear",
+    });
     const valInput = buildInput(tplNode, st.sel === null ? null : list[st.sel],
-                                commitVal, commitVal, ctx,
+                                commitVal, commitVal, memberCtx,
                                 tpl.constraints.one_of_for === undefined
                                     ? undefined : null);
 
