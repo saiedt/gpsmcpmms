@@ -450,7 +450,10 @@ function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
                   tooltip: o && o.tooltip,
                   // a name the service made up is not translated -- and so
                   // stands in no dictionary either
-                  verbatim: !!(o && o.verbatim)}));
+                  verbatim: !!(o && o.verbatim),
+                  // the one that takes over when the stored value answered a
+                  // different question -- see below
+                  proposed: !!(o && o.proposed)}));
         }
         // a file waiting to be sent is already choosable, though the device
         // has never heard of it -- that is the whole point of choosing before
@@ -489,6 +492,29 @@ function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
         // label is an identifier and stays as it is, while the tooltip beside
         // it is prose. So "de-DE-Wavenet-H (weiblich)" -- the name untouched,
         // the hint in the reader's language.
+        // ...unless the value never belonged to this list in the first
+        // place. Where the options depend on a sibling field (one_of_for)
+        // and that field has moved on, the stored value is not a leftover:
+        // it is the answer to the question before this one, and it will be
+        // written over by the next save whatever happens. A provider may
+        // then say which of the new options takes its place, and the editor
+        // fills that in -- once per draft, like a likely_val, so that
+        // clearing the field by hand stays possible.
+        //
+        // The voice of the speech output is the case this was built for:
+        // choose another language and the voice belongs to the language
+        // before it, while the recordings of the new one already name the
+        // voice they were made with.
+        if (cons.one_of_for !== undefined && !S.readOnly &&
+                node.configurability === 1 &&
+                cur !== null && cur !== undefined && cur !== "" &&
+                !options.some(o => o.value === cur)) {
+            const takesOver = options.find(o => o.proposed);
+            if (takesOver) {
+                cur = takesOver.value;
+                commitQuiet(cur);
+            }
+        }
         // A stored value that is no longer among the options keeps its place
         // in the list, marked. Without this the browser quietly moved the
         // selection to the empty option: the value was gone from the screen
