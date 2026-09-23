@@ -156,12 +156,13 @@ class ConfigManager:
         "{app} Configuration Editor",
         "Configuration Editor",
         "Save", "Apply", "Remove", "Undo",
-        # The empty entry of a member drop-down inside a list editor. Blank
-        # everywhere else, where it means "not answered" and a word would
-        # read like a value; in a list the field always shows the selected
-        # member, and this is how that member is cleared away -- which
-        # nothing on screen used to say. Lower case on purpose: it is not a
-        # button but one entry among the members, and it names an act.
+        # The empty entry of a member drop-down, while a member is selected:
+        # the field shows that member, and this is how it is cleared away,
+        # which nothing on screen used to say. Blank everywhere else -- in an
+        # ordinary field, and on a list's empty row -- where the entry means
+        # "not answered" and is itself what is selected, so a word there
+        # would read like a value. Lower case on purpose: it is not a button
+        # but one entry among the members, and it names an act.
         "clear",
         "End session", "Show protected parameters",
         "Change password", "Language",

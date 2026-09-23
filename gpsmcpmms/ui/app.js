@@ -1057,7 +1057,12 @@ function renderListA(node, container, relKeys, ctx, tone) {
     // key.
     const memberCtx = Object.assign({}, ctx, {
         usedEnumValues: new Set(list.filter((v, i) => i !== st.sel)),
-        emptyOptionLabel: "clear",
+        // ...and the word only where there is something to clear. On the
+        // empty row at the end the entry is the one already selected, and
+        // the field would then stand there reading "clear" as though that
+        // were the member -- which is the same objection that keeps the word
+        // out of an ordinary field.
+        emptyOptionLabel: st.sel === null ? undefined : "clear",
     });
     const valInput = buildInput(tplNode, st.sel === null ? null : list[st.sel],
                                 commitVal, commitVal, memberCtx,
