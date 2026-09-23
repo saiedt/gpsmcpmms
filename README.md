@@ -377,7 +377,11 @@ label:
   `relevance`), recursing into sub-groups.
 - **List editors** come in two shapes: a small **table + value field** for lists
   of simple values, and a **record navigator** (record block + up/down + a *New*
-  button + Remove/Undo/Apply) for lists of records.
+  button + Remove/Undo/Apply) for lists of records. The table always carries an
+  empty last row -- the place the next member goes -- and that row is the one
+  selected until somebody picks another, so a member is typed into the field
+  and applied without any further ceremony. Three rows are shown at a time; the
+  rest are scrolled to, and the selected row is always among those visible.
 - Fields validate on leave; `s2g_scale` is applied for display; dynamic enums are
   fetched on expand; already-used enum options are filtered out where a
   `list_keys` uniqueness applies; unanswered booleans render *indeterminate* and

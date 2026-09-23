@@ -256,10 +256,20 @@ button.toggled:hover:not(:disabled) { background: var(--accent-soft); }
   border-collapse: collapse; width: 100%; background: #fff;
 }
 .list-a .table-wrap {
-  max-height: 96px; overflow-y: auto;
+  /* three rows, plus the box's own two lines of border: with
+     border-box sizing the border would otherwise eat two pixels off
+     the third row and leave it scrolling for nothing. */
+  max-height: calc(var(--list-row) * 3 + 2px); overflow-y: auto;
   border: 1px solid var(--list-line); border-radius: var(--radius);
 }
-.list-a td { padding: 5px 10px; border-bottom: 1px solid var(--line); cursor: pointer; }
+/* A row is a known height, so that "three rows" is three rows and not
+   whatever the font of the moment makes of a pixel budget: 22px of line,
+   5px of padding above and below, and the rule underneath. */
+.list-a { --list-row: 33px; }
+.list-a td {
+  padding: 5px 10px; border-bottom: 1px solid var(--line); cursor: pointer;
+  line-height: 22px;
+}
 .list-a tr.selected td { background: var(--list-soft); }
 .list-a .apply-line { margin-top: 6px; }
 

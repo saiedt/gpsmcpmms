@@ -1050,10 +1050,53 @@ function renderListA(node, container, relKeys, ctx, tone) {
         tr.addEventListener("click", () => { if (!fixed) select(i); });
         return tr;
     });
+    // Where the next member goes: a row of its own, at the end, selected
+    // until somebody picks another. That position existed before -- it is
+    // what the number field shows as list.length + 1 -- but only as a
+    // number, so the table showed what was there and nothing about where
+    // something new would land. Now it is on screen, and the moment it takes
+    // a value the next empty row appears beneath it, which is how five
+    // members are entered without touching anything but the field and Apply.
+    //
+    // Not drawn where nothing can be added. Case B learnt that the hard way:
+    // its navigator walked into a slot the device then refused at save time,
+    // which is a late and puzzling way to be told that a list cannot grow.
+    if (!fixed && !(list.length >= cons.max_size)) {
+        const blank = el("tr", {class: st.sel === null ? "selected" : ""},
+                         el("td", {}, "\u00a0"));
+        blank.addEventListener("click", () => select(null));
+        rows.push(blank);
+    }
+    const wrap = el("div", {class: "table-wrap"}, el("table", {},
+        el("tbody", {}, ...rows)));
+    // Three rows are shown and the rest are scrolled to (style.css) -- and
+    // the selected one is brought into view, because the one selected by
+    // default is the last: on a list of ten it would otherwise sit below the
+    // fold, and the field beside the table would be editing something
+    // nobody can see. Measured after the layout rather than reckoned from
+    // the stylesheet: what a row is high is what the reader's language and
+    // font make it.
+    // On a timer and not in an animation frame: a window that is not being
+    // painted -- another one in front of it, the tab in the background --
+    // runs no frame callbacks at all, and the scrolling would then be the
+    // one thing that works everywhere except where somebody is looking.
+    // A timer runs regardless, and reading clientHeight below settles the
+    // layout by itself. The body only exists while the group is open
+    // (collapsible builds it then and renderAll rebuilds it on every
+    // change), so by the time this runs there is something to measure.
+    setTimeout(() => {
+        if (!wrap.isConnected || !wrap.clientHeight) return;
+        const trs = wrap.querySelectorAll("tr");
+        const tr = trs[st.sel === null ? trs.length - 1 : st.sel];
+        if (!tr) return;
+        const top = tr.offsetTop - trs[0].offsetTop, high = tr.offsetHeight;
+        if (top < wrap.scrollTop) wrap.scrollTop = top;
+        else if (top + high > wrap.scrollTop + wrap.clientHeight)
+            wrap.scrollTop = top + high - wrap.clientHeight;
+    }, 0);
     body.append(
         el("div", {class: "edit-line"}, posField, valInput),
-        el("div", {class: "table-wrap"}, el("table", {},
-            el("tbody", {}, ...rows))),
+        wrap,
         el("div", {class: "apply-line"},
             el("button", {disabled: fixed ? "" : null,
                 // Through the field's own change handler, so that Apply and
