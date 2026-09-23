@@ -1180,7 +1180,18 @@ function renderListB(node, container, relKeys, ctx, tone) {
     const structureFixed = S.readOnly || node.configurability === 0;
     let st = S.listsB[node.path];
     if (!st || st.pos > list.length + 1) {
-        st = S.listsB[node.path] = {pos: 1, draft: null, changed: false};
+        // Opened at the empty slot behind the last record, the same place
+        // the table of a simple list has its empty row -- and for the same
+        // reason. A navigator that opens on record one shows a filled form
+        // and says nothing about where a new one comes from; somebody
+        // looking for that has to walk to the end first to find out that
+        // there is a place there at all. It is worst where a list sits
+        // inside a record of another list, which is exactly where the
+        // chains are: two navigators, both showing something that already
+        // exists, and no sign of which of them one is adding to.
+        st = S.listsB[node.path] = {
+            pos: structureFixed ? Math.max(list.length, 1) : list.length + 1,
+            draft: null, changed: false};
     }
     if (st.draft === null) {
         // The record being edited has just become a different one -- a move,
