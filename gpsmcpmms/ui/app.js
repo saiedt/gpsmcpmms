@@ -1094,16 +1094,36 @@ function renderListA(node, container, relKeys, ctx, tone) {
         else if (top + high > wrap.scrollTop + wrap.clientHeight)
             wrap.scrollTop = top + high - wrap.clientHeight;
     }, 0);
+    const applyBtn = el("button", {disabled: fixed ? "" : null,
+        // Through the field's own change handler, so that Apply and leaving
+        // the field are the same act: the handler is where the value is read
+        // in the member's own type and validated.
+        onclick: () => valInput.dispatchEvent(new Event("change"))},
+        xl("Apply"));
+    // ...and it is on only when there is something to apply. It used to be on
+    // from the moment the group opened -- empty field, empty row selected --
+    // and pressing it then did nothing whatever, while the record navigator
+    // beside it lights its own Apply only once a record has been touched.
+    // Two buttons of the same name in the same panel should not mean two
+    // different things.
+    //
+    // The field was built from what is stored, so its own starting state is
+    // the yardstick: anything else in it is an edit, including an emptied
+    // field, which applies as the removal of the selected member. Some kinds
+    // of field are not a single control -- a file, a captured value -- and
+    // those keep the old behaviour rather than a wrong one.
+    if (!fixed && ("value" in valInput || valInput.type === "checkbox")) {
+        const asTyped = () => valInput.type === "checkbox" ? valInput.checked
+                                                           : valInput.value;
+        const asBuilt = asTyped();
+        const settle = () => { applyBtn.disabled = asTyped() === asBuilt; };
+        valInput.addEventListener("input", settle);
+        settle();
+    }
     body.append(
         el("div", {class: "edit-line"}, posField, valInput),
         wrap,
-        el("div", {class: "apply-line"},
-            el("button", {disabled: fixed ? "" : null,
-                // Through the field's own change handler, so that Apply and
-                // leaving the field are the same act: the handler is where
-                // the value is read in the member's own type and validated.
-                onclick: () => valInput.dispatchEvent(new Event("change"))},
-                xl("Apply"))));
+        el("div", {class: "apply-line"}, applyBtn));
     return body;
 }
 
