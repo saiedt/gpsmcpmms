@@ -132,3 +132,38 @@ def test_a_declared_pattern_holds_for_every_value(setup_demo_environment,
     # a name the pattern admits still may not leave the directory
     assert _set_file(cfg, module_id, "../bell.wav") == [path]
     assert cfg.query(path)[path] == "bell.wav"
+
+
+# --------------------------------------------------------------------------
+# A release may tighten a bound under values that are already stored
+# --------------------------------------------------------------------------
+
+def test_a_member_value_outside_its_bound_is_dropped_and_not_fatal(
+        setup_demo_environment):
+    # The member takes its value while its node is being built, and there
+    # every value used to count as a declaration: one stored second outside a
+    # bound the release had just narrowed raised CvvLoadError, the module did
+    # not load, and the editor that could have repaired it lives in the same
+    # process. The value is data and is dropped like any other refused one.
+    cfg = setup_demo_environment
+    rejected, _ = CvvNode.update_module(
+            cfg, "blist", {"entries": [{"name": "A", "seconds": 40}]})
+    assert rejected                                # 40 is outside 10..20
+    entries = cfg.query("blist.entries")["blist.entries"]
+    assert len(entries) == 1                       # ...the member stays,
+    assert entries[0]["name"] == "A"               # everything else intact,
+    assert entries[0]["seconds"] == 16             # the declaration's own value
+
+
+def test_a_member_keeps_what_the_declaration_still_knows(
+        setup_demo_environment):
+    # The same for a property a release has removed: the stored record names
+    # something the declaration no longer has, which was fatal through the
+    # unknown-key check.
+    cfg = setup_demo_environment
+    rejected, _ = CvvNode.update_module(
+            cfg, "blist",
+            {"entries": [{"name": "B", "seconds": 12, "gone": "x"}]})
+    assert rejected
+    entries = cfg.query("blist.entries")["blist.entries"]
+    assert entries == [{"name": "B", "seconds": 12}]

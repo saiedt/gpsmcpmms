@@ -867,6 +867,13 @@ class CvvValue:
                      f"value on {self._owner.get_path()}.")
 
         self._declared_val = None
+        # Whether what ends up in _declared_val came down with the parent's
+        # value instead of out of this declaration. It decides what a value
+        # that does not fit means: a declaration contradicting itself is a
+        # bug and has to be loud, while a value handed down is data -- and
+        # data may have been written a release ago, when the declaration said
+        # something else.
+        from_above = False
         self._source = (
             (bool(decl.get("init_only", False)) << 1) +
             bool(decl.get("backend_provided", False)) + 1
@@ -882,6 +889,7 @@ class CvvValue:
                     critical(f"Conflicting spec of fixed values for "
                              f"{self._owner.get_path()}.")
                 self._declared_val = iv
+                from_above = not fv
                 if fv or self._source > self.SRC_BACKEND:
                     self._source = self.NO_SOURCE
             elif fv:
@@ -891,27 +899,67 @@ class CvvValue:
                 # a value provided by the parent's value is more specific
                 # than this declaration's own default_val
                 self._declared_val = iv
+                from_above = True
         elif fv:
             self._declared_val = fv
             self._source = self.NO_SOURCE
         else:
             self._declared_val = dv
 
+        # A value that came down from above and does not fit is dropped,
+        # and the declaration's own takes its place. It used to be fatal, and
+        # fatal in the worst place there is: a list member takes its value
+        # while the node is still being built, so a release that tightens a
+        # bound met every stored value outside it with CvvLoadError. The
+        # module did not load at all -- and the editor that could have
+        # repaired the value lives in the same process, so the device was out
+        # of reach. A removed property did the same, through the unknown-key
+        # check below.
+        #
+        # Nothing disappears quietly: impose_value() walks the same members
+        # immediately afterwards, fails on them again and reports each one
+        # through `rejected`, which is where the load warns and the editor
+        # marks the field. Only the declaration phase still dies here -- there
+        # the value *is* the declaration, and a declaration that contradicts
+        # itself is a programming error.
+        salvageable = from_above and get_ctxt_of_current_thread()[1] in (
+                CVV_MODULE_LOAD_PHASE, CVV_MODULE_UPDATE_PHASE)
+
         if self._kind == self.DICT_KIND:
             if self._declared_val is None:
                 self._declared_val = {}
             elif isinstance(self._declared_val, dict):
-                for k in self._declared_val:
-                    if not k in self._value:
-                        critical(f"Unknown child key '{k}' in declared value of "
-                                 f"{self._owner.get_path()}")
+                unknown = [k for k in self._declared_val
+                           if k not in self._value]
+                if unknown and not salvageable:
+                    critical(f"Unknown child key '{unknown[0]}' in declared "
+                             f"value of {self._owner.get_path()}")
+                if unknown:
+                    warn(f"{self._owner.get_path()}: the stored value names "
+                         f"{unknown}, which the declaration no longer knows; "
+                         "dropped.")
+                    self._declared_val = {k: v
+                                          for k, v in self._declared_val.items()
+                                          if k in self._value}
+            elif salvageable:
+                warn(f"{self._owner.get_path()}: the stored value is no "
+                     "record any more; dropped.")
+                self._declared_val = {}
             else:
                 critical("Conflicting type and value declarations: "
                         f"{self._owner.get_path()}")
             self._push_up_value()
         elif not self._check_and_set_value(self._declared_val):
-            critical("Conflicting type and value declarations: "
-                    f"{self._owner.get_path()}")
+            if not salvageable:
+                critical("Conflicting type and value declarations: "
+                        f"{self._owner.get_path()}")
+            warn(f"{self._owner.get_path()}: the stored value "
+                 f"'{self._declared_val}' no longer conforms with the "
+                 "declaration; the declared value takes its place.")
+            self._declared_val = dv
+            if not self._check_and_set_value(dv):
+                critical("Conflicting type and value declarations: "
+                        f"{self._owner.get_path()}")
 
     def __init__(self, owner: 'CvvPathElem', decl: dict):
         if not (isinstance(owner, CvvPathElem) and isinstance(decl, dict)):

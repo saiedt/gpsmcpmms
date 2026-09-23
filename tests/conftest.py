@@ -82,6 +82,25 @@ def setup_demo_environment():
         callback=lambda value: None,
     )
 
+    # A list whose members carry a bounded value of their own, for the case a
+    # release tightens a bound under values that are already stored. The
+    # member takes its value while the node is being built, which is a
+    # different code path from a plain parameter -- and the one that used to
+    # be fatal.
+    config_mgr.register_params(
+        module_id="blist",
+        module_label="Bounded list",
+        type_dict={
+            "timed": {"name": {"label": "Name", "type": "string"},
+                      "seconds": {"label": "Seconds", "type": "int",
+                                  "bound_to": "10..20", "default_val": 16}},
+            "timed_list": {"list_member": {"type": "timed"},
+                           "list_size": "0.."},
+        },
+        param_dict={"entries": {"label": "Entries", "type": "timed_list"}},
+        callback=lambda value: None,
+    )
+
     return config_mgr
 
 
