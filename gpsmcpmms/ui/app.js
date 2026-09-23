@@ -505,12 +505,24 @@ function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
         // choose another language and the voice belongs to the language
         // before it, while the recordings of the new one already name the
         // voice they were made with.
+        // And it fills a field nobody has answered at all. That is the
+        // same case seen earlier: a declaration cannot know what the device
+        // it is running on already does, so the honest declaration names no
+        // default_val and the field comes up empty -- which leaves the
+        // parameter unanswered, and the device unfinished, until somebody
+        // says so. The proposal stands in until then, to be confirmed by
+        // saving or typed over, and is taken once per draft like the
+        // likely_val above: re-filling it on every render would make
+        // emptying the field by hand impossible.
+        const unanswered = (cur === null || cur === undefined || cur === "");
+        const proposalKey = "proposed:" + node.path;
         if (cons.one_of_for !== undefined && !S.readOnly &&
                 node.configurability === 1 &&
-                cur !== null && cur !== undefined && cur !== "" &&
-                !options.some(o => o.value === cur)) {
+                (unanswered ? !ctx.adopted.has(proposalKey)
+                            : !options.some(o => o.value === cur))) {
             const takesOver = options.find(o => o.proposed);
             if (takesOver) {
+                if (unanswered) ctx.adopted.add(proposalKey);
                 cur = takesOver.value;
                 commitQuiet(cur);
             }
