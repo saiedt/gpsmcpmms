@@ -86,6 +86,12 @@ class ConfigManager:
     # whatever they are called.
     DECL_KEY_KINDS = {
         "label": "label", "acquire_button": "label",
+        # ...and the word on a test button, which is a label like any other.
+        # It was left out when test_button was added, so the one string that
+        # uses it ("Record") stood in the translation template with no kind
+        # beside it -- which is exactly how an entry nothing uses any more
+        # looks. A translator would have been right to wonder.
+        "test_button": "label",
         "tooltip": "tooltip", "hint": "tooltip", "test_func_msg": "tooltip",
         "placeholder": "placeholder",
     }
