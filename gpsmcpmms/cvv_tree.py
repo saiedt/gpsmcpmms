@@ -413,6 +413,32 @@ class CvvValue:
                     critical(f"Cannot resolve attribute '{prop}' "
                               "inside keys constraint context.")
 
+    def validate_protected_by(self):
+        """The deferred half of 'protected_by': the field it names has to
+        exist in the member and to be a boolean.
+
+        The field is the whole rule -- a record carrying it may be changed
+        and removed only by an admin session, and only an admin session may
+        set it -- so a name pointing at nothing, or at something that can
+        hold more than yes and no, would be a protection nobody could reason
+        about.
+        """
+        list_value = self._owner.get_parent_value()
+        name = (list_value._constraints.get("protected_by")
+                    if list_value is not None else None)
+        if not name:
+            return
+        if self._kind != self.DICT_KIND:
+            critical("'protected_by' needs records as members, and "
+                     f"{self._owner.get_path()} has scalar ones.")
+        field = self._owner.get_child_value(name)
+        if not isinstance(field, CvvValue):
+            critical(f"'protected_by' names '{name}', which is no field of "
+                     f"{self._owner.get_path()}.")
+        if field._constraints.get("type") != "boolean":
+            critical(f"'protected_by' names '{name}', which is not a "
+                     "boolean.")
+
     def value_cond_holds(self, op, r_val):
         if isinstance(self._value, dict) or isinstance(self._value, list):
             warn(f"{self._value} cannot be compared with {r_val}.")
@@ -479,6 +505,19 @@ class CvvValue:
                     validated_keys.append(t)
 
             self._constraints["keys"] = tuple(validated_keys)
+
+        if "protected_by" in list_decl:
+            # Protection out of a value rather than out of the declaration
+            # (spec 4.4 knows only the second). The declaration says which
+            # field of a member decides; the member says whether it is
+            # protected. Only the structural half here -- that the field
+            # exists and is a boolean is settled by the owner once the
+            # template stands, as with list_keys above.
+            name = list_decl["protected_by"]
+            if not (isinstance(name, str) and name.strip()):
+                critical("'protected_by' must name a member's field: "
+                         f"{name!r}")
+            self._constraints["protected_by"] = name.strip()
 
     def _add_dict_constraints(self, type_decl):
         """'distinct_values': groups of paths below this node whose values must
@@ -1325,6 +1364,27 @@ class CvvNode:
             return [n.get_path() for n in collected]
 
     @classmethod
+    def get_member_protected_lists(cls, holder, module):
+        """Every list in this module whose members carry their own
+        protection: [(path, field name), ...].
+
+        Asked by the session that has to enforce it. The tree knows the
+        declaration; who may save what is decided where the password is
+        known, and that is not here.
+        """
+        cls._check_holder(holder)
+        lock = cls._get_module_lock(module, create=False)
+        if lock is None:
+            return []
+        with lock:
+            with cls._global_lock:
+                m_node = cls._root_instance.get_child(module)
+            found = []
+            if isinstance(m_node, CvvPathElem):
+                m_node.collect_member_protected_lists(found)
+            return found
+
+    @classmethod
     def touches_protected(cls, holder, path):
         """
         Whether anything protected lies at `path`, above it or below it: True
@@ -1599,7 +1659,8 @@ class CvvPathElem(CvvNode):
         # annotations added internally during type resolution
         "is_list", "resolved_type",
     ))
-    LIST_TYPE_KEYS = frozenset(("list_keys", "list_member", "list_size"))
+    LIST_TYPE_KEYS = frozenset(("list_keys", "list_member", "list_size",
+                                "protected_by"))
     # directives a named dict type may carry beside its properties
     DICT_TYPE_KEYS = frozenset(("distinct_values",))
 
@@ -1611,6 +1672,14 @@ class CvvPathElem(CvvNode):
                 not n_id.startswith("list_") and
                 bool(re.match(r"^[-0-9A-Za-z_]+$", n_id))
             )
+
+    def collect_member_protected_lists(self, collector):
+        """Walks the subtree for lists declaring 'protected_by'."""
+        name = self._cur_val._constraints.get("protected_by")
+        if name:
+            collector.append((self.get_path(), name))
+        for c in (self._children or {}).values():
+            c.collect_member_protected_lists(collector)
 
     def collect_protected_nodes(self, collector):
         if self._protected:
@@ -1931,15 +2000,31 @@ class CvvPathElem(CvvNode):
         Any sibling in the same dict will do, named before or after -- the
         value dict is laid out from the whole declaration before a single
         child is expanded, so both directions are equally real. What it may
-        not name is something outside its own dict, or itself.
+        not name is itself.
+
+        A leading '^' reaches one level further out, and several stack. That
+        is for the fields that have no sibling to name: a member of a list is
+        alone in its list, and what tells it what to offer stands beside the
+        list, in the record holding it -- the members of a help chain are
+        chosen from the contacts of that chain's category, and the category
+        is a field of the chain, not of the member. "^chain_id" says exactly
+        that, and says it in the one place a reader will look.
         """
         if not (isinstance(sibling, str) and sibling.strip()):
             critical(f"'values_for' of '{prop}' must name a sibling.")
         sibling = sibling.strip()
-        if not self._cur_val.is_valid_child_key(sibling):
+        name = sibling.lstrip("^")
+        up = len(sibling) - len(name)
+        holder = self
+        for _ in range(up):
+            holder = holder._parent
+            if holder is None or holder._cur_val is None:
+                critical(f"'values_for' of '{prop}' reaches out beyond the "
+                         f"module with '{sibling}'.")
+        if not (name and holder._cur_val.is_valid_child_key(name)):
             critical(f"'values_for' of '{prop}' names '{sibling}', which is "
-                     "not an earlier sibling of it.")
-        if sibling == prop:
+                     f"no field of {holder.get_path()}.")
+        if up == 0 and name == prop:
             critical(f"'values_for' of '{prop}' names the field itself.")
         constraints = child._cur_val._constraints
         if not isinstance(constraints.get("one_of"), str):
@@ -2142,6 +2227,16 @@ class CvvPathElem(CvvNode):
                 lt = CvvPathElem(self, self.LIST_ITEM_TEMPLATE_ID,
                                  self._item_decl)
                 lt._cur_val.validate_list_keys()
+                lt._cur_val.validate_protected_by()
+                # A member may name what its options are computed for, the
+                # same as any field in a record -- only that its own list
+                # holds no other field, so what it names lies outside: the
+                # '^' in "^chain_id". Bound here because a member is not
+                # expanded by _expand_by_type_decl, which is where every
+                # other 'values_for' is taken up.
+                if "values_for" in self._item_decl:
+                    self._bind_values_source(lt, self.LIST_ITEM_TEMPLATE_ID,
+                                             self._item_decl["values_for"])
                 self._ui_props["item_template"] = lt
                 if not self._expand_by_list_value():
                     critical(f"Incompatible list value for {self.get_path()}.")

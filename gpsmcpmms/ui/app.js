@@ -244,6 +244,26 @@ function validValue(cons, v) {   // v in model space; null = unset -> valid
     }
 }
 
+/* 'values_for' names the field whose draft value the provider is given, and
+   `ownKeys` is the path of the field doing the naming. A plain name is a
+   sibling in the same record; each leading '^' steps one level further out,
+   which is how a list member reaches past its own list -- the members of a
+   help chain are offered the contacts of that chain's category, and the
+   category stands beside the list, not in it.
+
+   Unset means null, not "no argument": the provider is meant to be able to
+   tell the two apart. Out of reach -- more '^' than there is path, which
+   happens inside a record the navigator renders on its own -- is null too;
+   there is nothing truthful to send. */
+function enumArgOf(cons, container, ownKeys) {
+    const spec = cons && cons.one_of_for;
+    if (spec === undefined) return undefined;
+    const name = spec.replace(/^\^+/, "");
+    const cut = ownKeys.length - 1 - (spec.length - name.length);
+    if (cut < 0) return null;
+    return getIn(container, ownKeys.slice(0, cut).concat(name)) ?? null;
+}
+
 function relevanceHolds(rule, dictValue) {
     const l = dictValue ? dictValue[rule.child_key] : undefined;
     const r = rule.value;
@@ -413,7 +433,12 @@ function colorOfHex(h) {
 function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
     // returns an element whose 'change' leads to commit(newModelValue)
     const cons = node.constraints || {}, ui = node.ui || {};
-    const fixed = S.readOnly || node.configurability === 0;
+    // ctx.locked: not the declaration but the record this field sits in --
+    // a member of a list with 'protected_by' whose flag is set, seen by a
+    // session without the password. It travels in the context because it
+    // has to reach every leaf below the record, however deep.
+    const fixed = S.readOnly || node.configurability === 0 ||
+                  !!(ctx && ctx.locked);
     const backend = node.configurability === 2;
     const fail = (input) => {
         input.classList.add("invalid");
@@ -789,12 +814,7 @@ function fieldRow(node, container, relKeys, ctx) {
         setIn(container, relKeys, v);
         ctx.markDirtyQuiet();
     };
-    // 'values_for' names a sibling field; its draft value is the provider's
-    // argument. Unset means null, not "no argument" -- the provider is meant
-    // to be able to tell the two apart.
-    const forKey = cons.one_of_for;
-    const enumArg = forKey === undefined ? undefined
-        : (getIn(container, relKeys.slice(0, -1).concat(forKey)) ?? null);
+    const enumArg = enumArgOf(cons, container, relKeys);
     const input = buildInput(node, cur, commit, commitQuiet, ctx, enumArg);
     if (input.type === "checkbox") {
         input.checked = !!cur;
@@ -831,14 +851,17 @@ function fieldRow(node, container, relKeys, ctx) {
         repeats ? el("span", {class: "field-note"},
                      xl("Value already taken"))
                 : refused ? el("span", {class: "field-note"}, refused) : null);
-    if (node.configurability === 2 && node.ui.acquire_button && !S.readOnly)
+    // Nothing beside a locked field either: capturing a card, uploading a
+    // file and probing all write where the field may not be written.
+    const locked = S.readOnly || !!ctx.locked;
+    if (node.configurability === 2 && node.ui.acquire_button && !locked)
         row.append(acquireButton(node, input, commit));
-    if (PROBE_TYPES.has(cons.type) && !S.readOnly)
+    if (PROBE_TYPES.has(cons.type) && !locked)
         row.append(probeButton(node, () => getIn(container, relKeys),
                                ctx.rerender));
-    if (cons.type === "file" && !S.readOnly)
+    if (cons.type === "file" && !locked)
         row.append(uploadButton(node, ctx, commit));
-    if (node.ui.test_func && !S.readOnly)
+    if (node.ui.test_func && !locked)
         row.append(testButton(node, () => getIn(container, relKeys)));
 
     return withHint(node, ctx, row);
@@ -985,7 +1008,7 @@ function renderListA(node, container, relKeys, ctx, tone) {
     const st = S.listsA[node.path] || (S.listsA[node.path] = {sel: null});
     if (st.sel !== null && st.sel >= list.length) st.sel = null;
     const cons = node.constraints, tpl = node.item_template;
-    const fixed = S.readOnly || node.configurability === 0;
+    const fixed = S.readOnly || node.configurability === 0 || !!ctx.locked;
     const body = el("div", {class: "group-body list-a " + (tone || "tone-1")});
 
     const rerenderList = () => ctx.rerender();
@@ -1064,10 +1087,16 @@ function renderListA(node, container, relKeys, ctx, tone) {
         // out of an ordinary field.
         emptyOptionLabel: st.sel === null ? undefined : "clear",
     });
+    // What the member's options are computed for: the field the template
+    // names, seen from the member's own place -- one step further in than
+    // the list itself, which is what the index stands for here. A member has
+    // no siblings, so what it names lies outside its list ("^chain_id"), and
+    // until now it was sent as null: the provider was asked for the options
+    // of a category nobody had named, and answered with all of them.
     const valInput = buildInput(tplNode, st.sel === null ? null : list[st.sel],
                                 commitVal, commitVal, memberCtx,
-                                tpl.constraints.one_of_for === undefined
-                                    ? undefined : null);
+                                enumArgOf(tpl.constraints, container,
+                                          relKeys.concat([0])));
 
     const rows = list.map((v, i) => {
         const tr = el("tr", {class: st.sel === i ? "selected" : ""},
@@ -1222,7 +1251,8 @@ function renderListB(node, container, relKeys, ctx, tone) {
     // -- but its members' inner leaves stay editable unless they lock
     // themselves (spec 2.1, key 4). Applying an edited record must therefore
     // stay possible; only the structural actions are barred.
-    const structureFixed = S.readOnly || node.configurability === 0;
+    const structureFixed = S.readOnly || node.configurability === 0 ||
+                           !!ctx.locked;
     let st = S.listsB[node.path];
     if (!st || st.pos > list.length + 1) {
         // Opened at the empty slot behind the last record, the same place
@@ -1271,10 +1301,20 @@ function renderListB(node, container, relKeys, ctx, tone) {
         ctx.rerender();
     };
 
+    // A record that carries its own protection (spec 4.4 knows only the
+    // declared sort), seen by a session without the password: it is shown --
+    // a chain has to be able to name the contact it calls -- and nothing in
+    // it can be touched. Read off the stored record and not off the draft,
+    // or clearing the checkbox would unlock the record it protects.
+    const memberLocked = !S.admin && !!cons.protected_by &&
+        st.pos <= list.length &&
+        !!(list[st.pos - 1] || {})[cons.protected_by];
+
     // standalone unique keys constrain the enum options of other rows
     const standaloneKeys = (cons.keys || [])
         .filter(g => g.length === 1).map(g => g[0]);
     const recCtx = Object.assign({}, ctx, {
+        locked: ctx.locked || memberLocked,
         // where this record sits, so a field inside it can be located within
         // a rule owned further up -- and can tell itself apart from the copy
         // of itself already in the list
@@ -1290,10 +1330,16 @@ function renderListB(node, container, relKeys, ctx, tone) {
     const recordBody = el("div", {class: "record-block"});
     for (const [key, child] of visibleChildren(tpl, st.draft, [])) {
         if (!hasVisibleContent(child, st.draft, [key])) continue;
-        const childCtx = standaloneKeys.includes(key)
+        let childCtx = standaloneKeys.includes(key)
             ? Object.assign({}, recCtx,
                 {usedEnumValues: usedEnumValuesIn(list, st.pos - 1, key)})
             : recCtx;
+        // The flag itself is the one field a session without the password
+        // may never write, in any record: setting it is what protection is,
+        // and a contact somebody adds in an ordinary session is an ordinary
+        // contact.
+        if (key === cons.protected_by && !S.admin)
+            childCtx = Object.assign({}, childCtx, {locked: true});
         recordBody.append(renderNode(child, st.draft, [key], childCtx));
     }
 
@@ -1342,7 +1388,8 @@ function renderListB(node, container, relKeys, ctx, tone) {
     // button inside a list applies a record -- the two must not look alike.
     // The weight is what keeps it the first among the four.
     const apply = el("button", {class: "lead",
-        disabled: S.readOnly || !st.changed || repeatsKey || missingKey
+        disabled: S.readOnly || memberLocked || !st.changed || repeatsKey
+                      || missingKey
                       || (structureFixed && st.pos > list.length)
                           ? "" : null,
         title: missingKey ? xl("Every key of this entry must be filled in")
@@ -1362,7 +1409,8 @@ function renderListB(node, container, relKeys, ctx, tone) {
         ctx.rerender();
     });
     const remove = el("button", {
-        disabled: structureFixed || st.pos > list.length ? "" : null},
+        disabled: structureFixed || memberLocked || st.pos > list.length
+                      ? "" : null},
         xl("Remove"));
     remove.addEventListener("click", () => {
         list.splice(st.pos - 1, 1);

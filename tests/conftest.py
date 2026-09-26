@@ -101,7 +101,60 @@ def setup_demo_environment():
         callback=lambda value: None,
     )
 
+    # Two rules that only make sense together, and the H4H application needs
+    # both: a list whose members carry their own protection (a contact the
+    # installer entered may be changed only with the password), and a member
+    # that takes its options from a field outside its own list (the members
+    # of a team are chosen among the people of that team's group).
+    config_mgr.register_params(
+        module_id="mplist",
+        module_label="Protected members",
+        func_dict={"get_people": _people_of, "get_groups": _groups},
+        type_dict={
+            "person": {
+                "number": {"label": "Number", "type": "string"},
+                "name": {"label": "Name", "type": "string"},
+                "installed": {"label": "Entered by the installer",
+                              "type": "boolean", "default_val": False},
+            },
+            "person_list": {"list_member": {"type": "person"},
+                            "list_keys": [["number"]],
+                            "list_size": "0..",
+                            "protected_by": "installed"},
+            "member_list": {"list_member": {"type": "enum",
+                                            "values": "get_people",
+                                            "values_for": "^group"},
+                            "list_size": "0..5"},
+            "team": {"group": {"label": "Group", "type": "enum",
+                               "values": "get_groups"},
+                     "members": {"label": "Members", "type": "member_list"}},
+            "team_list": {"list_member": {"type": "team"},
+                          "list_keys": [["group"]], "list_size": "0.."},
+        },
+        param_dict={"people": {"label": "People", "type": "person_list"},
+                    "teams": {"label": "Teams", "type": "team_list"}},
+        callback=lambda value: None,
+    )
+
     return config_mgr
+
+
+# The two providers behind "mplist": who belongs to which group, and the
+# groups themselves. A provider that is handed the group answers with the
+# people in it -- which is the whole point of a 'values_for' reaching out of
+# its list.
+_PEOPLE = {"0151": ("Ada", ("red", "blue")), "0152": ("Ben", ("blue",)),
+           "0153": ("Cem", ("red",))}
+
+
+def _people_of(group):
+    return {number: {"label": name, "verbatim": True}
+            for number, (name, groups) in _PEOPLE.items()
+            if not group or group in groups}
+
+
+def _groups():
+    return {"red": {"label": "Red"}, "blue": {"label": "Blue"}}
 
 
 def pytest_sessionfinish(session, exitstatus):

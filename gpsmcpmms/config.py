@@ -1994,6 +1994,90 @@ class ConfigManager:
                 del d[rel[-1]]
                 rejected.append(path)
 
+    @staticmethod
+    def _payload_list(value, rel):
+        """The list a dotted path addresses inside an update payload, or
+        None. Written the same way _strip_protected_updates reads one: the
+        editor may send a dotted key or nested dicts, and both are the same
+        statement."""
+        dotted = ".".join(rel)
+        if isinstance(value.get(dotted), list):
+            return value[dotted]
+        d = value
+        for seg in rel[:-1]:
+            d = d.get(seg) if isinstance(d, dict) else None
+            if d is None:
+                return None
+        found = d.get(rel[-1]) if isinstance(d, dict) else None
+        return found if isinstance(found, list) else None
+
+    def _guard_protected_members(self, module_id, value, rejected):
+        """Keeps a session without the password off the records that carry
+        their own protection.
+
+        Three rules, all of them about what is *stored*: such a record may
+        not be changed, may not be removed, and the protection may not be
+        given to a record that does not already have it -- which is what
+        makes a contact somebody adds in an ordinary session an ordinary
+        contact.
+
+        The payload is repaired rather than refused whole. Everything else in
+        the same list is the household's own business, and a save that took
+        nothing at all because one row was touched would be a puzzle: the
+        rows that may change do, the protected one goes back to what it was,
+        and the paths of what was put right travel back as the refusals they
+        are.
+        """
+        for path, field in CvvNode.get_member_protected_lists(self,
+                                                              module_id):
+            rel = path.split(".")[1:]
+            if not rel:
+                continue
+            submitted = self._payload_list(value, rel)
+            if submitted is None:
+                continue                # this list is not part of the save
+            stored = self.query(path).get(path)
+            if not isinstance(stored, list):
+                continue
+            constraints = CvvNode.get_node_constraints(self, path) or {}
+            groups = constraints.get("keys") or ()
+            # One group is enough to tell two records apart, and the first is
+            # the one the declaration leads with. Without any, position is
+            # all there is -- and a list whose records have no key is one
+            # where position is their identity anyway.
+            group = groups[0] if groups else None
+
+            def ident(record, index):
+                if not group:
+                    return index
+                return tuple(record.get(k) for k in group)
+
+            locked = {ident(rec, i): (i, rec)
+                      for i, rec in enumerate(stored)
+                      if isinstance(rec, dict) and rec.get(field)}
+            seen = set()
+            for i, rec in enumerate(submitted):
+                if not isinstance(rec, dict):
+                    continue
+                known = locked.get(ident(rec, i))
+                if known is not None:
+                    seen.add(ident(rec, i))
+                    if rec != known[1]:
+                        submitted[i] = dict(known[1])
+                        rejected.append(f"{path}.{i:02}")
+                elif rec.get(field):
+                    rec[field] = False
+                    rejected.append(f"{path}.{i:02}.{field}")
+            for key, (i, rec) in sorted(locked.items(),
+                                        key=lambda kv: kv[1][0]):
+                if key not in seen:
+                    # Removed, and it may not be. Put back at the end rather
+                    # than at its old place: the rows around it have moved,
+                    # and the order of a list like this carries no meaning
+                    # its records do not carry themselves.
+                    submitted.append(dict(rec))
+                    rejected.append(f"{path}.{i:02}")
+
     # ------------------------------------------------------------------
     # The flask-based config-editor backend (spec 4.2, 4.4, 4.7, 4.8)
     # ------------------------------------------------------------------
@@ -2220,6 +2304,7 @@ class ConfigManager:
                 admin = self._session_admin
             if not admin:
                 self._strip_protected_updates(module, value, rejected)
+                self._guard_protected_members(module, value, rejected)
             try:
                 rejected += self._apply_module_update(module, value)
             except CvvError as exc:
