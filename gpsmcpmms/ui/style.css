@@ -243,8 +243,9 @@ button.toggled:hover:not(:disabled) { background: var(--accent-soft); }
 .list-b > .action-block > button:hover:not(:disabled) {
   background: var(--list-fill-hover); border-color: var(--list-fill-hover);
 }
-/* first among the four, without a second colour to say so */
-.list-b > .action-block > button.lead { font-weight: 600; }
+/* first among the buttons, without a second colour to say so */
+.list-b > .action-block > button.lead,
+.list-a > .apply-line > button.lead { font-weight: 600; }
 
 .list-a .edit-line { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
 .list-a .pos-field, .list-b .pos-field {
@@ -271,7 +272,12 @@ button.toggled:hover:not(:disabled) { background: var(--accent-soft); }
   line-height: 22px;
 }
 .list-a tr.selected td { background: var(--list-soft); }
-.list-a .apply-line { margin-top: 6px; }
+/* A row carrying something typed and not yet applied. It stands in the table
+   so that it can be corrected or confirmed, and it is not in the data.
+   Slanted rather than coloured: a colour here would compete with the
+   selection, which is the other thing a row has to say about itself. */
+.list-a tr.pending td { font-style: italic; }
+.list-a .apply-line { margin-top: 6px; display: flex; gap: 8px; }
 
 .list-b .layout { display: flex; gap: 10px; align-items: center; }
 .list-b .record-block {

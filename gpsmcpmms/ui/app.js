@@ -572,14 +572,13 @@ function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
                 class: orphanedValue ? "invalid" : null,
                 title: orphanedValue ? cur : null,
                 onchange: (e) => commit(e.target.value || null)},
-            // The empty entry is blank wherever it means "not answered":
-            // a field nobody has filled in shows it, and a word there would
-            // read like a value. Inside a list it is the opposite -- the
-            // field always shows the selected member, and the entry is how
-            // that member is cleared away, which nothing on screen said.
-            // Whoever draws the field says which of the two it is.
-            el("option", {value: ""},
-               ctx.emptyOptionLabel ? xl(ctx.emptyOptionLabel) : ""),
+            // The empty entry is blank, and says nothing: a field nobody
+            // has filled in shows it, and a word there would read like a
+            // value. It carried "clear" inside a list for a while, when
+            // emptying the field was how a member was removed -- removing
+            // is a button of its own now, and the entry is back to meaning
+            // "nothing chosen".
+            el("option", {value: ""}, ""),
             orphanedValue
                 ? el("option", {value: cur}, xl("Value not known"))
                 : null,
@@ -1005,124 +1004,185 @@ function memberLabel(tpl, v) {
 
 function renderListA(node, container, relKeys, ctx, tone) {
     const list = getIn(container, relKeys) || [];
-    const st = S.listsA[node.path] || (S.listsA[node.path] = {sel: null});
-    if (st.sel !== null && st.sel >= list.length) st.sel = null;
     const cons = node.constraints, tpl = node.item_template;
     const fixed = S.readOnly || node.configurability === 0 || !!ctx.locked;
+    const st = S.listsA[node.path] ||
+               (S.listsA[node.path] = {sel: list.length, drafts: {}});
+    if (!st.drafts) st.drafts = {};
     const body = el("div", {class: "group-body list-a " + (tone || "tone-1")});
+
+    // The row behind the last one is where a new member goes, and it is the
+    // one selected when the group opens -- for a list of simple values, and
+    // only there: a record navigator opens on the first record, because a
+    // record is read before it is added to.
+    //
+    // Where nothing can be added there is no such row, and the selection
+    // falls back on the last member there is.
+    const growable = !fixed && list.length < cons.max_size;
+    const last = growable ? list.length : Math.max(list.length - 1, 0);
+    if (!(st.sel >= 0) || st.sel > last) st.sel = last;
 
     const rerenderList = () => ctx.rerender();
     const select = (i) => { st.sel = i; rerenderList(); };
+    const stored = (i) => (i < list.length ? list[i] : null);
+    const shown = (i) => (i in st.drafts ? st.drafts[i] : stored(i));
+    const cellText = (v) => (v === null || v === undefined || v === "")
+        ? "\u00a0" : memberLabel(tpl, v);
 
-    const posField = el("input", {class: "pos-field", type: "text",
-        value: st.sel === null ? list.length + 1 : st.sel + 1,
-        disabled: fixed ? "" : null});
-    posField.addEventListener("change", () => {
-        const n = parseInt(posField.value, 10);
-        select(Number.isInteger(n) && n >= 1 && n <= list.length ? n - 1
-                                                                 : null);
-    });
+    // ---- the table, so that the row being edited can be corrected in place
+    const rows = [];
+    let selectedRow = null, selectedCell = null;
+    for (let i = 0; i <= last; i++) {
+        const td = el("td", {}, cellText(shown(i)));
+        const tr = el("tr", {class: (i === st.sel ? "selected" : "") +
+                                    (i in st.drafts ? " pending" : "")}, td);
+        tr.addEventListener("click", () => { if (!fixed) select(i); });
+        rows.push(tr);
+        if (i === st.sel) { selectedRow = tr; selectedCell = td; }
+    }
+    const wrap = el("div", {class: "table-wrap"}, el("table", {},
+        el("tbody", {}, ...rows)));
 
-    const commitVal = async (v) => {
-        if (v === "") v = null;
-        if (v === null) {                                    // A.6, removal
-            if (st.sel !== null &&
-                    await modal(xl("Really remove this entry?")) !== null) {
-                list.splice(st.sel, 1);
-                st.sel = null;
-                ctx.markDirty();
-            }
-            rerenderList();
-            return;
-        }
-        if (!validValue(tpl.constraints, v)) {
-            msg(xl("Invalid input"), "error");
-            return;
-        }
-        const existing = list.indexOf(v);
-        if (existing >= 0) { select(existing); return; }     // search select
-        if (st.sel !== null) {
-            list[st.sel] = v;                                // replace
-        } else {
-            if (list.length >= cons.max_size) {
-                msg(xl("List is full"), "error");
-                return;
-            }
-            list.push(v);
-            st.sel = null;
-        }
-        setIn(container, relKeys, list);
-        ctx.markDirty();
-        rerenderList();
-    };
-
-    // The member's own field, and not a text box. The spec says "an input
-    // field for the value of a list element" (4.6.2 A.2) -- one field, not
-    // one *text* field, and a member that is an enum wants the enum's list.
-    // Typed by hand it was the identifier that had to be typed: a chain
-    // member is stored as a telephone number, so choosing a contact meant
-    // knowing their number by heart and spelling it the way the store spells
-    // it. Everything else a member can be -- a number with a range, a
-    // colour, a checkbox -- was a text box too.
+    // ---- the member's own field
+    // Not a text box: the spec says "an input field for the value of a list
+    // element" (4.6.2 A.2) -- one field, not one *text* field, and a member
+    // that is an enum wants the enum's list. Typed by hand it was the
+    // identifier that had to be typed: a chain member is stored as a
+    // telephone number, so choosing a contact meant knowing their number by
+    // heart and spelling it the way the store spells it.
     //
     // configurability travels from the list: the template carries its own,
     // and a list nobody may change must not hand out a field they can.
     const tplNode = Object.assign({}, tpl,
                                   {configurability: node.configurability});
     // A list of simple values holds no duplicates (spec 4.9.2), so what is
-    // already in it has no business in the list of choices: offering a
-    // contact who is two rows up is offering something the device would
-    // refuse. The selected member itself stays on offer -- the field has to
-    // be able to show what it is editing.
-    //
-    // The same filter the record navigator uses for a list_keys uniqueness,
-    // for the same reason; here it is the members themselves that are the
-    // key.
+    // already in it has no business in the list of choices. The selected
+    // member itself stays on offer -- the field has to be able to show what
+    // it is editing.
     const memberCtx = Object.assign({}, ctx, {
         usedEnumValues: new Set(list.filter((v, i) => i !== st.sel)),
-        // ...and the word only where there is something to clear. On the
-        // empty row at the end the entry is the one already selected, and
-        // the field would then stand there reading "clear" as though that
-        // were the member -- which is the same objection that keeps the word
-        // out of an ordinary field.
-        emptyOptionLabel: st.sel === null ? undefined : "clear",
     });
     // What the member's options are computed for: the field the template
     // names, seen from the member's own place -- one step further in than
     // the list itself, which is what the index stands for here. A member has
-    // no siblings, so what it names lies outside its list ("^chain_id"), and
-    // until now it was sent as null: the provider was asked for the options
-    // of a category nobody had named, and answered with all of them.
-    const valInput = buildInput(tplNode, st.sel === null ? null : list[st.sel],
-                                commitVal, commitVal, memberCtx,
-                                enumArgOf(tpl.constraints, container,
-                                          relKeys.concat([0])));
+    // no siblings, so what it names lies outside its list ("^chain_id").
+    let valInput = null, asBuilt = null;
 
-    const rows = list.map((v, i) => {
-        const tr = el("tr", {class: st.sel === i ? "selected" : ""},
-                      el("td", {}, memberLabel(tpl, v)));
-        tr.addEventListener("click", () => { if (!fixed) select(i); });
-        return tr;
-    });
-    // Where the next member goes: a row of its own, at the end, selected
-    // until somebody picks another. That position existed before -- it is
-    // what the number field shows as list.length + 1 -- but only as a
-    // number, so the table showed what was there and nothing about where
-    // something new would land. Now it is on screen, and the moment it takes
-    // a value the next empty row appears beneath it, which is how five
-    // members are entered without touching anything but the field and Apply.
+    // What is typed is a draft and nothing more until Apply: the table shows
+    // it, the data does not hold it, and it survives a move to another row.
+    // Before this, the first keystroke that reached the field was already a
+    // member of the list -- the next empty row appeared underneath, Apply had
+    // nothing left to do, and a mistake could only be removed, not corrected.
     //
-    // Not drawn where nothing can be added. Case B learnt that the hard way:
-    // its navigator walked into a slot the device then refused at save time,
-    // which is a late and puzzling way to be told that a list cannot grow.
-    if (!fixed && !(list.length >= cons.max_size)) {
-        const blank = el("tr", {class: st.sel === null ? "selected" : ""},
-                         el("td", {}, "\u00a0"));
-        blank.addEventListener("click", () => select(null));
-        rows.push(blank);
-    }
-    const wrap = el("div", {class: "table-wrap"}, el("table", {},
-        el("tbody", {}, ...rows)));
+    // A draft exists only where it is a value and a different one: emptying
+    // the field is how a row goes back to what it holds, and on the empty row
+    // it is how what was typed is dropped.
+    //
+    // Noted without a re-render, deliberately. A click on Apply blurs the
+    // field first; a field whose change rebuilt the panel would take the
+    // button out from under the pointer, and the click would land on a new
+    // element and never be a click at all.
+    const noteDraft = (v) => {
+        if (v === "" || v === undefined) v = null;
+        if (v === null || v === stored(st.sel)) delete st.drafts[st.sel];
+        else st.drafts[st.sel] = v;
+        if (selectedCell) selectedCell.textContent = cellText(shown(st.sel));
+        if (selectedRow)
+            selectedRow.classList.toggle("pending", st.sel in st.drafts);
+        settle();
+    };
+
+    const applyDraft = () => {
+        // A pending edit first, through the field's own change handler: that
+        // is where the value is read in the member's own type and validated,
+        // so Apply and leaving the field stay the same act.
+        valInput.dispatchEvent(new Event("change"));
+        const v = shown(st.sel);
+        if (v === null || v === undefined || v === "") return;
+        const twin = list.indexOf(v);
+        if (twin >= 0 && twin !== st.sel) {
+            // Already a member. Typing one is how a member is looked up, so
+            // the selection goes there rather than an error going up.
+            delete st.drafts[st.sel];
+            select(twin);
+            return;
+        }
+        const atEnd = st.sel >= list.length;
+        if (atEnd && list.length >= cons.max_size) {
+            msg(xl("List is full"), "error");
+            return;
+        }
+        if (atEnd) list.push(v); else list[st.sel] = v;
+        delete st.drafts[st.sel];
+        setIn(container, relKeys, list);
+        ctx.markDirty();
+        // A member confirmed at the end brings the next empty row at once,
+        // and the selection goes there: that is how five members are entered
+        // with nothing but the field and Apply.
+        if (atEnd) st.sel = list.length;
+        rerenderList();
+    };
+
+    const removeRow = () => {
+        if (st.sel >= list.length) {
+            delete st.drafts[st.sel];       // the empty row: drop the draft
+            rerenderList();
+            return;
+        }
+        list.splice(st.sel, 1);
+        // The drafts of the rows below move up with them; the one on the row
+        // that goes, goes with it.
+        const moved = {};
+        for (const key of Object.keys(st.drafts)) {
+            const i = Number(key);
+            if (i === st.sel) continue;
+            moved[i > st.sel ? i - 1 : i] = st.drafts[key];
+        }
+        st.drafts = moved;
+        setIn(container, relKeys, list);
+        ctx.markDirty();
+        rerenderList();
+    };
+
+    const applyBtn = el("button", {class: "lead", disabled: "",
+                                   onclick: applyDraft}, xl("Apply"));
+    const removeBtn = el("button", {disabled: "", onclick: removeRow},
+                         xl("Remove"));
+    // Apply is on where the selected row carries something unconfirmed --
+    // recorded as a draft, or still standing in the field unblurred, because
+    // a button that is off takes no click and the blur would never happen.
+    // Remove is on for every row there is, and on the empty row only once
+    // something has been typed into it: there is nothing else to remove.
+    const settle = () => {
+        const live = valInput && ("value" in valInput ||
+                                  valInput.type === "checkbox")
+            ? (valInput.type === "checkbox" ? valInput.checked
+                                            : valInput.value)
+            : null;
+        const touched = (st.sel in st.drafts) ||
+                        (live !== null && live !== "" && live !== asBuilt);
+        applyBtn.disabled = fixed || !touched;
+        removeBtn.disabled = fixed ||
+            !(st.sel < list.length || touched);
+    };
+
+    valInput = buildInput(tplNode, shown(st.sel), noteDraft, noteDraft,
+                          memberCtx,
+                          enumArgOf(tpl.constraints, container,
+                                    relKeys.concat([0])));
+    asBuilt = ("value" in valInput || valInput.type === "checkbox")
+        ? (valInput.type === "checkbox" ? valInput.checked : valInput.value)
+        : null;
+    valInput.addEventListener("input", settle);
+    settle();
+
+    const posField = el("input", {class: "pos-field", type: "text",
+        value: st.sel + 1, disabled: fixed ? "" : null});
+    posField.addEventListener("change", () => {
+        const n = parseInt(posField.value, 10);
+        select(Number.isInteger(n) && n >= 1 && n <= last + 1 ? n - 1 : last);
+    });
+
     // Three rows are shown and the rest are scrolled to (style.css) -- and
     // the selected one is brought into view, because the one selected by
     // default is the last: on a list of ten it would otherwise sit below the
@@ -1134,50 +1194,21 @@ function renderListA(node, container, relKeys, ctx, tone) {
     // painted -- another one in front of it, the tab in the background --
     // runs no frame callbacks at all, and the scrolling would then be the
     // one thing that works everywhere except where somebody is looking.
-    // A timer runs regardless, and reading clientHeight below settles the
-    // layout by itself. The body only exists while the group is open
-    // (collapsible builds it then and renderAll rebuilds it on every
-    // change), so by the time this runs there is something to measure.
     setTimeout(() => {
         if (!wrap.isConnected || !wrap.clientHeight) return;
         const trs = wrap.querySelectorAll("tr");
-        const tr = trs[st.sel === null ? trs.length - 1 : st.sel];
+        const tr = trs[st.sel];
         if (!tr) return;
         const top = tr.offsetTop - trs[0].offsetTop, high = tr.offsetHeight;
         if (top < wrap.scrollTop) wrap.scrollTop = top;
         else if (top + high > wrap.scrollTop + wrap.clientHeight)
             wrap.scrollTop = top + high - wrap.clientHeight;
     }, 0);
-    const applyBtn = el("button", {disabled: fixed ? "" : null,
-        // Through the field's own change handler, so that Apply and leaving
-        // the field are the same act: the handler is where the value is read
-        // in the member's own type and validated.
-        onclick: () => valInput.dispatchEvent(new Event("change"))},
-        xl("Apply"));
-    // ...and it is on only when there is something to apply. It used to be on
-    // from the moment the group opened -- empty field, empty row selected --
-    // and pressing it then did nothing whatever, while the record navigator
-    // beside it lights its own Apply only once a record has been touched.
-    // Two buttons of the same name in the same panel should not mean two
-    // different things.
-    //
-    // The field was built from what is stored, so its own starting state is
-    // the yardstick: anything else in it is an edit, including an emptied
-    // field, which applies as the removal of the selected member. Some kinds
-    // of field are not a single control -- a file, a captured value -- and
-    // those keep the old behaviour rather than a wrong one.
-    if (!fixed && ("value" in valInput || valInput.type === "checkbox")) {
-        const asTyped = () => valInput.type === "checkbox" ? valInput.checked
-                                                           : valInput.value;
-        const asBuilt = asTyped();
-        const settle = () => { applyBtn.disabled = asTyped() === asBuilt; };
-        valInput.addEventListener("input", settle);
-        settle();
-    }
+
     body.append(
         el("div", {class: "edit-line"}, posField, valInput),
         wrap,
-        el("div", {class: "apply-line"}, applyBtn));
+        el("div", {class: "apply-line"}, removeBtn, applyBtn));
     return body;
 }
 
@@ -1255,18 +1286,15 @@ function renderListB(node, container, relKeys, ctx, tone) {
                            !!ctx.locked;
     let st = S.listsB[node.path];
     if (!st || st.pos > list.length + 1) {
-        // Opened at the empty slot behind the last record, the same place
-        // the table of a simple list has its empty row -- and for the same
-        // reason. A navigator that opens on record one shows a filled form
-        // and says nothing about where a new one comes from; somebody
-        // looking for that has to walk to the end first to find out that
-        // there is a place there at all. It is worst where a list sits
-        // inside a record of another list, which is exactly where the
-        // chains are: two navigators, both showing something that already
-        // exists, and no sign of which of them one is adding to.
-        st = S.listsB[node.path] = {
-            pos: structureFixed ? Math.max(list.length, 1) : list.length + 1,
-            draft: null, changed: false};
+        // Opened on the first record. The empty slot behind the last one is
+        // reached with "New", which is the button that says what it is for;
+        // a navigator that opens there shows an empty form for a list that
+        // may be full of records, and the records are what somebody came to
+        // look at. (A list of simple values does open on its empty row --
+        // there the table shows everything at once, so the row where
+        // something new goes is the only thing the field could usefully be
+        // editing.)
+        st = S.listsB[node.path] = {pos: 1, draft: null, changed: false};
     }
     if (st.draft === null) {
         // The record being edited has just become a different one -- a move,

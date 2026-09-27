@@ -169,7 +169,6 @@ class ConfigManager:
         # "not answered" and is itself what is selected, so a word there
         # would read like a value. Lower case on purpose: it is not a button
         # but one entry among the members, and it names an act.
-        "clear",
         "End session", "Show protected parameters",
         "Change password", "Language",
         "Incorrect password",
