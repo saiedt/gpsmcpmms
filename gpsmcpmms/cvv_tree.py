@@ -554,6 +554,23 @@ class CvvValue:
             critical(f"Specified simple type is unknown: '{type_str}'.")
 
         bound_to = decl.get("bound_to", "")
+        # 'refreshable': a list of options that can change while somebody is
+        # looking at it -- the devices a radio can see -- gets a button that
+        # asks again (spec 4.9.1). Only a dynamic enum has anybody to ask, so
+        # anywhere else the key is a mistake in the source and is refused
+        # here, where the person who can fix it is still looking, rather than
+        # ignored: a button that never appears is the kind of fault nobody
+        # traces back to a declaration.
+        refreshable = decl.get("refreshable")
+        if refreshable is not None:
+            if not isinstance(refreshable, bool):
+                critical("'refreshable' must be True or False, not "
+                         f"{refreshable!r}.")
+            vals = decl.get("values")
+            if refreshable and not (type_str == "enum" and not bound_to and
+                                    isinstance(vals, str) and vals.strip()):
+                critical("'refreshable' needs a dynamic enum: its 'values' "
+                         "must name a backend function.")
         if type_str == "file":
             # Recorded whether or not a pattern follows. A declared bound_to
             # otherwise replaced the type constraint entirely, and with it the
@@ -594,6 +611,8 @@ class CvvValue:
                         # dynamic enum: options resolved at runtime by the
                         # named backend function (see spec 4.9.1)
                         self._constraints["one_of"] = vals.strip()
+                        if refreshable:
+                            self._constraints["refreshable"] = True
                         return
                     if not isinstance(vals, dict):
                         critical("enum 'values' must be a dict or the name "
@@ -1653,7 +1672,8 @@ class CvvPathElem(CvvNode):
         "hint", "label", "likely_val", "placeholder", "protected", "relevance",
         "s2g_scale", "tooltip", "type",
         # type-specific sub-properties (see section 2.1, key 3)
-        "acquire_button", "bound_to", "file_dir", "values", "values_for",
+        "acquire_button", "bound_to", "file_dir", "refreshable", "values",
+        "values_for",
         # test support (see section 4.9.4 of the spec)
         "test_func", "test_func_msg", "test_button",
         # annotations added internally during type resolution
@@ -2237,6 +2257,12 @@ class CvvPathElem(CvvNode):
                 if "values_for" in self._item_decl:
                     self._bind_values_source(lt, self.LIST_ITEM_TEMPLATE_ID,
                                              self._item_decl["values_for"])
+                # The button that asks again stands beside a field, and a
+                # member of a simple list has no row of its own to put it in.
+                # Refused rather than left to do nothing.
+                if self._item_decl.get("refreshable"):
+                    critical("'refreshable' is not available for the members "
+                             f"of a simple list ({self.get_path()}).")
                 self._ui_props["item_template"] = lt
                 if not self._expand_by_list_value():
                     critical(f"Incompatible list value for {self.get_path()}.")

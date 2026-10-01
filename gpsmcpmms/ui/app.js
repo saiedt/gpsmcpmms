@@ -289,11 +289,15 @@ function relevanceHolds(rule, dictValue) {
    because that is what says whether they are still the answer to the question
    being asked -- and without it every render would ask again, and every
    answer would render again. */
-async function fetchEnumOptions(path, rerender, arg) {
+async function fetchEnumOptions(path, rerender, arg, refresh) {
     S.enums[path] = {pending: true, arg};
     let url = `/api/config/enum-options?path=${encodeURIComponent(path)}`;
     if (arg !== undefined)
         url += `&arg=${encodeURIComponent(JSON.stringify(arg))}`;
+    // Only the button says this. Drawing the field asks what the device
+    // knows; the button asks it to look again, and looking may cost
+    // something nobody ordered by opening a group.
+    if (refresh) url += "&refresh=1";
     const r = await api(url);
     S.enums[path] = (r.data && r.data.values) ? {values: r.data.values, arg}
                   : {error: (r.data && r.data.error) || xl("No answer from the device."),
@@ -860,6 +864,17 @@ function fieldRow(node, container, relKeys, ctx) {
                                ctx.rerender));
     if (cons.type === "file" && !locked)
         row.append(uploadButton(node, ctx, commit));
+    // A list of options that can change while somebody is looking at it
+    // (spec 4.9.1): the same button a hint has, for the same reason -- what
+    // is shown is a statement about the present. Not for a session that may
+    // not write: asking again may set the device to work.
+    if (cons.refreshable && typeof cons.one_of === "string" && !locked)
+        row.append(el("button", {class: "hint-refresh", type: "button",
+            title: xl("Refresh"),
+            onclick: () => { fetchEnumOptions(node.path, ctx.rerender,
+                                              enumArg, true);
+                             ctx.rerender(); }},
+            "↻"));
     if (node.ui.test_func && !locked)
         row.append(testButton(node, () => getIn(container, relKeys)));
 

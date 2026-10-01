@@ -218,6 +218,7 @@ A Declaration is a dict with any of these keys (`type` is mandatory):
 |----------|-----|---------|
 | `values` | `enum` | `{id: {"label": …, "tooltip"?: …}}`, or a **function name** (resolved via `func_dict`) for dynamic options. |
 | `values_for` | dynamic `enum` | Name of a sibling whose current value the options are computed *for*; it is passed to the provider. See *Dynamic enums* under [Advanced features](#advanced-features). |
+| `refreshable` | dynamic `enum` | `True` puts a **↻** beside the field that asks the provider again; the provider is called with the keyword `refresh`. See *Dynamic enums* under [Advanced features](#advanced-features). |
 | `bound_to` | `int`/`float` | `"min..max"` (either side omittable). |
 | `bound_to` | `string` | a Python regular expression (without the leading `r`). |
 | `s2g_scale` | `int`/`float` | `"*N"` or `"/N"` — the editor shows the value scaled and stores it unscaled (UI only). |
@@ -688,7 +689,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /api/config/enum-options?path=[&arg=]` | Resolve a dynamic enum's options; `arg` is the JSON-encoded value of the `values_for` sibling. |
+| `GET /api/config/enum-options?path=[&arg=][&refresh=1]` | Resolve a dynamic enum's options; `arg` is the JSON-encoded value of the `values_for` sibling, `refresh=1` is what the ↻ of a `refreshable` enum sends. |
 | `POST /api/config/file` | Upload a file for a parameter of type `file` (multipart: `path`, `file`); stores it in the host's `file_dir` and sets the parameter to its name. |
 | `POST /api/config/revive` | Puts a dormant module's parameters back by calling the `revive` callable it left. Administrators only, and by POST: it changes what the device offers. Registering ends the editing session, so a fresh token comes back with the answer — the person who pressed the button must not be sent to the password prompt for it. |
 | `GET /api/config/hint?path=[&lang=]` | The current text of a provider-backed `hint`, with the moment it was established. The stamp is the point: a hint asserts something about the present, and an undated assertion goes on claiming it. |
@@ -745,6 +746,31 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
   naming different siblings. `register_params` refuses at startup if the named
   sibling is not in the same dict, if it is the field itself, if the field is not
   a dynamic enum, or if the provider does not take an argument.
+  **`refreshable: True`** is for a list that can change while somebody is
+  looking at it — the devices a radio can see, the sticks plugged into a hub.
+  Options are otherwise fetched once, when the field is drawn, and kept until
+  the panel is saved; such a field gets a **↻** beside it that asks again
+  without saving and keeps what is selected.
+
+  The provider is told which of the two questions it is answering:
+
+  ```python
+  "device": {"type": "enum", "values": "get_devices", "refreshable": True},
+
+  def get_devices(refresh=False):
+      if refresh:
+          start_scan()            # somebody asked the device to look
+      return devices_known_now()  # drawing the field only asks what is known
+  ```
+
+  `refresh` is `False` when the editor merely draws the field and `True` when
+  the button was pressed. They are not the same request: looking may cost
+  something — a radio scan, a round trip — that nobody ordered by opening a
+  group. The button is not shown to a session that may not write. With
+  `values_for` the provider takes both, the sibling's value first.
+  `register_params` refuses at startup if the field is not a dynamic enum, if
+  the provider cannot take the keyword, or on the member of a simple list,
+  which has no row to put the button in.
 - **Backend-captured values** — a `backend_provided` field shows an
   `acquire_button`; pressing it long-polls `/api/value/capture`. A module delivers
   the value with `config_mgr.handle_value_event(value, alt_target_paths)` (use

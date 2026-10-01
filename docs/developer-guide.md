@@ -317,6 +317,15 @@ commits a pairing nobody chose, and if saving has consequences (here: recording
 every sentence of a language) they happen in an arbitrary voice before the
 intended one is reachable.
 
+**`refreshable`** is the answer to a list that moves while somebody watches
+it. Options are fetched when the field is drawn and kept until the panel is
+saved, which is right for voices and wrong for the Bluetooth devices in range:
+the one being paired appears a few seconds *after* the group was opened.
+`"refreshable": True` puts a ↻ beside the field, and the provider learns which
+of the two it is answering through the keyword `refresh` — `False` for the
+drawing, `True` for the button. Keep the expensive part behind `True`: a scan
+that starts because somebody opened a group is a scan nobody asked for.
+
 **`test_func`** receives the value in the field, not the one on disk. That is
 what makes "try it first" possible with no draft state in the backend and no
 second round of saving: the editor posts what is on screen, the module does the

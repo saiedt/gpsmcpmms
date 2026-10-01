@@ -621,6 +621,8 @@ class ConfigManager:
         self._harvest_xlation_keys(type_dict, self._func_registry[module_id])
         self._check_values_for(param_dict, self._func_registry[module_id])
         self._check_values_for(type_dict, self._func_registry[module_id])
+        self._check_refreshable(param_dict, self._func_registry[module_id])
+        self._check_refreshable(type_dict, self._func_registry[module_id])
         type_registry = type_dict if isinstance(type_dict, dict) else {}
         type_registry[module_id] = param_dict
         config_value = CvvNode.init_module(self, module_id, {
@@ -1448,6 +1450,48 @@ class ConfigManager:
                         f"register_params(): the provider '{provider}' of "
                         f"'{key}' has to take the value of "
                         f"'{value['values_for']}' as its argument.") from None
+
+    def _check_refreshable(self, decl_data, funcs):
+        """
+        Verifies at registration that the provider of a 'refreshable' enum
+        can be told which of the two questions it is being asked.
+
+        It is called with the keyword 'refresh': False when the editor merely
+        draws the field, True when somebody pressed the button. The two are
+        not the same request. Drawing asks what is known; the button asks the
+        device to look again, and looking may cost something -- a radio scan,
+        a round trip to a server -- that nobody ordered by opening a group.
+        A provider that cannot take the keyword would fail on the first
+        click, so it is refused here instead, for the reason
+        _check_values_for gives.
+        """
+        if not isinstance(decl_data, dict):
+            return
+        for key, value in decl_data.items():
+            if not isinstance(value, dict):
+                continue
+            self._check_refreshable(value, funcs)
+            if value.get("refreshable") is not True:
+                continue
+            provider = value.get("values")
+            if not isinstance(provider, str):
+                # Not a dynamic enum at all. The tree refuses that itself,
+                # with the sentence that names the mistake.
+                continue
+            func = funcs.get(provider)
+            if func is None:
+                raise ValueError(
+                        f"register_params(): '{key}' declares 'refreshable' "
+                        f"but its 'values' ({provider!r}) is not a function "
+                        "in func_dict.")
+            args = (None,) if "values_for" in value else ()
+            try:
+                inspect.signature(func).bind(*args, refresh=False)
+            except TypeError:
+                raise ValueError(
+                        f"register_params(): the provider '{provider}' of "
+                        f"the refreshable '{key}' has to take the keyword "
+                        "'refresh'.") from None
 
     def _note_xlation_key(self, xlation_key, kind=None):
         # Nothing is written into the dictionaries here. A key they do not
@@ -2364,8 +2408,13 @@ class ConfigManager:
                     args = (json.loads(raw) if raw else None,)
                 except ValueError:
                     return jsonify({"error": "malformed argument"}), 400
+            # 'refreshable': the provider is told whether somebody asked it
+            # to look again or the editor is only drawing the field.
+            kwargs = {}
+            if constraints.get("refreshable"):
+                kwargs["refresh"] = request.args.get("refresh") == "1"
             try:
-                result = func(*args)
+                result = func(*args, **kwargs)
             except Exception as exc:
                 self._logger.error(f"enum provider '{provider}' raised: "
                                    f"{exc}")
