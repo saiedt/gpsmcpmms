@@ -76,6 +76,13 @@ That is the whole specification. What each line buys:
   module reads its hardware and answers with `handle_value_event()`, which
   reports whether anybody was still waiting. It works for a path inside a list
   row, and for the row being added — the one that has no ordinal yet.
+- A list whose members are **nothing but** such a value needs no record around
+  them: `list_member` takes `backend_provided` and `acquire_button` itself, and
+  the simple list's own value field carries the button. The pattern for such a
+  list is `"telegrams.*"`, with no field name behind it — in `distinct_values`
+  as well as in the paths handed to `handle_value_event()`. Wrapping the value
+  in a one-field record to get a button is what this saves; the record stays
+  the right answer as soon as a second field joins it.
 - **`list_keys: [["tag"], ["category"]]`** — two separate one-column keys, which
   is what makes the pairing a bijection: no token twice, no category twice. One
   compound key `[["tag", "category"]]` would have allowed both to repeat as long

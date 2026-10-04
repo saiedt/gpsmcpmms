@@ -1066,10 +1066,15 @@ function renderListA(node, container, relKeys, ctx, tone) {
     // telephone number, so choosing a contact meant knowing their number by
     // heart and spelling it the way the store spells it.
     //
-    // configurability travels from the list: the template carries its own,
-    // and a list nobody may change must not hand out a field they can.
-    const tplNode = Object.assign({}, tpl,
-                                  {configurability: node.configurability});
+    // configurability travels from the list: a list nobody may change must
+    // not hand out a field they can. Only that case travels, though. A
+    // member that is captured rather than typed carries a 2 of its own, and
+    // taking the list's 1 instead turned it into a text box -- a telegram to
+    // be typed off a log, which is the very thing the capture button is
+    // there to spare.
+    const tplNode = Object.assign({}, tpl, {
+        configurability: node.configurability === 0 ? 0 : tpl.configurability,
+    });
     // A list of simple values holds no duplicates (spec 4.9.2), so what is
     // already in it has no business in the list of choices. The selected
     // member itself stays on offer -- the field has to be able to show what
@@ -1220,10 +1225,22 @@ function renderListA(node, container, relKeys, ctx, tone) {
             wrap.scrollTop = top + high - wrap.clientHeight;
     }, 0);
 
-    body.append(
-        el("div", {class: "edit-line"}, posField, valInput),
-        wrap,
-        el("div", {class: "apply-line"}, removeBtn, applyBtn));
+    // A value hardware produces is captured here as it is at a field
+    // (spec 4.9.3): the template may carry backend_provided, and then the
+    // member's own field gets the button. Without it, a list of values that
+    // can only be captured had to be a list of one-field records -- that
+    // being the only way to a field that has a button -- and the reader got
+    // a record navigator for what is one column of telegrams.
+    //
+    // The captured value takes the road a typed one takes: it becomes this
+    // row's draft, the table shows it, and Apply puts it in the list. What
+    // the capture asks on is the template's own path, the same path a
+    // record's field asks on -- which is what the module's '*' matches.
+    const editLine = el("div", {class: "edit-line"}, posField, valInput);
+    if (!fixed && tplNode.configurability === 2 && tpl.ui.acquire_button)
+        editLine.append(acquireButton(tplNode, valInput, noteDraft));
+    body.append(editLine, wrap,
+                el("div", {class: "apply-line"}, removeBtn, applyBtn));
     return body;
 }
 

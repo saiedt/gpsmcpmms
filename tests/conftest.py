@@ -136,6 +136,26 @@ def setup_demo_environment():
         callback=lambda value: None,
     )
 
+    # A module for lists whose members only hardware can produce: two lists
+    # of plain strings, each captured through the member's own button, and no
+    # value may serve in both of them.
+    config_mgr.register_params(
+        module_id="caplist",
+        module_label="Captured members",
+        type_dict={
+            "telegram_list": {
+                "list_member": {"type": "string", "backend_provided": True,
+                                "acquire_button": "Trigger the transmitter"},
+                "list_size": "0..16"},
+            "senders": {
+                "distinct_values": [["buttons.*", "sensors.*"]],
+                "buttons": {"label": "Buttons", "type": "telegram_list"},
+                "sensors": {"label": "Sensors", "type": "telegram_list"}},
+        },
+        param_dict={"senders": {"label": "Transmitters", "type": "senders"}},
+        callback=lambda value: None,
+    )
+
     return config_mgr
 
 
