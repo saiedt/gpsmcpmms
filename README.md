@@ -456,6 +456,13 @@ module's `state_func` says it is doing at this moment, and `allFindings()`,
 `findingsUnder(path)` and `worstLevel()` put the findings wherever the design
 wants them — above the form, beside the field, as a count at the door.
 
+This section is also written to be handed over. An AI assistant given it,
+the list of names at the top of `core.js` and a description of the application
+has what it needs to write an application-aware editor: the rules it must not
+break are in the core already, and the one it could break — speaking to the
+device itself — is stated above. What it cannot be given is a device to try
+the result on, and that remains somebody's job.
+
 Two things to keep in mind. A design is written against one version of the
 core, and a core that gains names does not break it; one that changes them
 would, which is why they are listed and tested. And a design replaces the
