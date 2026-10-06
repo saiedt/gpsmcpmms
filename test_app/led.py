@@ -46,6 +46,7 @@ class LEDController:
         self.states_initialized = False
         self._supported_states = []
         self._pixels = None
+        self.current_state = None
 
     def init_supported_states(self, led_state_list):
         if self.states_initialized:
@@ -56,6 +57,9 @@ class LEDController:
             module_id="led",
             module_label="Statusanzeige",
             callback=config_changed,
+            # which of the states below the ring is showing just now
+            state_func=lambda: (None if self.current_state is None
+                                else {"id": self.current_state}),
             type_dict={
                 "led_state_conf": {
                     "num_active_leds": {
@@ -146,8 +150,9 @@ class LEDController:
         )
 
     def set_state(self, led_state):
-        # implementation not relevant for the test app
-        pass
+        # driving the ring is not relevant for the test app; saying which
+        # state it would be showing is
+        self.current_state = led_state
 
 
 def config_changed(value):

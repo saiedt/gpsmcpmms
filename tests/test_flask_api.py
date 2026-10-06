@@ -473,3 +473,80 @@ def test_an_own_script_alone_is_nothing_to_clear_away(client):
         assert _ui_files() == ["app.js"]
     finally:
         os.remove(path)
+
+
+# --------------------------------------------------------------------------
+# How things stand right now (/api/status)
+# --------------------------------------------------------------------------
+
+def test_asking_how_things_stand_opens_no_session(client):
+    # /api/cvv_data hands the first caller the write lock. A page that only
+    # watches must be able to ask without taking it.
+    body = client.get("/api/status").get_json()
+    assert body["session"] == "none"
+    assert config_mgr._session_token is None
+    assert _fresh_token(client), "the lock is still there to be had"
+
+
+def test_asking_does_not_keep_a_session_alive(client):
+    # Otherwise a page left open overnight holds the lock by having watched.
+    import time
+    token = _fresh_token(client)
+    runs_out = time.time() + 5
+    config_mgr._session_expires = runs_out
+    body = client.get("/api/status",
+                      headers={"X-GPSMCPMMS-Token": token}).get_json()
+    assert body["session"] == "valid"
+    assert config_mgr._session_expires == runs_out
+    assert client.get("/api/status").get_json()["session"] == "other"
+
+
+def test_a_module_says_what_it_is_doing(client):
+    import led
+    led.ledc.set_state("phone_ready")
+    try:
+        assert client.get("/api/status").get_json()["state"] == {
+            "led": {"id": "phone_ready"}}
+        # and a page is complete when it loads, without asking twice
+        assert client.get("/api/cvv_data").get_json()["state"] == {
+            "led": {"id": "phone_ready"}}
+        led.ledc.set_state(None)
+        assert client.get("/api/status").get_json()["state"] == {}
+    finally:
+        led.ledc.set_state(None)
+
+
+def test_a_module_that_cannot_say_does_not_take_the_answer_down(client, caplog):
+    held = config_mgr._state_funcs["led"]
+    config_mgr._state_funcs["led"] = lambda: {"when": object()}
+    try:
+        with caplog.at_level("ERROR"):
+            for _ in range(3):
+                resp = client.get("/api/status")
+                assert resp.status_code == 200
+                assert resp.get_json()["state"] == {}
+        said = [r for r in caplog.records
+                if "could not say what it is doing" in r.message]
+        assert len(said) == 1, "once, not at every look"
+    finally:
+        config_mgr._state_funcs["led"] = held
+        config_mgr._state_faults.discard("led")
+
+
+def test_the_findings_are_those_the_asking_session_may_see(client):
+    # The factory password is an administrator's finding and nobody else's.
+    from gpsmcpmms.config import ConfigManager
+    own = ConfigManager.OWN_MODULE_ID
+    assert own not in client.get("/api/status").get_json()["module_status"]
+    token = _admin_token(client)
+    seen = client.get("/api/status",
+                      headers={"X-GPSMCPMMS-Token": token}).get_json()
+    assert any("factory default password" in text
+               for text in seen["module_status"][own])
+
+
+def test_what_a_module_is_asked_with_has_to_be_callable():
+    with pytest.raises(ValueError, match="state_func"):
+        config_mgr.register_params(
+            module_id="idle", module_label="Idle", param_dict={},
+            callback=lambda value: None, state_func="busy")

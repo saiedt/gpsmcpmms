@@ -138,7 +138,7 @@ A module describes itself with two dicts:
 ```python
 config_mgr.register_params(
     module_id, module_label, param_dict, callback,
-    type_dict=None, module_tooltip=None, func_dict=None)
+    type_dict=None, module_tooltip=None, func_dict=None, state_func=None)
 ```
 
 - Called **once per run** per module (register the same schema every run; only
@@ -150,6 +150,12 @@ config_mgr.register_params(
   keeps them, too. See [Status messages](#status-messages).
 - `func_dict` maps function names referenced in Declarations (dynamic enums, see
   [Advanced features](#advanced-features)) to callables.
+- `state_func()` says what the module is doing at this moment, as anything
+  JSON can carry, or `None`. It is asked whenever an editor looks, and its
+  answer travels under the module's id in `state` — to every session and to
+  callers without one, so it is what the device would show anybody standing in
+  front of it and nothing a protected parameter holds. A finding says what is
+  wrong until it is dealt with; this says what is going on.
 
 **Value priority** (highest wins): `fixed_val` → saved user input → `default_val`
 → *no value* (`None`).
@@ -712,6 +718,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 | `POST /api/config/update` | Apply `{module, value}`; returns `{rejected: […]}` referring by path to config elements not updated. |
 | `GET /api/cvv_data[?passwd=…]` | Retrieves the whole content to be merged by the script into the page in order to render the editor in a browser; issues/refreshes the session token; strips protected subtrees unless unlocked by valid password. |
 | `POST /api/end_session` | Release the editing token. |
+| `GET /api/status` | How things stand right now: `{session, lock_free_in, module_status, state}`. `session` is `valid` for the token sent, `other` or `none`; `module_status` holds the findings that session may see; `state` what each module's `state_func` answers. Opens no session and keeps none alive, so a page may ask as often as it likes. |
 | `GET /api/lang/info` | Which languages exist here, what they are called, whether an allow-list bounds them, and the application's name. For admins additionally the orphan keys and how far each language is translated. |
 | `GET /api/lang/template?lang=&refs=` | Download a translation template (admin): the source language (`DECL_LANG`, by default `en`), `kind`, chosen reference languages, then the target language. |
 | `POST /api/lang/upload` | Upload a filled translation CSV (admin); returns the report. |

@@ -59,6 +59,7 @@ SUPPORTED_STATES = [
 
 def main():
     led.ledc.init_supported_states(SUPPORTED_STATES)
+    led.ledc.set_state("card_reading")
     config_mgr.start_editor()
     logger.app_logger.info(
         f"App bereit; Konfigurationseditor auf Port {config_mgr._ui_port}."

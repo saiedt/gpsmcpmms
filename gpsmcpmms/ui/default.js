@@ -1490,6 +1490,58 @@ function renderLangPanel(mode) {
 }
 
 /* ---------- top level rendering ---------- */
+/* One banner per module, and inside it one line per finding. Two banners
+   for one module would read as two modules; two findings run together on
+   one line read as one muddled thought. Where two findings could be said
+   as a single sentence a module says them as one -- what arrives here as
+   two really is two, and a line of its own is the honest separator.
+
+   Sorted by module id, the same order the panels below are in: a device
+   chooses that order by prefixing its ids, and a banner that ignored it
+   would send the reader down the page in the wrong direction.
+
+   A box of their own rather than straight into the page, because they are the
+   one part of it that changes without anybody having done anything -- see
+   watchStanding() -- and redrawing the whole page for a new finding would
+   take the field out from under whoever is typing into it. */
+function drawFindings() {
+    const box = document.getElementById("findings");
+    if (!box) return;
+    box.innerHTML = "";
+    for (const mid of Object.keys(S.moduleStatus).sort())
+        box.append(el("div", {class: "banner"},
+            ...S.moduleStatus[mid].map(m => el("div", {class: "finding"},
+                xl(m),
+                m === FACTORY_PASSWD_FINDING && S.admin
+                    ? el("button", {class: "small", onclick: changePassword},
+                         xl("Change password"))
+                    : null))));
+}
+
+/* Looks again every ten seconds while the page is being looked at. What a
+   module has found may have gone since the page was drawn, or only just
+   turned up, and a finding that was dealt with an hour ago is worse than
+   none. A page nobody sees asks nothing.
+
+   The one thing said aloud is the end of this page's own session: taken
+   over, or run out. Until now that was learned at the next Save, with
+   whatever had been typed in the meantime. Said once -- the way back is a
+   reload, and repeating it would not bring that any nearer. */
+const STANDING_EVERY = 10000;
+let sessionLossSaid = false;
+function watchStanding() {
+    setInterval(async () => {
+        if (document.hidden) return;
+        const wasMine = !S.readOnly && S.session === "valid";
+        if (!await refreshStatus()) return;
+        drawFindings();
+        if (wasMine && S.session !== "valid" && !sessionLossSaid) {
+            sessionLossSaid = true;
+            msg(xl("The editing session has ended."), "error");
+        }
+    }, STANDING_EVERY);
+}
+
 function renderAll() {
     const app = document.getElementById("app");
     app.innerHTML = "";
@@ -1560,23 +1612,8 @@ function renderAll() {
             el("button", {class: "small", onclick: takeOverSession},
                xl("Take over session")),
             lockFreeHint()));
-    // One banner per module, and inside it one line per finding. Two banners
-    // for one module would read as two modules; two findings run together on
-    // one line read as one muddled thought. Where two findings could be said
-    // as a single sentence a module says them as one -- what arrives here as
-    // two really is two, and a line of its own is the honest separator.
-    //
-    // Sorted by module id, the same order the panels below are in: a device
-    // chooses that order by prefixing its ids, and a banner that ignored it
-    // would send the reader down the page in the wrong direction.
-    for (const mid of Object.keys(S.moduleStatus).sort())
-        app.append(el("div", {class: "banner"},
-            ...S.moduleStatus[mid].map(m => el("div", {class: "finding"},
-                xl(m),
-                m === FACTORY_PASSWD_FINDING && S.admin
-                    ? el("button", {class: "small", onclick: changePassword},
-                         xl("Change password"))
-                    : null))));
+    app.append(el("div", {id: "findings"}));
+    drawFindings();
 
     // sorted by module id, which is how a device controls the order of the
     // groups on screen -- prefix the ids and you have chosen the sequence
@@ -1613,6 +1650,7 @@ async function boot() {
         await reloadData();
         applyTextDirection();
         renderAll();
+        watchStanding();
     } catch (e) {
         document.getElementById("app").innerHTML = "";
         document.getElementById("app").append(

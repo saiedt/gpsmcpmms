@@ -44,7 +44,8 @@
  *              memberLacksKey
  *   device     fetchEnumOptions, fetchHint, pendingFilesFor,
  *              flushPendingFiles, PROBE_TYPES, probeValue, captureValue,
- *              runTest, wakeModule, loadLangList, loadLang, reloadData
+ *              runTest, wakeModule, loadLangList, loadLang, reloadData,
+ *              refreshStatus
  *   saving     saveObstacle, unsetBooleans, submitModule
  *   session    takeOverWith, setPassword, endSession
  *   languages  useLanguage, langName, isLangCode, fetchTemplate,
@@ -59,6 +60,11 @@ const S = {
     token: null, readOnly: false, admin: false, factory: false,
     // what each module last said about itself, keyed by module id
     moduleStatus: {},
+    // what each module is doing at this moment, keyed by module id, as far
+    // as it says; and whose the editing session is: "valid" for this page's
+    // own, "other", or "none". Both age -- see refreshStatus().
+    state: {},
+    session: null,
     dormant: {},             // module id -> label, admin only
     lockFreeIn: null,        // seconds until the foreign session lapses
     protectedOmitted: false,
@@ -669,6 +675,34 @@ async function submitModule(mid) {
     return {outcome: rejected.length > 0 ? "rejected" : "saved", rejected};
 }
 
+/* ---------- how things stand right now ----------
+   What the modules are doing, what they have found and whose the session is
+   are all true only for a while, and nothing tells the page when they stop
+   being so. A design that wants to stay true asks again from time to time --
+   how often, and whether at all while nobody is looking, is its to decide.
+
+   Asking costs the device nothing it would mind and, deliberately, changes
+   nothing there: no session is opened by it and none is kept alive, so a
+   page left open overnight does not hold the write lock by having watched.
+
+   Returns true where something is different from what S held, false where
+   nothing is, and null where the device did not answer -- in which case S is
+   left as it was, because "no answer" is not "nothing to report". */
+async function refreshStatus() {
+    let r = null;
+    try { r = await api("/api/status"); } catch (e) { return null; }
+    if (r.status !== 200 || !r.data) return null;
+    const now = {moduleStatus: r.data.module_status || {},
+                 state: r.data.state || {},
+                 session: r.data.session};
+    const was = JSON.stringify({moduleStatus: S.moduleStatus, state: S.state,
+                                session: S.session});
+    Object.assign(S, now);
+    if (typeof r.data.lock_free_in === "number")
+        S.lockFreeIn = r.data.lock_free_in;
+    return JSON.stringify(now) !== was;
+}
+
 /* ---------- asking the device to do something ----------
    Each of these is one request, and each says how it went in words a design
    can act on without knowing what the device answered with. */
@@ -855,6 +889,8 @@ async function reloadData(passwd) {
     S.admin = r.data.admin;
     S.wrongPasswd = r.data.wrong_passwd;
     S.moduleStatus = r.data.module_status || {};
+    S.state = r.data.state || {};
+    S.session = r.data.read_only ? "other" : "valid";
     S.dormant = r.data.dormant || {};
     S.protectedOmitted = r.data.protected_omitted;
     S.cvv = r.data.cvv;

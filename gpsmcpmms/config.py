@@ -351,6 +351,12 @@ class ConfigManager:
         # a module learns in between. There is nothing to clear: the next
         # report replaces this one, and None takes the entry away.
         self._module_status: dict = {}
+        # What each module can be asked about the present moment: module_id ->
+        # a callable returning what it is doing right now, see
+        # _module_states(). And the modules whose answer could not be used,
+        # so that the log says so once and not at every look.
+        self._state_funcs: dict = {}
+        self._state_faults: set = set()
         # Modules that gave their parameters up but left a way back:
         # module_id -> {"label": ..., "revive": callable}. They keep their
         # findings and their place in the editor; what they no longer have is
@@ -610,9 +616,43 @@ class ConfigManager:
                     "Translations: some are still incomplete.")
         return found
 
+    def _module_states(self):
+        """What each module says it is doing at this moment, keyed by module.
+
+        A finding says what is wrong and stays until somebody has dealt with
+        it. This says what is going on, and is true for as long as it takes
+        to read: a card was laid on, a call came in, a connection dropped.
+        None of that reaches the editor by itself, so the module is asked
+        whenever somebody looks.
+
+        What a module answers is its own business and travels as it is --
+        an identifier, a few figures, whatever its editor knows how to draw.
+        It is handed to every session and to callers without one, so it is
+        the kind of thing the device shows anybody standing in front of it,
+        and nothing a protected parameter holds. None means there is nothing
+        to say just now.
+        """
+        states = {}
+        # a copy: a module may register from a thread of its own meanwhile
+        for m_id, func in list(self._state_funcs.items()):
+            try:
+                state = func()
+                json.dumps(state)
+            except Exception as exc:
+                if m_id not in self._state_faults:
+                    self._state_faults.add(m_id)
+                    self._logger.error(
+                            f"Module '{m_id}' could not say what it is "
+                            f"doing: {exc}")
+                continue
+            self._state_faults.discard(m_id)
+            if state is not None:
+                states[m_id] = state
+        return states
+
     def register_params(self, module_id, module_label, param_dict,
                         callback, type_dict=None, module_tooltip=None,
-                        func_dict=None):
+                        func_dict=None, state_func=None):
         if not (module_id and isinstance(module_id, str) and
                 not module_id in self._callback_registry
         ):
@@ -629,8 +669,17 @@ class ConfigManager:
         ):
             raise ValueError("register_params(): 'func_dict' must map "
                              "function names to callables.")
+        if state_func is not None and not callable(state_func):
+            raise ValueError(
+                f"register_params(): 'state_func' must be callable "
+                f"(got {type(state_func).__name__})."
+            )
         self._callback_registry[module_id] = callback
         self._func_registry[module_id] = func_dict or {}
+        if state_func is None:
+            self._state_funcs.pop(module_id, None)
+        else:
+            self._state_funcs[module_id] = state_func
         self._module_labels[module_id] = module_label
         # Registering is the way back from dormancy, so arriving here ends it.
         self._dormant.pop(module_id, None)
@@ -711,6 +760,7 @@ class ConfigManager:
         removed = CvvNode.discard_module(self, module_id)
         self._callback_registry.pop(module_id, None)
         self._func_registry.pop(module_id, None)
+        self._state_funcs.pop(module_id, None)
         if revive is None:
             self._module_status.pop(module_id, None)
             self._dormant.pop(module_id, None)
@@ -2326,7 +2376,42 @@ class ConfigManager:
                 "dormant": ({m_id: d["label"]
                              for m_id, d in self._dormant.items()}
                             if admin else {}),
+                # what each module is doing at this moment -- here as well as
+                # under /api/status, so that a page is complete when it loads
+                "state": self._module_states(),
                 "cvv": cvv,
+            })
+
+        @app.route("/api/status")
+        def status():
+            """How things stand right now: what the modules are doing, what
+            they have found, and whose the editing session is.
+
+            Everything here ages while it is being read, which is why it has
+            a door of its own. /api/cvv_data answers the same questions, but
+            only as part of loading the whole tree -- and asking it opens a
+            session where there is none, and keeps one alive where there is.
+            A page that wants to stay true has to ask again and again, and
+            must not, by asking, hold the write lock for good on behalf of
+            somebody who went home.
+
+            So this one takes a token and gives nothing for it but the right
+            answer: the findings are the ones that session may see, an
+            administrator's for an administrator. Without one, or with a
+            stale one, it answers what anybody is shown. No session is opened
+            and none is touched.
+            """
+            standing = self._session_status(request_token())
+            with self._lock:
+                admin = standing == "valid" and self._session_admin
+            return jsonify({
+                # 'valid': the token sent is the active one; 'other': somebody
+                # else holds the session; 'none': nobody does
+                "session": standing,
+                "lock_free_in": (self._lock_free_in()
+                                 if standing == "other" else None),
+                "module_status": self._module_status_report(admin),
+                "state": self._module_states(),
             })
 
         @app.route("/api/config/revive", methods=["POST"])
