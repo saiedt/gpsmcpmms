@@ -340,3 +340,9 @@ button.toggled:hover:not(:disabled) { background: var(--accent-soft); }
 .banner > .finding {
   flex: 1 0 100%; display: flex; gap: 10px; align-items: center;
 }
+/* How serious a finding is, said by the line and not by the banner: one
+   module may have something broken and something merely worth knowing, and
+   they stand under one another in the same box. The middle level looks the
+   way every finding used to. */
+.banner > .finding.error { color: var(--err); font-weight: 600; }
+.banner > .finding.info { color: var(--muted); }

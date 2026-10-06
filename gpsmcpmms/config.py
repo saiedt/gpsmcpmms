@@ -282,7 +282,17 @@ class ConfigManager:
         # a hint states something about the present; without the moment it was
         # established it would keep asserting it long after it stopped being so
         "As of", "Refresh",
+        # beside a finding that names the path it is about: opens the way
+        # down to it
+        "Show",
     )
+
+    # How serious a finding is, most serious first. A module that says
+    # nothing about it means the middle one, which is what every finding was
+    # before there was a choice: something to be seen to, with nothing
+    # broken yet.
+    FINDING_LEVELS = ("error", "warning", "info")
+    DEFAULT_FINDING_LEVEL = "warning"
 
     # Declaration keys whose string values are display strings in DECL_LANG
     # and hence translation keys
@@ -489,9 +499,9 @@ class ConfigManager:
         another remains does not have to remember which door it used for
         which.
 
-        A finding is a string, or a dict naming the path it is about as well:
-        {"text": ..., "path": ...}. See _read_finding() for what the path
-        changes.
+        A finding is a string, or a dict that may also name the path it is
+        about and how serious it is: {"text": ..., "path": ..., "level": ...}.
+        See _read_finding() for what each of them changes.
         """
         if not (module_id in self._callback_registry or
                 module_id in self._dormant):
@@ -521,12 +531,12 @@ class ConfigManager:
                 f"Module '{module_id}' reported {type(message).__name__} as "
                 f"its status; a status is a finding, a list of them, or None.")
         noted = [self._read_finding(module_id, m) for m in found]
-        for text, _ in noted:
+        for text, _path, _level in noted:
             self._note_xlation_key(text, "ui")
         self._module_status[module_id] = noted
 
     def _read_finding(self, module_id, finding):
-        """One finding, as a pair of its text and the path it is about.
+        """One finding, as its text, the path it is about and its level.
 
         A bare string is about no path in particular, and reaches
         administrators only: nobody can tell what it is about, so nobody can
@@ -543,22 +553,36 @@ class ConfigManager:
         path it concerns. Checked when the editor asks rather than here: the
         tree changes under a noted finding, and a path that matches nothing --
         a list member that has gone, say -- is then back with administrators.
+
+        'level' is one of FINDING_LEVELS and decides nothing in here. It is
+        for the reader: three findings in one colour say that three things
+        want attention and not which of them is why the device does not work.
+        "error" is for what stops the device doing its job, "info" for what
+        is merely worth knowing, and a finding that says neither is a
+        "warning".
         """
+        level = self.DEFAULT_FINDING_LEVEL
         if isinstance(finding, str):
             text, path = finding, None
         elif (isinstance(finding, dict) and "text" in finding and
-                set(finding) <= {"text", "path"}):
+                set(finding) <= {"text", "path", "level"}):
             text, path = finding["text"], finding.get("path")
+            level = finding.get("level", level)
         else:
             raise ValueError(
                 f"Module '{module_id}' reported {finding!r} as a finding; a "
                 f"finding is a non-empty string, or a dict of 'text' and "
-                f"'path'.")
+                f"optionally 'path' and 'level'.")
+        if level not in self.FINDING_LEVELS:
+            raise ValueError(
+                f"Module '{module_id}' reported a finding of level "
+                f"{level!r}; a level is one of "
+                f"{', '.join(self.FINDING_LEVELS)}.")
         if not (isinstance(text, str) and text.strip()):
             raise ValueError(f"Module '{module_id}' reported a finding "
                              f"without text: {finding!r}.")
         if path is None:
-            return text.strip(), None
+            return text.strip(), None, level
         path = path.strip() if isinstance(path, str) else ""
         # Its own subtree and nothing else: who may see a finding is decided
         # by the protection of what it names, and that must not be decided by
@@ -571,13 +595,16 @@ class ConfigManager:
             self._logger.warning(
                 f"Module '{module_id}' reported a finding about '{path}', "
                 "which matches nothing; it reaches administrators only.")
-        return text.strip(), path
+        return text.strip(), path, level
 
     def _module_status_report(self, admin):
         """What the editor puts above the panels: the findings, keyed by
         module, as far as this session may see them.
 
-        Each finding is a whole line. No module name is put in front of it --
+        Each finding travels as {"text", "level", "path"}: the text is the key
+        the editor translates, the level says how serious it is, and the path
+        -- None where the module named none -- is where an editor can take
+        the reader. No module name is put in front of the text --
         what a finding is about is often a group inside a module rather than
         the module itself, and only the module knows which. A heading composed
         here would be right for some and misleading for the rest.
@@ -593,12 +620,13 @@ class ConfigManager:
         found = {}
         # a copy: a module may report from a thread of its own while this runs
         for m_id, noted in list(self._module_status.items()):
-            texts = [text for text, path in noted
+            shown = [{"text": text, "level": level, "path": path}
+                     for text, path, level in noted
                      if admin or (path is not None and
                                   CvvNode.touches_protected(self, path)
                                   is False)]
-            if texts:
-                found[m_id] = texts
+            if shown:
+                found[m_id] = shown
         if not admin:
             return found
         # The factory password is this library's finding like any other, and
@@ -606,14 +634,17 @@ class ConfigManager:
         # an administrator's business; the person the device stands with can
         # do nothing about it and does not need to be told.
         if self._current_ui_passwd() == self.FACTORY_DEFAULT_PASSWD:
-            found.setdefault(self.OWN_MODULE_ID, []).append(
-                    "The device is still using the factory default password")
+            found.setdefault(self.OWN_MODULE_ID, []).append({
+                    "text": "The device is still using the factory default "
+                            "password",
+                    "level": "warning", "path": None})
         incomplete = [lang for lang in self.supported_languages()
                       if (lambda done, total: done < total)(
                               *self.translation_status(lang))]
         if incomplete:
-            found.setdefault(self.OWN_MODULE_ID, []).append(
-                    "Translations: some are still incomplete.")
+            found.setdefault(self.OWN_MODULE_ID, []).append({
+                    "text": "Translations: some are still incomplete.",
+                    "level": "info", "path": None})
         return found
 
     def _module_states(self):

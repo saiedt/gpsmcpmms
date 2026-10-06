@@ -1046,6 +1046,20 @@ own key and fill the translation templates with variants, and the log is where
 the numbers belong anyway. Which is also why several short findings beat one
 sentence assembled from parts: the combinations multiply, the keys do not.
 
+#### How serious a finding is
+
+A dict may carry a `level` as well: `"error"` for what stops the device doing
+its job, `"info"` for what is merely worth knowing. A finding that says
+neither — every bare string — is a `"warning"`. The level decides nothing in
+the library; it is for the reader, who cannot tell from three findings in one
+colour which of them is why the device does not work.
+
+```python
+found.append({"text": "The server cannot be reached.", "level": "error"})
+```
+
+The editor receives each finding as `{"text", "level", "path"}`.
+
 #### Who sees a finding
 
 A finding is a string, or a dict that also names the path it is about:
@@ -1054,6 +1068,10 @@ A finding is a string, or a dict that also names the path it is about:
 found.append({"text": "Contacts: one of them has no phone number.",
               "path": "app.contacts"})
 ```
+
+The path also reaches the editor, which can then take the reader there: the
+default design puts a **Show** button beside such a finding, opening every
+group on the way down.
 
 Without a path, only administrators see it. With one, it reaches every session
 that is shown that path in full — the person the device stands with included,

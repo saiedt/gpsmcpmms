@@ -46,6 +46,7 @@
  *              flushPendingFiles, PROBE_TYPES, probeValue, captureValue,
  *              runTest, wakeModule, loadLangList, loadLang, reloadData,
  *              refreshStatus
+ *   findings   allFindings, findingsUnder, worstLevel, FINDING_RANK
  *   saving     saveObstacle, unsetBooleans, submitModule
  *   session    takeOverWith, setPassword, endSession
  *   languages  useLanguage, langName, isLangCode, fetchTemplate,
@@ -58,7 +59,8 @@
 
 const S = {
     token: null, readOnly: false, admin: false, factory: false,
-    // what each module last said about itself, keyed by module id
+    // what each module last said about itself, keyed by module id: a list
+    // of findings, each {text, level, path} -- see allFindings()
     moduleStatus: {},
     // what each module is doing at this moment, keyed by module id, as far
     // as it says; and whose the editing session is: "valid" for this page's
@@ -673,6 +675,46 @@ async function submitModule(mid) {
     const rejected = r.data.rejected;
     await reloadData();
     return {outcome: rejected.length > 0 ? "rejected" : "saved", rejected};
+}
+
+/* ---------- findings ----------
+   What the modules have to report, for a design to put wherever it puts such
+   things: all above the form, each beside what it is about, a count at the
+   door of the place to go to.
+
+   `text` is a key and wants xl(). `level` is "error", "warning" or "info" --
+   FINDING_RANK puts them in that order. `path` is where the finding points,
+   and null where the module named no place; such a finding is about its
+   module as a whole, which is how findingsUnder() files it.
+
+   The order within a module is the module's own and is kept: it said the
+   first thing first. */
+const FINDING_RANK = {error: 0, warning: 1, info: 2};
+
+function allFindings() {
+    const out = [];
+    for (const mid of Object.keys(S.moduleStatus).sort())
+        for (const f of S.moduleStatus[mid])
+            out.push({module: mid, text: f.text, level: f.level,
+                      path: f.path || null});
+    return out;
+}
+
+/* Those about `path` or anything below it. A module's id is a path too. */
+function findingsUnder(path) {
+    return allFindings().filter((f) => {
+        const at = f.path || f.module;
+        return at === path || at.startsWith(path + ".");
+    });
+}
+
+/* The most serious level among `findings`, or null for none. */
+function worstLevel(findings) {
+    let worst = null;
+    for (const f of findings)
+        if (worst === null || FINDING_RANK[f.level] < FINDING_RANK[worst])
+            worst = f.level;
+    return worst;
 }
 
 /* ---------- how things stand right now ----------

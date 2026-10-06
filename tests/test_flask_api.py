@@ -158,6 +158,10 @@ def test_a_way_back_that_does_not_register_is_reported_as_a_failure(client):
 # Who is told what a module found
 # --------------------------------------------------------------------------
 
+def _texts(body, module_id):
+    return [finding["text"] for finding in body["module_status"][module_id]]
+
+
 def test_a_finding_reaches_whoever_is_shown_what_it_is_about(client):
     from gpsmcpmms.config import ConfigManager
     config_mgr.register_params(
@@ -176,25 +180,25 @@ def test_a_finding_reaches_whoever_is_shown_what_it_is_about(client):
     body = client.get("/api/cvv_data?passwd="
                       + ConfigManager.FACTORY_DEFAULT_PASSWD).get_json()
     assert body["admin"]
-    assert body["module_status"]["told"] == everything
+    assert _texts(body, "told") == everything
 
     config_mgr._invalidate_session("the same test, now without password")
     body = client.get("/api/cvv_data").get_json()
     assert not body["admin"]
-    assert body["module_status"]["told"] == ["About the open one."]
+    assert _texts(body, "told") == ["About the open one."]
 
     # The answer to a save is filtered the same way: it is the same banner.
     resp = client.post("/api/config/update",
                        headers={**API, "X-GPSMCPMMS-Token": body["token"]},
                        json={"module": "told", "value": {"open": 2}})
-    assert resp.get_json()["module_status"]["told"] == ["About the open one."]
+    assert _texts(resp.get_json(), "told") == ["About the open one."]
 
     # A read-only viewer is shown the open parameter, so the finding about it
     # comes along; the lock decides who may change a value, not who may read
     # what is wrong with it.
     body = client.get("/api/cvv_data").get_json()
     assert body["read_only"]
-    assert body["module_status"]["told"] == ["About the open one."]
+    assert _texts(body, "told") == ["About the open one."]
 
 
 def test_an_update_writes_a_line_naming_the_module(client, caplog):
@@ -542,7 +546,7 @@ def test_the_findings_are_those_the_asking_session_may_see(client):
     seen = client.get("/api/status",
                       headers={"X-GPSMCPMMS-Token": token}).get_json()
     assert any("factory default password" in text
-               for text in seen["module_status"][own])
+               for text in _texts(seen, own))
 
 
 def test_what_a_module_is_asked_with_has_to_be_callable():
@@ -550,3 +554,41 @@ def test_what_a_module_is_asked_with_has_to_be_callable():
         config_mgr.register_params(
             module_id="idle", module_label="Idle", param_dict={},
             callback=lambda value: None, state_func="busy")
+
+
+# --------------------------------------------------------------------------
+# What a finding carries besides its text
+# --------------------------------------------------------------------------
+
+def test_a_finding_travels_with_its_level_and_the_path_it_is_about(client):
+    # The path was used to decide who may read a finding and then dropped, so
+    # an editor could say what was wrong and not where; and every finding
+    # looked as serious as every other.
+    config_mgr.register_params(
+        module_id="ranked", module_label="Ranked",
+        param_dict={"open": {"type": "int", "label": "Open",
+                             "default_val": 1}},
+        callback=lambda value: [
+            {"text": "This is broken.", "path": "ranked.open",
+             "level": "error"},
+            {"text": "Worth knowing.", "level": "info"},
+            "Said the old way."])
+    token = _admin_token(client)
+    seen = client.get("/api/status",
+                      headers={"X-GPSMCPMMS-Token": token}).get_json()
+    assert seen["module_status"]["ranked"] == [
+        {"text": "This is broken.", "level": "error", "path": "ranked.open"},
+        {"text": "Worth knowing.", "level": "info", "path": None},
+        {"text": "Said the old way.", "level": "warning", "path": None}]
+
+
+def test_a_level_nobody_knows_is_refused_where_it_is_reported():
+    config_mgr.register_params(
+        module_id="shouting", module_label="Shouting",
+        param_dict={"open": {"type": "int", "label": "Open",
+                             "default_val": 1}},
+        callback=lambda value: None)
+    with pytest.raises(ValueError, match="level"):
+        config_mgr.update_status("shouting",
+                                 {"text": "Everything is on fire.",
+                                  "level": "fatal"})

@@ -556,7 +556,7 @@ function fieldRow(node, container, relKeys, ctx) {
     const refused = S.probeBad[node.path];
     if ((repeats || refused) && input.classList) input.classList.add("invalid");
 
-    const row = el("div", {class: "field-row"},
+    const row = el("div", {class: "field-row", "data-path": node.path},
         el("label", {}, xl(node.ui.label || node.path.split(".").pop())),
         node.ui.tooltip ? el("span",
             {class: "help", title: xl(node.ui.tooltip)}, "?") : null,
@@ -606,7 +606,8 @@ function withHint(node, ctx, body) {
 function collapsible(pathKey, labelText, tooltip, renderBody, extraClass,
                      headerExtra) {
     const isOpen = !!S.open[pathKey];
-    const group = el("div", {class: `group ${extraClass || ""}`});
+    const group = el("div", {class: `group ${extraClass || ""}`,
+                             "data-path": pathKey});
     const header = el("div", {class: "group-header"},
         el("span", {class: "arrow"}, isOpen ? "▼" : "▶"),
         el("span", {}, labelText),
@@ -1510,12 +1511,38 @@ function drawFindings() {
     box.innerHTML = "";
     for (const mid of Object.keys(S.moduleStatus).sort())
         box.append(el("div", {class: "banner"},
-            ...S.moduleStatus[mid].map(m => el("div", {class: "finding"},
-                xl(m),
-                m === FACTORY_PASSWD_FINDING && S.admin
+            ...S.moduleStatus[mid].map(m => el("div",
+                {class: "finding " + m.level},
+                xl(m.text),
+                m.text === FACTORY_PASSWD_FINDING && S.admin
                     ? el("button", {class: "small", onclick: changePassword},
                          xl("Change password"))
+                    : null,
+                m.path
+                    ? el("button", {class: "small",
+                                    onclick: () => showPath(m.path)},
+                         xl("Show"))
                     : null))));
+}
+
+/* Takes the reader to what a finding is about: every group on the way down
+   is opened, and the deepest thing the page then has for that path is brought
+   into view. That may be less than the path names -- a member of a list is
+   not a place of its own on this page, and the list it belongs to is as near
+   as it gets. */
+function showPath(path) {
+    const parts = path.split(".");
+    const prefixes = parts.map((_, i) => parts.slice(0, i + 1).join("."));
+    for (const prefix of prefixes) S.open[prefix] = true;
+    renderAll();
+    for (const prefix of prefixes.reverse()) {
+        const target = [...document.querySelectorAll("[data-path]")]
+            .find(e => e.getAttribute("data-path") === prefix);
+        if (target) {
+            target.scrollIntoView({block: "center"});
+            break;
+        }
+    }
 }
 
 /* Looks again every ten seconds while the page is being looked at. What a

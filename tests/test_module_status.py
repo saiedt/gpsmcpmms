@@ -28,7 +28,8 @@ def _register(mgr, module_id, callback):
 
 
 def _messages(mgr, module_id, admin=True):
-    return mgr._module_status_report(admin).get(module_id)
+    found = mgr._module_status_report(admin).get(module_id)
+    return None if found is None else [finding["text"] for finding in found]
 
 
 def test_a_silent_callback_reports_nothing(mgr):
