@@ -291,6 +291,21 @@ def test_the_core_draws_nothing():
         assert not re.search(drawing, core), drawing
 
 
+def test_the_default_design_leaves_what_a_value_is_to_the_core():
+    # Whether a typed number is valid, how a scaled value reads, which option
+    # stands in for an unanswered field: a design that decided any of that
+    # itself would decide it differently from the next one.
+    import os
+    import gpsmcpmms
+    path = os.path.join(os.path.dirname(gpsmcpmms.__file__), "ui",
+                        "default.js")
+    with open(path, encoding="utf-8") as handle:
+        design = handle.read()
+    for rule in ("validValue(", "scaleIn(", "scaleOut(", "ui.likely_val",
+                 "o.proposed", "one_of_for", "ranged_int", "hexOfColor("):
+        assert rule not in design, rule
+
+
 def test_the_default_design_speaks_to_the_device_only_through_the_core():
     # A design that issued requests of its own would have to be told about
     # every change to the REST-API; one that does not, cannot fall behind it.

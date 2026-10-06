@@ -410,11 +410,13 @@ Replace as little as the application needs:
   goes into `ui_dir/assets/` and is served at `/assets/…`. An appliance's own
   network often leads nowhere, so nothing should be fetched from elsewhere.
 
-A design builds on the names `core.js` declares; the list is at the top of that
-file, grouped by what they are for. It is held to one rule, which the default
-design is tested against: **a design never speaks to the device itself.** Every
-request goes out from the core, so that a change to the REST API is made in one
-place and reaches every design with the upgrade.
+A design builds on the names `core.js` declares; they are listed below and at
+the top of that file. It is held to two rules, which the default design is
+tested against: **a design never speaks to the device itself**, and **a design
+never decides what a value is.** Every request goes out from the core, and
+every judgement about a value — valid or not, which option stands in for an
+empty field, how a scaled number reads — is the core's, so that a change to
+either is made in one place and reaches every design with the upgrade.
 
 Three things are said across the line between the two:
 
@@ -455,6 +457,125 @@ on a page, what a list entry is summed up as. `S.state` carries what each
 module's `state_func` says it is doing at this moment, and `allFindings()`,
 `findingsUnder(path)` and `worstLevel()` put the findings wherever the design
 wants them — above the form, beside the field, as a count at the door.
+
+#### What `core.js` declares
+
+Everything is a plain global; a design loads `/core.js` first and uses them by
+name. Paths are dump paths (`module.group.field`), `node` is a node of
+`S.cvv`, `container` and `relKeys` locate a value inside a draft, and `ctx` is
+the context a design carries down the tree (`rerender`, `adopted`,
+`markDirty`, `markDirtyQuiet`, and whatever the list rules below name).
+
+**State**
+
+| Name | What it is |
+|------|------------|
+| `S` | The editor's state: `token`, `readOnly`, `admin`, `session`, `cvv` (the tree), `edit` (the draft of every module's value), `dirty`, `moduleStatus` (findings), `state` (what each module is doing), `dormant`, `enums`, `hints`, `pendingFiles`, `probeBad`, `lang`, `languages`, `langNames`, `appTitle`, `coverage`, `orphans`, and whatever a design adds. |
+
+**Small things**
+
+| Name | What it does |
+|------|--------------|
+| `xl(key)` | The key in the reader's language, or the key itself. |
+| `deepCopy(v)` | A JSON copy. |
+| `getIn(obj, keys)` / `setIn(obj, keys, v)` | Read or write a value at a key path. |
+| `api(path, opts)` | One request to the device, with the API header and the token; `{status, data}`. Rarely needed by a design. |
+| `authHeaders()` | The headers `api()` sends, for a `fetch()` of a file. |
+
+**Values**
+
+| Name | What it does |
+|------|--------------|
+| `composeValue(node)` | The value a node holds, as a draft: a dict of its children or a copy of its value. |
+| `scaleOut(ui, v)` / `scaleIn(ui, cons, d)` | Model to display and back, for a parameter with `s2g_scale`. |
+| `inRange(v, range)` | Whether `v` lies within `[lo, hi]`, either end possibly `null`. |
+| `validValue(cons, v)` | Whether a model value satisfies its constraints; `null` is always valid. |
+| `hexOfColor(rgb)` / `colorOfHex(hex)` | `[r, g, b]` to `#rrggbb` and back. |
+
+**Fields** — what one leaf is, for whoever draws it
+
+| Name | What it does |
+|------|--------------|
+| `fieldSpec(node, cur, ctx, enumArg)` | Everything about drawing one leaf: `kind` (`boolean`, `enum`, `color`, `number`, `text`), `fixed`, `backend`, `placeholder`, and by kind the options (fetched if need be, with `pending`/`error` meanwhile), the proposal taken, whether the held value is orphaned, the display value, the step. |
+| `readField(spec, raw)` | What was typed, as a model value: `{value}` or `{invalid: true}`. |
+| `optionWording(option)` | `{text, hint}` of one option, translated unless verbatim. |
+| `likelyValue(node, cur, relKeys, ctx)` | The `likely_val` to fill into an empty field, once per draft; `undefined` otherwise. The caller writes it. |
+| `proposedOption(node, cur, options, ctx)` | The option marked `proposed` that stands in for an empty or outdated value of a `one_of_for` field, once per draft; `undefined` otherwise. |
+
+**Structure**
+
+| Name | What it does |
+|------|--------------|
+| `enumArgOf(cons, container, relKeys)` | The sibling value a `one_of_for` provider is asked with. |
+| `relevanceHolds(rule, dictValue)` | Whether a relevance rule is met by the dict it belongs to. |
+| `visibleChildren(node, container, relKeys)` | The children of a dict that are on screen: not hidden, relevance met. |
+| `hasVisibleContent(node, container, relKeys)` | Whether a group would show anything at all. |
+| `memberLabel(template, v)` | What a member of a simple list reads as. |
+| `resolveWithPaths(value, parts, prefix)` / `pathMatchesPattern(pattern, path)` / `takenElsewhere(ctx, absKeys)` | The `distinct_values` machinery: which values a group of patterns already holds elsewhere. |
+| `usedEnumValuesIn(list, exceptIdx, prop)` | The values of `prop` the other members of a list hold. |
+| `checkModuleLists(node, value, focusErr)` | Whether every visible list meets its minimum size; `focusErr` is told which does not. |
+| `collectUnsetBooleans(node, container, relKeys, found)` | The booleans nobody has answered, into `found`. |
+
+**Members of a list of records** — asked of a draft before it is applied
+
+| Name | What it does |
+|------|--------------|
+| `standaloneKeysOf(cons)` | The keys that must be unique on their own. |
+| `memberIsLocked(cons, list, idx)` | Whether a record is protected by its own flag and this session may not touch it. |
+| `memberRepeatsKey(cons, list, idx, draft, ctx)` | Whether the draft repeats a key another member holds. |
+| `memberLacksKey(cons, draft)` | Whether a key of the draft is still empty. |
+
+**The device**
+
+| Name | What it does |
+|------|--------------|
+| `fetchEnumOptions(path, rerender, arg, refresh)` | Asks for a dynamic enum's options into `S.enums[path]`; `refresh` asks the device to look again. |
+| `fetchHint(path, rerender)` | Asks for a dynamic hint into `S.hints[path]`, with the moment it was established. |
+| `pendingFilesFor(path)` | The files chosen for a `file` parameter and not yet sent. |
+| `flushPendingFiles(module)` | Sends them, just before a save; `false` if one was refused. |
+| `PROBE_TYPES` / `probeValue(node, value, rerender)` | Which types the device can verify, and the verdict into `S.probeBad`. |
+| `captureValue(path)` | One capture of a backend-provided value: `{value}`, `{timeout}` or `{error}`. |
+| `runTest(path, value)` | The declared test: `{started, clean, error}`. |
+| `wakeModule(module)` | Calls a retired module back; `true` if it registered. |
+| `loadLangList()` / `loadLang()` | The languages the device has, and the dictionary of the chosen one. |
+| `reloadData(passwd)` | The whole tree afresh, as the session may see it; with the password, as an administrator. Resets the drafts and tells `onReload` listeners. |
+| `refreshStatus()` | Findings, state and the standing of the session, without touching the session; `true` if anything changed, `null` if the device did not answer. |
+
+**Findings**
+
+| Name | What it does |
+|------|--------------|
+| `FINDING_RANK` | `error` before `warning` before `info`. |
+| `allFindings()` | Every finding this session may see, as `{module, text, level, path}`. |
+| `findingsUnder(path)` | Those about `path` or anything below it. |
+| `worstLevel(findings)` | The most serious level among them, or `null`. |
+
+**Saving**
+
+| Name | What it does |
+|------|--------------|
+| `saveObstacle(module)` | What stops a save before anything is sent (a list too short, a value the device refused), or `null`. |
+| `unsetBooleans(module)` | The booleans still owed an answer, for the design to ask about. |
+| `submitModule(module)` | Sends files and values; `{outcome}` is `files`, `ended`, `failed`, `rejected` or `saved`. |
+
+**The session, the languages, wording**
+
+| Name | What it does |
+|------|--------------|
+| `takeOverWith(passwd)` | Takes the editing session over: `ok`, `refused` or `silent`. |
+| `setPassword(new)` | Sets the administrator password; `true` on success. |
+| `endSession()` | Releases the editing session. |
+| `useLanguage(code)` | Switches the reading language and loads its dictionary. |
+| `langName(code)` / `isLangCode(code)` / `RTL_LANGS` | The name of a language, whether a code looks like one, and which are written right to left. |
+| `fetchTemplate(target, refs)` / `sendTranslation(file, target, name)` / `targetFromFileName(file)` | The CSV round-trip: `{blob}` or `{error}`, `{report, translated, total}` or `{error}`. |
+| `editorTitle()` | What the editor is called, with the application's name in it. |
+
+**What the core tells a design**
+
+| Name | What it does |
+|------|--------------|
+| `onNotify(fn)` | `fn(text, cls)` is called for whatever the core has to say; `cls` is `info`, `ok` or `error`. |
+| `onReload(fn)` | `fn()` is called when `reloadData()` has replaced the tree. |
 
 This section is also written to be handed over. An AI assistant given it,
 the list of names at the top of `core.js` and a description of the application

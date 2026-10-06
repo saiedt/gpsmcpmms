@@ -36,6 +36,8 @@
  *   small      xl, deepCopy, getIn, setIn, api, authHeaders
  *   values     composeValue, scaleOut, scaleIn, inRange, validValue,
  *              hexOfColor, colorOfHex
+ *   fields     fieldSpec, readField, optionWording, likelyValue,
+ *              proposedOption
  *   structure  enumArgOf, relevanceHolds, visibleChildren, hasVisibleContent,
  *              memberLabel, resolveWithPaths, takenElsewhere,
  *              pathMatchesPattern, usedEnumValuesIn, checkModuleLists,
@@ -257,6 +259,222 @@ function hexOfColor(v) {
 }
 function colorOfHex(h) {
     return [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+}
+
+/* ---------- what a field is ----------
+   Everything a design has to know to draw one leaf, and nothing about how.
+
+   fieldSpec() answers for a leaf and the value it currently holds:
+
+     kind         "boolean", "enum", "color", "number" or "text"
+     fixed        nobody may write it: read-only session, configurability 0,
+                  or a locked record around it
+     backend      the device fills it (configurability 2); shown, not typed
+     placeholder  what to show while it is empty
+     and by kind:
+     enum         pending / error while the options are on their way or
+                  failed to come; else options (the ones on offer, taken
+                  ones left out), cur (possibly a proposal just taken, see
+                  proposedOption()), proposal (that value, or undefined),
+                  orphaned (cur is held but is none of the options)
+     color        hex, as an <input type=color> wants it
+     number       shown (scaled for display), isInt, step
+     text         shown, secret (a password)
+
+   readField() turns what was typed back into a value of the model, or says
+   it is invalid. The two are the one place the rules about a field are
+   written; a design that drew a field by other means still asks them. */
+function fieldSpec(node, cur, ctx, enumArg) {
+    const cons = node.constraints || {}, ui = node.ui || {};
+    // ctx.locked: not the declaration but the record this field sits in --
+    // a member of a list with 'protected_by' whose flag is set, seen by a
+    // session without the password. It travels in the context because it
+    // has to reach every leaf below the record, however deep.
+    const spec = {
+        node, cons, ui, cur,
+        fixed: S.readOnly || node.configurability === 0 || !!(ctx && ctx.locked),
+        backend: node.configurability === 2,
+        placeholder: ui.placeholder || "",
+    };
+    if (cons.type === "boolean") {
+        spec.kind = "boolean";
+        return spec;
+    }
+    if (cons.one_of !== undefined) {
+        spec.kind = "enum";
+        let options = Array.isArray(cons.one_of) ? cons.one_of : null;
+        if (options === null) {           // dynamic enum
+            const state = S.enums[node.path];
+            // Ask again as soon as the field the options are computed from
+            // has become another one -- in the draft, long before saving:
+            // the voices of a language nobody has applied yet.
+            if (!state || state.arg !== enumArg) {
+                fetchEnumOptions(node.path, ctx.rerender, enumArg);
+                spec.pending = true;
+                return spec;
+            }
+            if (state.pending) { spec.pending = true; return spec; }
+            if (state.error) { spec.error = state.error; return spec; }
+            options = Object.entries(state.values).map(([value, o]) =>
+                ({value, label: (o && o.label) || value,
+                  tooltip: o && o.tooltip,
+                  // a name the service made up is not translated -- and so
+                  // stands in no dictionary either
+                  verbatim: !!(o && o.verbatim),
+                  // the one that takes over when the stored value answered a
+                  // different question -- see proposedOption()
+                  proposed: !!(o && o.proposed)}));
+        }
+        // a file waiting to be sent is already choosable, though the device
+        // has never heard of it -- that is the whole point of choosing before
+        // saving
+        if (cons.type === "file")
+            for (const {name} of (S.pendingFiles[node.path] || []))
+                if (!options.some(o => o.value === name))
+                    options.push({value: name, label: name});
+        if (ctx.usedEnumValues)           // uniqueness filter (spec 4.9.2)
+            options = options.filter(o => o.value === cur ||
+                                          !ctx.usedEnumValues.has(o.value));
+        spec.options = options;
+        spec.proposal = proposedOption(node, cur, options, ctx);
+        if (spec.proposal !== undefined) spec.cur = cur = spec.proposal;
+        // A stored value that is no longer among the options keeps its place
+        // in the list, marked. Without this the browser quietly moved the
+        // selection to the empty option: the value was gone from the screen
+        // *and* from the DOM, so anybody who saved that row for an unrelated
+        // reason wrote the emptiness back and lost the assignment -- which is
+        // how a service card came to point at nothing.
+        //
+        // A dynamic enum's options are settled only at runtime, which is why
+        // the core could never check the stored value against them ("defer
+        // the exact check" in cvv_tree). Once the provider stops offering it,
+        // the stored value is a leftover -- and the editor used to throw it
+        // away, quietly. It was meant to make the device's state agree with
+        // a field that already looked empty. But the emptiness was only
+        // staged: the store kept the value until somebody saved that panel
+        // for some other reason, and then a service card lost what it was
+        // for. That value is the one record of it -- 4525e783 can still be
+        // looked up and found to have been "Formalitäten"; a null cannot.
+        // So it stays, and the field says so instead.
+        spec.orphaned = cur !== null && cur !== undefined && cur !== ""
+                        && !options.some(o => o.value === cur);
+        return spec;
+    }
+    if (cons.type === "color") {
+        spec.kind = "color";
+        spec.hex = hexOfColor(cur);
+        return spec;
+    }
+    const numeric = cons.ranged_int || cons.ranged_float ||
+                    cons.type === "int" || cons.type === "float";
+    if (numeric) {
+        spec.kind = "number";
+        spec.isInt = !!cons.ranged_int || cons.type === "int";
+        spec.step = spec.isInt && !ui.scale_op ? "1" : "any";
+        spec.shown = cur === null || cur === undefined ? "" : scaleOut(ui, cur);
+        return spec;
+    }
+    spec.kind = "text";
+    spec.secret = cons.type === "password";
+    spec.shown = cur === null || cur === undefined ? "" : cur;
+    return spec;
+}
+
+function readField(spec, raw) {
+    const cons = spec.cons, ui = spec.ui;
+    switch (spec.kind) {
+    case "number": {
+        if (raw.trim() === "") return {value: null};
+        const d = parseFloat(raw);
+        if (Number.isNaN(d)) return {invalid: true};
+        let v = scaleIn(ui, cons, d);
+        if (spec.isInt && !ui.scale_op) {
+            if (!Number.isInteger(d)) return {invalid: true};
+            v = Math.round(v);
+        }
+        if (!spec.isInt && Number.isInteger(v)) v = v + 0.0;
+        if (!validValue(cons, spec.isInt ? v : parseFloat(v)))
+            return {invalid: true};
+        return {value: v};
+    }
+    case "text": {
+        const v = raw === "" ? null : raw;
+        return validValue(cons, v) ? {value: v} : {invalid: true};
+    }
+    case "color": return {value: colorOfHex(raw)};
+    case "enum": return {value: raw || null};
+    default: return {value: !!raw};
+    }
+}
+
+/* What an option reads as. The two halves are translated differently on
+   purpose: a verbatim label is an identifier and stays as it is, while the
+   tooltip beside it is prose. So "de-DE-Wavenet-H (weiblich)" -- the name
+   untouched, the hint in the reader's language.
+
+   The hint belongs in the visible text and not only in a title: a title on
+   an <option> is honoured by hardly any browser -- Firefox shows it, Chrome
+   and Edge do not -- and a hint nobody sees is the same as no hint. It cost
+   somebody an afternoon of listening to voices they did not want, because the
+   one thing that told male from female was in that title. */
+function optionWording(o) {
+    return {text: o.verbatim ? o.label : xl(o.label),
+            hint: o.tooltip ? xl(o.tooltip) : null};
+}
+
+/* ---------- proposals ----------
+   Two kinds of value the editor fills in on the device's behalf, each taken
+   once per draft and then left alone: clearing the field by hand has to stay
+   possible, and re-filling it on every render would make that impossible.
+   Which drafts have taken what is kept in ctx.adopted, a Set the design hands
+   in; it survives a save on purpose, so a proposal somebody cleared does not
+   come back with the reloaded tree. Both return the value to take, or
+   undefined; writing it into the draft is the caller's, who holds it. */
+
+/* A likely_val is a proposal, not a decision: the backend never adopts it --
+   an unset parameter keeps config_ready() false, which is the whole
+   difference to a default_val -- but the editor fills it in, so that the
+   admin only has to confirm it by saving, or type something else over it. */
+function likelyValue(node, cur, relKeys, ctx) {
+    const proposal = node.ui.likely_val;
+    const adoptKey = relKeys.join(".");
+    if (proposal === undefined || !(cur === null || cur === undefined) ||
+            node.configurability !== 1 || S.readOnly ||
+            ctx.adopted.has(adoptKey))
+        return undefined;
+    ctx.adopted.add(adoptKey);
+    return proposal;
+}
+
+/* Where the options depend on a sibling field (one_of_for) and that field
+   has moved on, the stored value is not a leftover: it is the answer to the
+   question before this one, and it will be written over by the next save
+   whatever happens. A provider may then say which of the new options takes
+   its place, and the editor fills that in.
+
+   The voice of the speech output is the case this was built for: choose
+   another language and the voice belongs to the language before it, while
+   the recordings of the new one already name the voice they were made with.
+
+   And it fills a field nobody has answered at all. That is the same case
+   seen earlier: a declaration cannot know what the device it is running on
+   already does, so the honest declaration names no default_val and the
+   field comes up empty -- which leaves the parameter unanswered, and the
+   device unfinished, until somebody says so. The proposal stands in until
+   then, to be confirmed by saving or typed over. */
+function proposedOption(node, cur, options, ctx) {
+    const cons = node.constraints || {};
+    const unanswered = (cur === null || cur === undefined || cur === "");
+    const proposalKey = "proposed:" + node.path;
+    if (cons.one_of_for === undefined || S.readOnly ||
+            node.configurability !== 1 ||
+            !(unanswered ? !ctx.adopted.has(proposalKey)
+                         : !options.some(o => o.value === cur)))
+        return undefined;
+    const takesOver = options.find(o => o.proposed);
+    if (!takesOver) return undefined;
+    if (unanswered) ctx.adopted.add(proposalKey);
+    return takesOver.value;
 }
 
 /* ---------- dynamic enums (spec 4.9.1) ---------- */

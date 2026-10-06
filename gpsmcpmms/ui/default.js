@@ -208,145 +208,42 @@ function uploadButton(node, ctx, commit) {
 /* ---------- single input fields ---------- */
 function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
     // returns an element whose 'change' leads to commit(newModelValue)
-    const cons = node.constraints || {}, ui = node.ui || {};
-    // ctx.locked: not the declaration but the record this field sits in --
-    // a member of a list with 'protected_by' whose flag is set, seen by a
-    // session without the password. It travels in the context because it
-    // has to reach every leaf below the record, however deep.
-    const fixed = S.readOnly || node.configurability === 0 ||
-                  !!(ctx && ctx.locked);
-    const backend = node.configurability === 2;
+    //
+    // What the field is -- its kind, its options, what it shows, whether it
+    // may be written -- is fieldSpec()'s answer, and what a typed value is
+    // worth is readField()'s. This function only chooses the element and
+    // wires the two up.
+    const spec = fieldSpec(node, cur, ctx, enumArg);
     const fail = (input) => {
         input.classList.add("invalid");
         msg(xl("Invalid input"), "error");
         setTimeout(() => input.focus(), 0);   // keep the focus (spec 4.5)
     };
     const ok = (input, v) => { input.classList.remove("invalid"); commit(v); };
+    const read = (input) => {
+        const got = readField(spec, input.value);
+        if (got.invalid) fail(input); else ok(input, got.value);
+    };
+    const off = spec.fixed ? "" : null;
+    const held = spec.fixed || spec.backend ? "" : null;
 
-    if (cons.type === "boolean") {
-        return el("input", {type: "checkbox", disabled: fixed ? "" : null,
+    switch (spec.kind) {
+    case "boolean":
+        return el("input", {type: "checkbox", disabled: off,
             // touching the box always answers it, so the third state goes away
             onchange: (e) => { e.target.indeterminate = false;
-                               commit(e.target.checked); }},
-            );
-    }
-    if (cons.one_of !== undefined) {
-        let options = Array.isArray(cons.one_of) ? cons.one_of : null;
-        if (options === null) {           // dynamic enum
-            const state = S.enums[node.path];
-            // Ask again as soon as the field the options are computed from
-            // has become another one -- in the draft, long before saving:
-            // the voices of a language nobody has applied yet.
-            if (!state || state.arg !== enumArg) {
-                fetchEnumOptions(node.path, ctx.rerender, enumArg);
-                return el("select", {disabled: ""}, el("option", {}, "…"));
-            }
-            if (state.pending)
-                return el("select", {disabled: ""}, el("option", {}, "…"));
-            if (state.error)
-                return el("select", {disabled: "", class: "invalid"},
-                          el("option", {}, xl(state.error)));
-            options = Object.entries(state.values).map(([value, o]) =>
-                ({value, label: (o && o.label) || value,
-                  tooltip: o && o.tooltip,
-                  // a name the service made up is not translated -- and so
-                  // stands in no dictionary either
-                  verbatim: !!(o && o.verbatim),
-                  // the one that takes over when the stored value answered a
-                  // different question -- see below
-                  proposed: !!(o && o.proposed)}));
-        }
-        // a file waiting to be sent is already choosable, though the device
-        // has never heard of it -- that is the whole point of choosing before
-        // saving
-        if (cons.type === "file")
-            for (const {name} of (S.pendingFiles[node.path] || []))
-                if (!options.some(o => o.value === name))
-                    options.push({value: name, label: name});
-        // A dynamic enum's options are settled only at runtime, which is why
-        // the core could never check the stored value against them ("defer
-        // the exact check" in cvv_tree). Once the provider stops offering it,
-        // the stored value is a leftover -- and this is where the editor used
-        // to throw it away, quietly, with commitQuiet(null).
-        //
-        // It was meant to make the device's state agree with a field that
-        // already looked empty. But the emptiness was only staged: the store
-        // kept the value until somebody saved that panel for some other
-        // reason, and then a service card lost what it was for. That value is
-        // the one record of it -- 4525e783 can still be looked up and found
-        // to have been "Formalitäten"; a null cannot.
-        //
-        // So it stays, and the field says so instead. The agreement the old
-        // code wanted is restored the other way round: the screen stops
-        // claiming the field is empty.
-        if (ctx.usedEnumValues)           // uniqueness filter (spec 4.9.2)
-            options = options.filter(o => o.value === cur ||
-                                          !ctx.usedEnumValues.has(o.value));
-        // An option's tooltip goes into the visible text, not only into the
-        // title. A title on an <option> is honoured by hardly any browser --
-        // Firefox shows it, Chrome and Edge do not -- and a hint nobody sees
-        // is the same as no hint. It cost somebody an afternoon of listening
-        // to voices they did not want, because the one thing that told male
-        // from female was in that title.
-        //
-        // The two halves are translated differently on purpose: a verbatim
-        // label is an identifier and stays as it is, while the tooltip beside
-        // it is prose. So "de-DE-Wavenet-H (weiblich)" -- the name untouched,
-        // the hint in the reader's language.
-        // ...unless the value never belonged to this list in the first
-        // place. Where the options depend on a sibling field (one_of_for)
-        // and that field has moved on, the stored value is not a leftover:
-        // it is the answer to the question before this one, and it will be
-        // written over by the next save whatever happens. A provider may
-        // then say which of the new options takes its place, and the editor
-        // fills that in -- once per draft, like a likely_val, so that
-        // clearing the field by hand stays possible.
-        //
-        // The voice of the speech output is the case this was built for:
-        // choose another language and the voice belongs to the language
-        // before it, while the recordings of the new one already name the
-        // voice they were made with.
-        // And it fills a field nobody has answered at all. That is the
-        // same case seen earlier: a declaration cannot know what the device
-        // it is running on already does, so the honest declaration names no
-        // default_val and the field comes up empty -- which leaves the
-        // parameter unanswered, and the device unfinished, until somebody
-        // says so. The proposal stands in until then, to be confirmed by
-        // saving or typed over, and is taken once per draft like the
-        // likely_val above: re-filling it on every render would make
-        // emptying the field by hand impossible.
-        const unanswered = (cur === null || cur === undefined || cur === "");
-        const proposalKey = "proposed:" + node.path;
-        if (cons.one_of_for !== undefined && !S.readOnly &&
-                node.configurability === 1 &&
-                (unanswered ? !ctx.adopted.has(proposalKey)
-                            : !options.some(o => o.value === cur))) {
-            const takesOver = options.find(o => o.proposed);
-            if (takesOver) {
-                if (unanswered) ctx.adopted.add(proposalKey);
-                cur = takesOver.value;
-                commitQuiet(cur);
-            }
-        }
-        // A stored value that is no longer among the options keeps its place
-        // in the list, marked. Without this the browser quietly moved the
-        // selection to the empty option: the value was gone from the screen
-        // *and* from the DOM, so anybody who saved that row for an unrelated
-        // reason wrote the emptiness back and lost the assignment -- which is
-        // how a service card came to point at nothing.
-        //
-        // Said in words and shown in red, rather than by printing the value
-        // itself: what is stored here is an identifier, and an identifier
-        // tells a reader nothing. What they need to know is that the field
-        // holds something the list cannot account for. The option still
-        // carries the real value, so selecting nothing else leaves it
-        // untouched; the raw id goes in the select's title, for whoever is
-        // diagnosing rather than deciding.
-        const orphanedValue = cur !== null && cur !== undefined && cur !== ""
-                              && !options.some(o => o.value === cur);
-        const sel = el("select", {disabled: fixed || backend ? "" : null,
-                class: orphanedValue ? "invalid" : null,
-                title: orphanedValue ? cur : null,
+                               commit(e.target.checked); }});
+    case "enum": {
+        if (spec.pending)
+            return el("select", {disabled: ""}, el("option", {}, "…"));
+        if (spec.error)
+            return el("select", {disabled: "", class: "invalid"},
+                      el("option", {}, xl(spec.error)));
+        // a proposal taken is a value the draft now holds; see proposedOption()
+        if (spec.proposal !== undefined) commitQuiet(spec.proposal);
+        const sel = el("select", {disabled: held,
+                class: spec.orphaned ? "invalid" : null,
+                title: spec.orphaned ? spec.cur : null,
                 onchange: (e) => commit(e.target.value || null)},
             // The empty entry is blank, and says nothing: a field nobody
             // has filled in shows it, and a word there would read like a
@@ -355,61 +252,38 @@ function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
             // is a button of its own now, and the entry is back to meaning
             // "nothing chosen".
             el("option", {value: ""}, ""),
-            orphanedValue
-                ? el("option", {value: cur}, xl("Value not known"))
+            spec.orphaned
+                ? el("option", {value: spec.cur}, xl("Value not known"))
                 : null,
-            ...options.map(o => {
-                const text = o.verbatim ? o.label : xl(o.label);
-                const hint = o.tooltip ? xl(o.tooltip) : null;
+            ...spec.options.map(o => {
+                const {text, hint} = optionWording(o);
                 return el("option", {value: o.value, title: hint},
                           hint ? `${text} (${hint})` : text);
             }));
-        sel.value = cur === null || cur === undefined ? "" : cur;
+        sel.value = spec.cur === null || spec.cur === undefined ? "" : spec.cur;
         return sel;
     }
-    if (cons.type === "color") {
-        return el("input", {type: "color", value: hexOfColor(cur),
-            disabled: fixed || backend ? "" : null,
+    case "color":
+        return el("input", {type: "color", value: spec.hex, disabled: held,
             onchange: (e) => commit(colorOfHex(e.target.value))});
-    }
-    const numeric = cons.ranged_int || cons.ranged_float ||
-                    cons.type === "int" || cons.type === "float";
-    if (numeric) {
-        const isInt = !!cons.ranged_int || cons.type === "int";
-        const input = el("input", {type: "number",
-            step: isInt && !ui.scale_op ? "1" : "any",
-            value: cur === null || cur === undefined ? "" : scaleOut(ui, cur),
-            placeholder: ui.placeholder || "",
-            disabled: fixed ? "" : null, readonly: backend ? "" : null});
-        input.addEventListener("change", () => {
-            if (input.value.trim() === "") return ok(input, null);
-            const d = parseFloat(input.value);
-            if (Number.isNaN(d)) return fail(input);
-            let v = scaleIn(ui, cons, d);
-            if (isInt && !ui.scale_op) {
-                if (!Number.isInteger(d)) return fail(input);
-                v = Math.round(v);
-            }
-            if (!isInt && Number.isInteger(v)) v = v + 0.0;
-            if (!validValue(cons, isInt ? v : parseFloat(v)))
-                return fail(input);
-            ok(input, v);
-        });
+    case "number": {
+        const input = el("input", {type: "number", step: spec.step,
+            value: spec.shown, placeholder: spec.placeholder,
+            disabled: off, readonly: spec.backend ? "" : null});
+        input.addEventListener("change", () => read(input));
         return input;
     }
-    const input = el("input", {
-        type: cons.type === "password" ? "password" : "text",
-        value: cur === null || cur === undefined ? "" : cur,
-        placeholder: ui.placeholder || "",
-        disabled: fixed ? "" : null, readonly: backend ? "" : null});
-    input.addEventListener("keydown",
-        (e) => { if (e.key === "Enter" || e.keyCode === 13) input.blur(); });
-    input.addEventListener("change", () => {
-        const v = input.value === "" ? null : input.value;
-        if (!validValue(cons, v)) return fail(input);
-        ok(input, v);
-    });
-    return input;
+    default: {
+        const input = el("input", {
+            type: spec.secret ? "password" : "text",
+            value: spec.shown, placeholder: spec.placeholder,
+            disabled: off, readonly: spec.backend ? "" : null});
+        input.addEventListener("keydown",
+            (e) => { if (e.key === "Enter" || e.keyCode === 13) input.blur(); });
+        input.addEventListener("change", () => read(input));
+        return input;
+    }
+    }
 }
 
 /* value capture for backend_provided params (spec 4.9.3) */
@@ -498,18 +372,9 @@ function probeButton(node, currentValue, rerender) {
 function fieldRow(node, container, relKeys, ctx) {
     let cur = getIn(container, relKeys);
     const cons = node.constraints || {};
-    // A likely_val is a proposal, not a decision: the backend never adopts it
-    // -- an unset parameter keeps config_ready() false, which is the whole
-    // difference to a default_val -- but the editor fills it in, so that the
-    // admin only has to confirm it by saving, or type something else over it.
-    // Adopting once per draft keeps emptying the field possible; re-filling it
-    // on every render would not.
-    const proposal = node.ui.likely_val;
-    const adoptKey = relKeys.join(".");
-    if (proposal !== undefined && (cur === null || cur === undefined) &&
-            node.configurability === 1 && !S.readOnly &&
-            !ctx.adopted.has(adoptKey)) {
-        ctx.adopted.add(adoptKey);
+    // a proposal the draft takes is written like a value, without a render
+    const proposal = likelyValue(node, cur, relKeys, ctx);
+    if (proposal !== undefined) {
         cur = proposal;
         setIn(container, relKeys, cur);
         ctx.markDirtyQuiet();
