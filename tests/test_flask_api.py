@@ -244,3 +244,35 @@ def test_a_refused_upload_says_why_in_a_key(client, tmp_path):
     assert resp.get_json()["error"] in ConfigManager.OWN_UI_KEYS
     # a file the value was refused for does not stay behind (spec 4.9.6)
     assert not (tmp_path / "horn.wav").exists()
+
+
+# --------------------------------------------------------------------------
+# Files a design of its own brings along
+# --------------------------------------------------------------------------
+
+def test_a_design_can_bring_files_of_its_own(client):
+    import os
+    folder = os.path.join(config_mgr.ui_dir, config_mgr.ASSET_SUBDIR, "fonts")
+    os.makedirs(folder, exist_ok=True)
+    font = os.path.join(folder, "own.woff2")
+    with open(font, "wb") as handle:
+        handle.write(b"wOF2")
+    try:
+        resp = client.get("/assets/fonts/own.woff2")
+        assert resp.status_code == 200
+        assert resp.get_data() == b"wOF2"
+        resp.close()
+    finally:
+        os.remove(font)
+    assert client.get("/assets/fonts/own.woff2").status_code == 404
+
+
+def test_nothing_beside_the_asset_folder_can_be_fetched_through_it(client):
+    # ui_dir also holds the dictionaries and the stamp of what was staged;
+    # the route serves its own folder and does not climb out of it.
+    import os
+    os.makedirs(os.path.join(config_mgr.ui_dir, config_mgr.ASSET_SUBDIR),
+                exist_ok=True)
+    assert os.path.exists(os.path.join(config_mgr.ui_dir, "app.js"))
+    for name in ("../app.js", "..%2Fapp.js", "../.staged.json"):
+        assert client.get("/assets/" + name).status_code == 404

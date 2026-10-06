@@ -144,6 +144,12 @@ class ConfigManager:
     PING_TIMEOUT = 2
     # the editor's web assets, and the record of what was staged into ui_dir
     WEB_ASSETS = ("index.html", "style.css", "app.js")
+    # Where a deployment's own design keeps what its three files refer to --
+    # fonts, images, further scripts and stylesheets. A folder of its own
+    # rather than ui_dir as a whole: beside the assets lie the dictionaries,
+    # the stamp of what was staged and whatever an upgrade set aside, and
+    # none of that is anybody's to fetch by guessing a name.
+    ASSET_SUBDIR = "assets"
     ASSET_STAMP = ".staged.json"
     # column separator of the translation CSVs: a pipe is chosen because it is
     # very unlikely to occur inside a key or a translation, so cells
@@ -2189,6 +2195,14 @@ class ConfigManager:
         @app.route("/app.js")
         def app_js():
             return send_from_directory(self.ui_dir, "app.js")
+
+        @app.route(f"/{self.ASSET_SUBDIR}/<path:name>")
+        def design_asset(name):
+            # send_from_directory refuses a name that leaves the folder, and
+            # answers 404 where the folder itself is missing: a deployment
+            # without a design of its own has none.
+            return send_from_directory(
+                    os.path.join(self.ui_dir, self.ASSET_SUBDIR), name)
 
         @app.route("/api/cvv_data")
         def cvv_data():

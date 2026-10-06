@@ -683,7 +683,9 @@ accident is a device that speaks English to somebody who needs help.
 
 ## REST API (summary)
 
-Static: `GET /`, `GET /style.css`, `GET /app.js`.
+Static: `GET /`, `GET /style.css`, `GET /app.js` from `ui_dir`;
+`GET /assets/<path>` from `ui_dir/assets/`, for whatever a deployment's own
+version of those three refers to (fonts, images, further scripts).
 Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 `X-GPSMCPMMS-Token`.
 
