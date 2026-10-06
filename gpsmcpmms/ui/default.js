@@ -422,17 +422,13 @@ function acquireButton(node, input, commit) {
         // would land in whichever field happened to ask first while the other
         // keeps waiting (see handle_value_event, spec 4.9.3).
         const thaw = freeze(xl("Reading value..."));
-        let r = null;
+        let data = null;
         try {
-            r = await api(
-                `/api/value/capture?path=${encodeURIComponent(node.path)}`);
-        } catch (e) {
-            r = null;       // device unreachable; reported below
+            data = await captureValue(node.path);
         } finally {
             thaw();
             btn.disabled = false;
         }
-        const data = r && r.data;
         if (data && data.value !== null && data.value !== undefined) {
             input.value = data.value;
             commit(data.value);
@@ -457,24 +453,23 @@ function testButton(node, currentValue) {
     const btn = el("button", {class: "small"},
                    xl(node.ui.test_button || "Test"));
     btn.addEventListener("click", async () => {
-        const r = await api("/api/config/test",
-            {json: {path: node.path, value: currentValue()}});
+        const t = await runTest(node.path, currentValue());
         // Three outcomes, not two: a test routine that returns "false" comes
         // back with status 200, and "Successful: false" contradicted itself.
         // A "true" says no more than that the routine ran without error --
         // whether the right ring tone sounded is decided by whoever listened.
-        const clean = (r.status === 200) && !!r.data.result;
-        const outcome = (r.status !== 200)
+        const clean = t.clean;
+        const outcome = !t.started
             ? xl("The test could not be started.")
-            : (r.data.result
+            : (t.clean
                 ? xl("The test routine ran without errors.")
                 : xl("The test routine could not carry out the test."));
         // The technical reason goes underneath rather than behind a colon:
         // the sentence ends in a full stop, and "... carry the test out.: 500"
         // reads like a typo. It is not translated -- what the server hands
         // back is written in no language of this house.
-        const detail = (r.status !== 200)
-            ? el("p", {class: "detail"}, (r.data && r.data.error) || r.status)
+        const detail = !t.started
+            ? el("p", {class: "detail"}, t.error)
             : null;
         await modal([node.ui.test_func_msg ? xl(node.ui.test_func_msg) : "",
                      el("p", {class: "outcome " + (clean ? "ok" : "error")},
@@ -977,13 +972,10 @@ function renderListB(node, container, relKeys, ctx, tone) {
     // a chain has to be able to name the contact it calls -- and nothing in
     // it can be touched. Read off the stored record and not off the draft,
     // or clearing the checkbox would unlock the record it protects.
-    const memberLocked = !S.admin && !!cons.protected_by &&
-        st.pos <= list.length &&
-        !!(list[st.pos - 1] || {})[cons.protected_by];
+    const memberLocked = memberIsLocked(cons, list, st.pos - 1);
 
     // standalone unique keys constrain the enum options of other rows
-    const standaloneKeys = (cons.keys || [])
-        .filter(g => g.length === 1).map(g => g[0]);
+    const standaloneKeys = standaloneKeysOf(cons);
     const recCtx = Object.assign({}, ctx, {
         locked: ctx.locked || memberLocked,
         // where this record sits, so a field inside it can be located within
@@ -1030,28 +1022,11 @@ function renderListB(node, container, relKeys, ctx, tone) {
     // The same rule one level up: as long as the draft repeats a member that
     // already exists, applying it would only hand the backend something it is
     // going to drop again.
-    const repeatsKey = Object.keys(st.draft || {}).some((key) => {
-        const value = st.draft[key];
-        if (value === null || value === undefined || value === "") return false;
-        return (standaloneKeys.includes(key) &&
-                usedEnumValuesIn(list, st.pos - 1, key).has(value)) ||
-               takenElsewhere(recCtx, recCtx.memberKeys.concat([key]))
-                   .has(value);
-    });
+    const repeatsKey = memberRepeatsKey(cons, list, st.pos - 1, st.draft,
+                                        recCtx);
 
-    // A member is known by its keys, and one that is not known by anything
-    // has no business in the list: it would take a place, count towards the
-    // list's size, and read as a finished row while whoever loads it later
-    // has to guess what it was meant to be. The backend refuses it too --
-    // stopping it here saves the round trip and, more to the point, says so
-    // while the field that is empty is still on screen.
-    //
-    // Only the keys. Everything else in the member may stay open; nothing
-    // says the whole record has to be settled in one sitting.
-    const missingKey = (cons.keys || []).some(group => group.some(key => {
-        const value = (st.draft || {})[key];
-        return value === null || value === undefined || value === "";
-    }));
+    // ...and it has to be known by something: see memberLacksKey().
+    const missingKey = memberLacksKey(cons, st.draft);
 
     // ...and the same rule again at the button, not only at the navigator: a
     // position typed straight into the field must not find a way in either.
@@ -1169,17 +1144,11 @@ function dormantModule(mid) {
 }
 
 async function reviveModule(mid) {
-    const r = await api("/api/config/revive", {json: {module: mid}});
-    if (r.status !== 200) {
+    if (!await wakeModule(mid)) {
         msg(`${xl("Apply failed")}: ${xl("No answer from the device.")}`,
             "error");
         return;
     }
-    // Registering parameters ends the editing session, so the device issues a
-    // new token in the same breath; without taking it the next request would
-    // arrive unauthorized, having done nothing wrong.
-    if (r.data && r.data.token) S.token = r.data.token;
-    await reloadData();
     renderAll();
 }
 
@@ -1228,14 +1197,12 @@ async function takeOverSession() {
     const passwd = await modal(xl("Password"),
                                {input: {type: "password"}});
     if (passwd === null) return;
-    const r = await api("/api/session/takeover", {json: {passwd}});
-    if (r.status !== 200 || !r.data || !r.data.token) {
-        msg(r.status === 403 ? xl("Incorrect password")
-                             : xl("No answer from the device."), "error");
+    const taken = await takeOverWith(passwd);
+    if (taken !== "ok") {
+        msg(taken === "refused" ? xl("Incorrect password")
+                                : xl("No answer from the device."), "error");
         return;
     }
-    S.token = r.data.token;
-    await reloadData();
     renderAll();
     msg(xl("Session taken over"), "ok");
 }
@@ -1248,9 +1215,7 @@ const FACTORY_PASSWD_FINDING =
 async function changePassword() {
     const neu = await modal(xl("New password"), {input: {type: "password"}});
     if (neu === null || neu === "") return;
-    const r = await api("/api/config/update",
-        {json: {module: "config", value: {ui_passwd: neu}}});
-    if (r.status !== 200 || r.data.rejected.length) {
+    if (!await setPassword(neu)) {
         msg(xl("Apply failed"), "error");
         return;
     }
@@ -1260,7 +1225,6 @@ async function changePassword() {
     // password is a strange reward. Setting a value does not touch the
     // session, so reloading the data is enough: the finding goes, and
     // whoever set the password is still an administrator.
-    await reloadData();
     renderAll();
     msg(xl("Saved"), "ok");
 }
@@ -1276,9 +1240,7 @@ function applyTextDirection() {
 }
 
 async function switchLanguage(lang) {
-    S.lang = lang;
-    localStorage.setItem("gpsmcpmms_lang", lang);
-    await loadLang();
+    await useLanguage(lang);
     applyTextDirection();
     renderAll();
 }
@@ -1297,17 +1259,12 @@ function triggerDownload(blob, name) {
 }
 
 async function downloadTemplate(target, refs) {
-    if (!/^[a-z]{2,3}$/.test(target))
+    if (!isLangCode(target))
         return msg(xl("Invalid input"), "error");
-    const url = `/api/lang/template?lang=${target}` +
-                `&refs=${encodeURIComponent(refs.join(","))}`;
-    const resp = await fetch(url, {headers: authHeaders()});
-    if (!resp.ok) {
-        let err = resp.status;
-        try { err = (await resp.json()).error || err; } catch (e) { /**/ }
-        return msg(`${xl("Apply failed")}: ${err}`, "error");
-    }
-    triggerDownload(await resp.blob(), `${target}.csv`);
+    const got = await fetchTemplate(target, refs);
+    if (got.error !== undefined)
+        return msg(`${xl("Apply failed")}: ${got.error}`, "error");
+    triggerDownload(got.blob, `${target}.csv`);
     msg(`${xl("Download CSV")}: ${target}.csv`, "ok");
 }
 
@@ -1321,30 +1278,15 @@ async function uploadTranslation(file, code, name) {
         if (target === null) return;
         target = target.trim().toLowerCase();
     }
-    if (!/^[a-z]{2,3}$/.test(target))
+    if (!isLangCode(target))
         return msg(xl("Invalid input"), "error");
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("lang", target);
-    if (S.token) fd.append("token", S.token);
-    // a language nobody can name would show up in every dropdown as a code
-    if (name) fd.append("name", name);
-
-    const resp = await fetch("/api/lang/upload",
-        {method: "POST", headers: authHeaders(), body: fd});
-    if (!resp.ok) {
-        let err = resp.status;
-        try { err = (await resp.json()).error || err; } catch (e) { /**/ }
-        return msg(`${xl("Invalid file")}: ${err}`, "error");
-    }
-    const translated = resp.headers.get("X-GPSMCPMMS-Translated");
-    const total = resp.headers.get("X-GPSMCPMMS-Total");
-    triggerDownload(await resp.blob(), `${target}.report.csv`);
-    if (S.lang === target) await loadLang();
-    await loadLangList();
+    const sent = await sendTranslation(file, target, name);
+    if (sent.error !== undefined)
+        return msg(`${xl("Invalid file")}: ${sent.error}`, "error");
+    triggerDownload(sent.report, `${target}.report.csv`);
     renderAll();
     msg(`${xl("Translation processed")}: ` +
-        `${translated} / ${total} ${xl("translated")}`, "ok");
+        `${sent.translated} / ${sent.total} ${xl("translated")}`, "ok");
 }
 
 /* ---------- managing translations ----------
@@ -1365,10 +1307,10 @@ async function uploadTranslation(file, code, name) {
    the answer. This panel is the one place only an admin ever sees, so putting
    the report here needs no rule about who may look -- the place is the rule.
 
-   The numbers come from /api/lang/info, which withholds them from everybody
-   else. The source language is left out of both the count and the list: it has
-   no dictionary and is complete by construction, so naming it would only
-   invite the question why it never moves. */
+   The numbers come with loadLangList(), and the device withholds them from
+   everybody else. The source language is left out of both the count and the
+   list: it has no dictionary and is complete by construction, so naming it
+   would only invite the question why it never moves. */
 function langStatusNodes() {
     const cov = S.coverage;
     if (!cov || !cov.total || !cov.done) return [];
@@ -1602,7 +1544,7 @@ function renderAll() {
     general.append(el("span", {class: "spacer"}));
     if (!S.readOnly)
         general.append(el("button", {onclick: async () => {
-            await api("/api/end_session", {json: {}});
+            await endSession();
             location.reload();
         }}, xl("End session")));
     app.append(general);

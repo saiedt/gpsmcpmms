@@ -28,7 +28,9 @@
  * app.css and app.js therefore still gets every correction made in here
  * with the next upgrade, and cannot fall behind the device it talks to.
  *
- * A design loads this file first and then builds on what it declares:
+ * A design loads this file first and then builds on what it declares. It
+ * never speaks to the device itself: every request there is goes out from
+ * here.
  *
  *   state      S
  *   small      xl, deepCopy, getIn, setIn, api, authHeaders
@@ -38,11 +40,16 @@
  *              memberLabel, resolveWithPaths, takenElsewhere,
  *              pathMatchesPattern, usedEnumValuesIn, checkModuleLists,
  *              collectUnsetBooleans
+ *   members    standaloneKeysOf, memberIsLocked, memberRepeatsKey,
+ *              memberLacksKey
  *   device     fetchEnumOptions, fetchHint, pendingFilesFor,
- *              flushPendingFiles, PROBE_TYPES, probeValue, loadLang,
- *              loadLangList, langName, reloadData
+ *              flushPendingFiles, PROBE_TYPES, probeValue, captureValue,
+ *              runTest, wakeModule, loadLangList, loadLang, reloadData
  *   saving     saveObstacle, unsetBooleans, submitModule
- *   wording    RTL_LANGS, editorTitle, targetFromFileName
+ *   session    takeOverWith, setPassword, endSession
+ *   languages  useLanguage, langName, isLangCode, fetchTemplate,
+ *              sendTranslation, targetFromFileName, RTL_LANGS
+ *   wording    editorTitle
  *   told       onNotify, onReload
  *
  * The editing token lives ONLY in this runtime memory (spec 4.8). */
@@ -488,6 +495,57 @@ function usedEnumValuesIn(list, exceptIdx, prop) {
     return used;
 }
 
+/* ---------- what holds for a member of a list of records ----------
+   Asked of a draft before it is applied, wherever and however a design lets
+   a record be edited: `idx` is the member's place in `list`, or the list's
+   length for one that is not in it yet. */
+
+/* standalone unique keys constrain the enum options of other rows */
+function standaloneKeysOf(cons) {
+    return (cons.keys || []).filter(g => g.length === 1).map(g => g[0]);
+}
+
+/* A record that carries its own protection (spec 4.4 knows only the declared
+   sort), seen by a session without the password: it is shown -- a chain has
+   to be able to name the contact it calls -- and nothing in it can be
+   touched. Read off the stored record and not off the draft, or clearing the
+   checkbox would unlock the record it protects. */
+function memberIsLocked(cons, list, idx) {
+    return !S.admin && !!cons.protected_by && idx < list.length &&
+           !!(list[idx] || {})[cons.protected_by];
+}
+
+/* As long as the draft repeats a member that already exists, applying it
+   would only hand the backend something it is going to drop again. `ctx`
+   carries where the record sits (memberKeys) and the distinct_values rules
+   owned further up (distinctScopes). */
+function memberRepeatsKey(cons, list, idx, draft, ctx) {
+    const standalone = standaloneKeysOf(cons);
+    return Object.keys(draft || {}).some((key) => {
+        const value = draft[key];
+        if (value === null || value === undefined || value === "") return false;
+        return (standalone.includes(key) &&
+                usedEnumValuesIn(list, idx, key).has(value)) ||
+               takenElsewhere(ctx, ctx.memberKeys.concat([key])).has(value);
+    });
+}
+
+/* A member is known by its keys, and one that is not known by anything has
+   no business in the list: it would take a place, count towards the list's
+   size, and read as a finished row while whoever loads it later has to guess
+   what it was meant to be. The backend refuses it too -- stopping it here
+   saves the round trip and, more to the point, says so while the field that
+   is empty is still on screen.
+
+   Only the keys. Everything else in the member may stay open; nothing says
+   the whole record has to be settled in one sitting. */
+function memberLacksKey(cons, draft) {
+    return (cons.keys || []).some(group => group.some(key => {
+        const value = (draft || {})[key];
+        return value === null || value === undefined || value === "";
+    }));
+}
+
 /* ---------- what a save is held to (spec 4.5) ---------- */
 /* Structural validation before saving: list minimum sizes, at every depth.
 
@@ -609,6 +667,128 @@ async function submitModule(mid) {
     const rejected = r.data.rejected;
     await reloadData();
     return {outcome: rejected.length > 0 ? "rejected" : "saved", rejected};
+}
+
+/* ---------- asking the device to do something ----------
+   Each of these is one request, and each says how it went in words a design
+   can act on without knowing what the device answered with. */
+
+/* value capture for backend_provided params (spec 4.9.3). Only one capture
+   may ever be outstanding -- a single backend event would otherwise land in
+   whichever field happened to ask first -- so a design keeps everything else
+   still until this returns. What comes back is the device's own answer:
+   {value}, {timeout: true} or {error}; null where there was none. */
+async function captureValue(path) {
+    try {
+        const r = await api(
+            `/api/value/capture?path=${encodeURIComponent(path)}`);
+        return r.data;
+    } catch (e) {
+        return null;        // device unreachable
+    }
+}
+
+/* Three outcomes, not two: a test routine that returns "false" comes back
+   with status 200, and "Successful: false" contradicted itself. `clean` says
+   no more than that the routine ran without error -- whether the right ring
+   tone sounded is decided by whoever listened. `error` is what the device
+   handed back where the test never started, and is written in no language of
+   this house. */
+async function runTest(path, value) {
+    const r = await api("/api/config/test", {json: {path, value}});
+    const started = r.status === 200;
+    return {started, clean: started && !!r.data.result,
+            error: started ? null : ((r.data && r.data.error) || r.status)};
+}
+
+/* A module that has given its parameters up is asked to register them again.
+   Registering parameters ends the editing session, so the device issues a
+   new token in the same breath; without taking it the next request would
+   arrive unauthorized, having done nothing wrong. */
+async function wakeModule(mid) {
+    const r = await api("/api/config/revive", {json: {module: mid}});
+    if (r.status !== 200) return false;
+    if (r.data && r.data.token) S.token = r.data.token;
+    await reloadData();
+    return true;
+}
+
+/* ---------- the session ----------
+   An editor whose window was closed without ending its session keeps the
+   write lock for the rest of the idle timeout. The admin password takes the
+   lock back (spec 4.8): "ok", "refused" for a wrong password, "silent" where
+   the device did not answer. The password is not carried into the new
+   session; protected parameters still need reloadData(passwd). */
+async function takeOverWith(passwd) {
+    const r = await api("/api/session/takeover", {json: {passwd}});
+    if (r.status !== 200 || !r.data || !r.data.token)
+        return r.status === 403 ? "refused" : "silent";
+    S.token = r.data.token;
+    await reloadData();
+    return "ok";
+}
+
+/* Setting a value does not touch the session, so whoever set the password is
+   still an administrator afterwards; the tree is loaded again because the
+   finding about the factory password goes with it. */
+async function setPassword(neu) {
+    const r = await api("/api/config/update",
+        {json: {module: "config", value: {ui_passwd: neu}}});
+    if (r.status !== 200 || r.data.rejected.length) return false;
+    await reloadData();
+    return true;
+}
+
+async function endSession() {
+    await api("/api/end_session", {json: {}});
+}
+
+/* ---------- languages ---------- */
+async function useLanguage(lang) {
+    S.lang = lang;
+    localStorage.setItem("gpsmcpmms_lang", lang);
+    await loadLang();
+}
+
+function isLangCode(code) { return /^[a-z]{2,3}$/.test(code); }
+
+/* Translations are managed by a CSV round-trip (spec 4.5): a template goes
+   out, is filled offline, and comes back; the device answers with a report.
+   Both ends hand over a file -- {blob}, {report, translated, total} -- or
+   {error}, and what becomes of the file is the design's to decide. */
+async function fetchTemplate(target, refs) {
+    const url = `/api/lang/template?lang=${target}` +
+                `&refs=${encodeURIComponent(refs.join(","))}`;
+    const resp = await fetch(url, {headers: authHeaders()});
+    if (!resp.ok) {
+        let err = resp.status;
+        try { err = (await resp.json()).error || err; } catch (e) { /**/ }
+        return {error: err};
+    }
+    return {blob: await resp.blob()};
+}
+
+async function sendTranslation(file, target, name) {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("lang", target);
+    if (S.token) fd.append("token", S.token);
+    // a language nobody can name would show up in every dropdown as a code
+    if (name) fd.append("name", name);
+
+    const resp = await fetch("/api/lang/upload",
+        {method: "POST", headers: authHeaders(), body: fd});
+    if (!resp.ok) {
+        let err = resp.status;
+        try { err = (await resp.json()).error || err; } catch (e) { /**/ }
+        return {error: err};
+    }
+    const sent = {report: await resp.blob(),
+                  translated: resp.headers.get("X-GPSMCPMMS-Translated"),
+                  total: resp.headers.get("X-GPSMCPMMS-Total")};
+    if (S.lang === target) await loadLang();
+    await loadLangList();
+    return sent;
 }
 
 const RTL_LANGS = new Set(["fa", "ar", "he", "ur", "ps", "sd"]);

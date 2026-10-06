@@ -287,6 +287,19 @@ def test_the_core_draws_nothing():
         assert not re.search(drawing, core), drawing
 
 
+def test_the_default_design_speaks_to_the_device_only_through_the_core():
+    # A design that issued requests of its own would have to be told about
+    # every change to the REST-API; one that does not, cannot fall behind it.
+    import os
+    import gpsmcpmms
+    path = os.path.join(os.path.dirname(gpsmcpmms.__file__), "ui",
+                        "default.js")
+    with open(path, encoding="utf-8") as handle:
+        design = handle.read()
+    for own_request in ("/api/", "fetch(", "FormData"):
+        assert own_request not in design, own_request
+
+
 def test_a_design_can_bring_files_of_its_own(client):
     import os
     folder = os.path.join(config_mgr.ui_dir, config_mgr.ASSET_SUBDIR, "fonts")
