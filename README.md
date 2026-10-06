@@ -10,6 +10,9 @@ configuration parameters — with types, constraints and UI metadata — and the
 - keeps the **single source of truth** for every parameter's *current value*,
 - **persists** those values across runs,
 - serves a **built-in web config-editor** that collects and validates user input,
+- keeps that editor in two parts — a **core** that knows the rules and a
+  **design** that draws them — so that an application can put a GUI of its own
+  in place of the default one without copying or re-implementing the first,
 - lets modules **query** their values and ask whether their configuration is ready.
 
 It is designed for a zero-maintenance appliance on a trusted LAN, but the core is
@@ -362,22 +365,105 @@ payload (not a JSON object, unknown module) yields `400`.
 
 Besides serving as the interface between client modules and the system,
 `gpsmcpmms/config.py` houses the Flask application backend that exposes the REST
-API summarized further below. The editor is made of two parts. `core.js` is the
-library's: what a value is, whether it is valid, which fields a rule switches
-off, how a module is saved. It draws nothing, is the same under every design,
-and is served from the package itself. `default.html`, `default.css` and
-`default.js` are one design built on it, served from the package as well, at
-`/`, `/app.css` and `/app.js`.
+API summarized further below.
 
-A deployment replaces any of the three by putting a file of the same extension
-named `app.…` into `ui_dir`: `app.css` alone for other colours, all three for
-an editor of its own. Nothing is copied or recorded, so a deployment with no
-such file always shows the design of the installed version, and one that has
-them keeps `core.js` current regardless. The default stays reachable under its
-own name (`/default.css`, `/default.js`), which lets an `app.css` begin with
-`@import "/default.css"` and change only what it means to change. What such a
-design refers to beside its three files (fonts, images, further scripts) goes
-into `ui_dir/assets/` and is served at `/assets/…`.
+### A core, and a design on top of it
+
+The editor that comes with the library knows nothing about the application it
+is configuring, and that is deliberate. It draws whatever was declared, in the
+order it was declared, as groups to open and fields to fill in: a
+straightforward form, because a form is the one presentation that fits every
+tree of parameters anybody will ever register. Nothing in it could be tailored
+to one application without making it wrong for the next.
+
+That independence has a price, and an application pays it in the places where
+it knows better. A ring of LEDs can be shown as a ring; a list of contacts
+reads better as a list than as one record with a pair of arrows; a device that
+is set up once, standing in front of it with a phone, wants to be led through.
+None of that belongs in a general-purpose editor — and all of it used to mean
+taking a copy of the whole frontend and maintaining it from then on.
+
+So the frontend is two parts:
+
+| Part | What it is | Where it comes from |
+|------|------------|---------------------|
+| `core.js` | Everything that is not a matter of design: the state, the conversation with the REST API, what a value is and whether it is valid, which fields a rule switches off, the rules about list members, findings, how a module is saved. It never touches the page. | Always the package, at `/core.js`. A deployment has no copy of it and so cannot keep an old one. |
+| the **design** | One way of drawing all that: three files, served at `/`, `/app.css` and `/app.js`. | The package's `default.html`, `default.css`, `default.js` — or the deployment's own `app.html`, `app.css`, `app.js` from `ui_dir`, each standing in place of its counterpart. |
+
+Nothing is copied or recorded. A deployment that has put no file into `ui_dir`
+always shows the default design of the installed version; one that has keeps
+its own until it takes the file away again, and gets every correction made to
+the core with the next upgrade regardless. Which of the two is served is
+decided at every request, so a design can be put in place and taken away while
+the device runs.
+
+### An editor of your own
+
+Replace as little as the application needs:
+
+- **Other colours, another typeface.** An `app.css` alone. The default stays
+  reachable under its own name, so the file can begin with
+  `@import "/default.css";` and change only what it means to change.
+- **Another presentation.** An `app.js`, usually with an `app.css` and often an
+  `app.html`. The page loads `/core.js` first and the design after it.
+- **Whatever those refer to** — fonts, images, further scripts and stylesheets —
+  goes into `ui_dir/assets/` and is served at `/assets/…`. An appliance's own
+  network often leads nowhere, so nothing should be fetched from elsewhere.
+
+A design builds on the names `core.js` declares; the list is at the top of that
+file, grouped by what they are for. It is held to one rule, which the default
+design is tested against: **a design never speaks to the device itself.** Every
+request goes out from the core, so that a change to the REST API is made in one
+place and reaches every design with the upgrade.
+
+Three things are said across the line between the two:
+
+| | The core | The design |
+|---|----------|------------|
+| Messages | calls `notify(text, cls)` for what it learns halfway through a conversation with the device | decides where that shows, by registering with `onNotify(fn)` |
+| A reloaded tree | calls whatever was registered with `onReload(fn)` | clears what it kept about the tree it drew — a selected row, a half-edited record |
+| Saving | offers three steps: `saveObstacle(module)`, `unsetBooleans(module)`, `submitModule(module)` | decides what stands between them: how a refusal is shown, how the open questions are asked |
+
+The smallest design that is an editor at all:
+
+```html
+<!-- app.html -->
+<div id="app"></div>
+<script src="/core.js"></script>
+<script src="/app.js"></script>
+```
+
+```js
+// app.js
+onNotify((text, cls) => showSomewhere(text, cls));
+
+async function start() {
+    await loadLangList();          // which languages, and what the app is called
+    await loadLang();              // the dictionary xl() reads from
+    await reloadData();            // S.cvv: the tree; S.edit: the draft of its values
+    draw();                        // yours
+    setInterval(async () => {      // findings and state age; ask again
+        if (await refreshStatus()) drawStanding();
+    }, 10000);
+}
+start();
+```
+
+From there on, what the application knows about itself lives in its design and
+nowhere else: which module is drawn as what, which parameters belong together
+on a page, what a list entry is summed up as. `S.state` carries what each
+module's `state_func` says it is doing at this moment, and `allFindings()`,
+`findingsUnder(path)` and `worstLevel()` put the findings wherever the design
+wants them — above the form, beside the field, as a count at the door.
+
+Two things to keep in mind. A design is written against one version of the
+core, and a core that gains names does not break it; one that changes them
+would, which is why they are listed and tested. And a design replaces the
+default for every reader of that device, administrators included: whatever the
+default lets them do — unlock protected parameters, take a session over, manage
+translations — the design has to offer too, or do without.
+
+### The default design
 
 The default design renders one **collapsible group
 per module**, each ending with a **Save** button that commits the module. A group

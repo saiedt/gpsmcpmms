@@ -444,6 +444,67 @@ before the application has told it anything, must not freeze a list whose
 contents it is guessing. Lock what you know; a lock set on an assumption is
 worse than no lock, because the assumption is now permanent.
 
+### Giving the application an editor of its own
+
+The editor that comes with the library draws any tree of parameters as a form,
+and knows nothing about yours. That is what makes it work for every
+application, and it is also the reason yours may want another: a general
+editor cannot know that a list of states is a ring of LEDs, or that six of
+your parameters are one step of setting the device up.
+
+The frontend is split for this. `core.js` holds what is true under any
+presentation and stays the library's; the design — `default.html`,
+`default.css`, `default.js` — is replaced by files named `app.…` in `ui_dir`.
+The [README](../README.md#an-editor-of-your-own) has the mechanism. What
+follows is what we would do again.
+
+#### Start with the stylesheet
+
+An `app.css` that begins with `@import "/default.css";` and sets a handful of
+variables is an afternoon, and it is enough to make the editor recognisably
+yours. Everything the default design does keeps working, and every upgrade of
+the library still reaches you. Go further only for what a stylesheet cannot do.
+
+#### Put what the application knows into the design, not into the library
+
+Which module is shown as what, which parameters share a page, what a list
+entry is summed up as: that is knowledge about your application, and your
+`app.js` is where it belongs. Asking the library to carry it — a new
+Declaration key for every such wish — makes the library know your application
+after all, which is the thing the split exists to avoid. Ask for a key when a
+second application would want it too.
+
+#### Never speak to the device from the design
+
+Every request there is goes out from `core.js`. A design that issues one of
+its own has taken on the REST API as a second thing to keep up with, and will
+find out about a change to it on a device in the field. If the core lacks what
+you need, that is a gap in the core.
+
+#### Keep the default reachable while you build
+
+`/default.css` and `/default.js` are served whatever stands in their place,
+and taking your `app.…` files out of `ui_dir` brings the default editor back
+without a restart. When something does not work in your design, look at it in
+the default one first: if it fails there too, it is not your design.
+
+#### Offer everything the default offers, or decide not to
+
+Your design is the editor for every reader of the device, the administrator
+included. Unlocking protected parameters, taking a session over, calling a
+retired module back, managing translations: each is a function of the core
+waiting to be called, and each is absent from your editor until you draw a way
+to it. Leaving one out is a decision, and it should be one.
+
+#### Ship it with the image, not with the content
+
+The design is part of the program. It belongs in the image beside the code —
+`ui_dir/app.…` and `ui_dir/assets/` — and it must not travel with what a
+device carries over from another: dictionaries and recordings are content and
+move between devices, a design moved with them puts the old editor in front of
+the new program. If you have scripts that copy `ui_dir` from one device to the
+next, make them copy the dictionaries and leave the rest.
+
 ### Your device is not the deployment
 
 A module that decides something about itself — whether it can render what it was
@@ -615,6 +676,25 @@ change came in. It reads correctly and is wrong every time: voicing eight
 languages takes minutes, and the callback has already answered. Report at the
 end of the work instead, with `update_status()`, and let the callback say only
 what it can know.
+
+#### Say how serious it is, and where
+
+A finding may carry a `level` and a `path`, and both are for the reader.
+Without a level every finding is a warning, and three warnings say that three
+things want attention, not which of them is why the device does not work.
+Keep `"error"` for what stops the device doing its job and `"info"` for what
+asks nothing of anybody; if everything is an error, nothing is.
+
+The path does two things at once, and the second is easy to forget. It lets
+the editor take the reader to the place — and it decides who is told: a finding
+that names a path with nothing protected at, above or below it reaches the
+person the device stands with, not only the administrator. So name the path
+where that person can act on it, and leave it off where they would only worry.
+
+What the device is *doing* is not a finding. A card laid on, a call in
+progress, a state the device is in: say that through `state_func`, which is
+asked whenever somebody looks and is true for as long as it takes to read. A
+finding stays until somebody has dealt with it.
 
 #### One question, one computation
 
