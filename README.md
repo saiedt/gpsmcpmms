@@ -356,7 +356,13 @@ payload (not a JSON object, unknown module) yields `400`.
 
 Besides serving as the interface between client modules and the system,
 `gpsmcpmms/config.py` houses the Flask application backend that exposes the REST
-API summarized further below. The assets `index.html`, `style.css`, `app.js` are
+API summarized further below. The editor is made of two parts. `core.js` is the
+library's: what a value is, whether it is valid, which fields a rule switches
+off, how a module is saved. It draws nothing, is the same under every design,
+and is served from the package itself. `index.html`, `style.css` and `app.js`
+are one design built on it; a deployment may replace them with its own and keep
+what it needs beside them (fonts, images, further scripts) in `ui_dir/assets/`,
+served at `/assets/…`. These three assets are
 served from `ui_dir`, into which `start_editor()` stages the packaged copies from
 `gpsmcpmms/ui/`. It records what it staged in `ui_dir/.staged.json`, so an
 upgraded package refreshes an asset that is still untouched — otherwise a
@@ -683,9 +689,8 @@ accident is a device that speaks English to somebody who needs help.
 
 ## REST API (summary)
 
-Static: `GET /`, `GET /style.css`, `GET /app.js` from `ui_dir`;
-`GET /assets/<path>` from `ui_dir/assets/`, for whatever a deployment's own
-version of those three refers to (fonts, images, further scripts).
+Static: `GET /`, `GET /style.css`, `GET /app.js` from `ui_dir`; `GET /core.js`
+from the package; `GET /assets/<path>` from `ui_dir/assets/`.
 Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 `X-GPSMCPMMS-Token`.
 

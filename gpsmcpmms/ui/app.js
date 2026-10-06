@@ -14,87 +14,36 @@
  * limitations under the License.
  */
 
-/* GPSMCPMMS config-editor frontend (spec sections 4.4 - 4.9).
- * The editing token lives ONLY in this runtime memory (spec 4.8). */
+/* GPSMCPMMS config-editor frontend, the stock design (spec sections
+ * 4.4 - 4.9).
+ *
+ * This file is one way of drawing the editor, and only that. What a value is
+ * and how a module is saved is core.js's business, which index.html loads
+ * first; a deployment that wants the editor to look and behave differently
+ * replaces this file, style.css and index.html in ui_dir and keeps core.js. */
 "use strict";
 
-const S = {
-    token: null, readOnly: false, admin: false, factory: false,
-    // what each module last said about itself, keyed by module id
-    moduleStatus: {},
-    dormant: {},             // module id -> label, admin only
-    lockFreeIn: null,        // seconds until the foreign session lapses
-    protectedOmitted: false,
-    cvv: {},                 // parsed /api/cvv_data dump
-    xl: {},                  // active translation dictionary
-    // What somebody chose last, failing that the language of their browser,
-    // failing that the one the source keys are written in. A fixed "de" stood
-    // here while the keys were German; today that would name a language
-    // nobody told the device about -- and for a German visitor it falls out
-    // anyway. Whether a dictionary exists for it is loadLangList()'s verdict.
-    lang: localStorage.getItem("gpsmcpmms_lang") ||
-          (navigator.language || "").split("-")[0] || "en",
-    // Until /api/lang/info answers, assume only the source language exists:
-    // it is the one language that is always there, being every key's own
-    // wording. The server names it in `source` -- never guess it here again.
-    sourceLang: "en",
-    languages: ["en"],
-    // Whether the hosting application named the languages it permits. It
-    // decides the shape of the "new language" row, so assume it does until
-    // /api/lang/info says otherwise: shutting the fields on a deployment that
-    // turns out to be open is a moment's confusion, opening them on one that
-    // is bounded invites a code the device will refuse.
-    bounded: true,
-    appTitle: "",            // what the hosting application calls itself
-    langNames: {},           // code -> name; the app's list, or endonyms
+if (typeof reloadData !== "function") {
+    // An index.html from before the split, kept because a deployment had
+    // changed it: it loads this file and nothing else.
+    document.getElementById("app").textContent =
+        "index.html is out of date: it must load /core.js before /app.js.";
+    throw new Error("core.js is not loaded");
+}
+
+/* What this design keeps about the page it drew. It lives in S beside the
+   data, because that is where every function in here already looks. */
+Object.assign(S, {
     langPanel: null,         // null | "new" | "edit"
     langForm: {},            // what the open panel has been told so far
-    coverage: null,          // {total, done:{lang:n}}; admins only
-    orphans: null,           // lang -> keys nothing registers; admins only
-    edit: {},                // moduleId -> working value (deep copy)
-    dirty: {},               // moduleId -> bool
-    adopted: {},             // moduleId -> Set of likely_val fields filled in
     open: {},                // dump path -> group expanded?
-    enums: {},               // dump path -> {values}|{error}|{pending}
-    hints: {},               // dump path -> {text, at}|{error}|{pending}
-    pendingFiles: {},        // dump path -> [{name, file}] chosen, not yet sent
     listsA: {},              // dump path -> {sel}
     listsB: {},              // dump path -> {pos, draft, changed}
-    probeBad: {},            // dump path -> the device refused this value
     message: null,           // {text, cls} on screen now; see msg()
-};
-
-function xl(key) { return S.xl[key] || key; }
-function deepCopy(v) { return v === undefined ? v : JSON.parse(JSON.stringify(v)); }
-function getIn(obj, keys) {
-    let cur = obj;
-    for (const k of keys) {
-        if (cur === null || cur === undefined) return undefined;
-        cur = cur[k];
-    }
-    return cur;
-}
-function setIn(obj, keys, val) {
-    let cur = obj;
-    for (const k of keys.slice(0, -1)) cur = cur[k];
-    cur[keys[keys.length - 1]] = val;
-}
-
-/* ---------- API ---------- */
-async function api(path, opts = {}) {
-    const headers = Object.assign(
-        {"X-GPSMCPMMS-Api": "1"}, opts.headers || {});
-    if (S.token) headers["X-GPSMCPMMS-Token"] = S.token;
-    if (opts.json !== undefined) {
-        headers["Content-Type"] = "application/json";
-        opts.body = JSON.stringify(opts.json);
-        opts.method = opts.method || "POST";
-    }
-    const resp = await fetch(path, Object.assign({}, opts, {headers}));
-    let data = null;
-    try { data = await resp.json(); } catch (e) { /* non-json */ }
-    return {status: resp.status, data};
-}
+});
+// The position and the draft of every list editor were about values that
+// have just been replaced.
+onReload(() => { S.listsB = {}; S.listsA = {}; });
 
 /* ---------- tiny DOM + modal helpers ---------- */
 function el(tag, attrs, ...children) {
@@ -191,141 +140,10 @@ function showMessage() {
     if (S.message)
         box.append(el("div", {class: `msg ${S.message.cls}`}, S.message.text));
 }
+// what core.js has to say goes the same way as what this file says
+onNotify(msg);
 
-/* ---------- values, scaling, validation ---------- */
-function composeValue(node) {
-    if (node.children) {
-        const value = {};
-        for (const [k, c] of Object.entries(node.children))
-            value[k] = composeValue(c);
-        return value;
-    }
-    return deepCopy(node.value === undefined ? null : node.value);
-}
-
-function scaleOut(ui, v) {   // model -> display
-    if (v === null || v === undefined || !ui.scale_op) return v;
-    const f = parseFloat(ui.scale_factor);
-    const r = ui.scale_op === "*" ? v * f : v / f;
-    return +r.toPrecision(12);
-}
-function scaleIn(ui, cons, d) {   // display -> model
-    if (d === null || !ui.scale_op) return d;
-    const f = parseFloat(ui.scale_factor);
-    let r = ui.scale_op === "*" ? d / f : d * f;
-    if (cons.ranged_int || cons.type === "int") r = Math.round(r);
-    return +r.toPrecision(12);
-}
-
-function inRange(v, range) {
-    return ((range[0] === null || v >= range[0]) &&
-            (range[1] === null || v <= range[1]));
-}
-
-function validValue(cons, v) {   // v in model space; null = unset -> valid
-    if (v === null || v === undefined) return true;
-    if (Array.isArray(cons.one_of))
-        return cons.one_of.some(o => o.value === v);
-    if (typeof cons.one_of === "string") return typeof v === "string";
-    if (cons.patterned_string !== undefined)
-        return typeof v === "string" &&
-               new RegExp(`^(?:${cons.patterned_string})$`).test(v);
-    if (cons.ranged_int) return Number.isInteger(v) && inRange(v, cons.ranged_int);
-    if (cons.ranged_float)
-        return typeof v === "number" && inRange(v, cons.ranged_float);
-    switch (cons.type) {
-        case "boolean": return typeof v === "boolean";
-        case "color": return Array.isArray(v) && v.length === 3;
-        case "int": return Number.isInteger(v);
-        case "float": return typeof v === "number";
-        case "path": case "pingable": case "url":
-            return typeof v === "string" && v !== "" && !/[\s]/.test(v);
-        default: return typeof v === "string";   // string, password
-    }
-}
-
-/* 'values_for' names the field whose draft value the provider is given, and
-   `ownKeys` is the path of the field doing the naming. A plain name is a
-   sibling in the same record; each leading '^' steps one level further out,
-   which is how a list member reaches past its own list -- the members of a
-   help chain are offered the contacts of that chain's category, and the
-   category stands beside the list, not in it.
-
-   Unset means null, not "no argument": the provider is meant to be able to
-   tell the two apart. Out of reach -- more '^' than there is path, which
-   happens inside a record the navigator renders on its own -- is null too;
-   there is nothing truthful to send. */
-function enumArgOf(cons, container, ownKeys) {
-    const spec = cons && cons.one_of_for;
-    if (spec === undefined) return undefined;
-    const name = spec.replace(/^\^+/, "");
-    const cut = ownKeys.length - 1 - (spec.length - name.length);
-    if (cut < 0) return null;
-    return getIn(container, ownKeys.slice(0, cut).concat(name)) ?? null;
-}
-
-function relevanceHolds(rule, dictValue) {
-    const l = dictValue ? dictValue[rule.child_key] : undefined;
-    const r = rule.value;
-    switch (rule.op) {
-        case "==": return l === r;
-        case "!=": return l !== r;
-        case "~=": return typeof l === "string" && typeof r === "string" &&
-                          new RegExp(r).test(l);
-    }
-    if (l === null || l === undefined) return false;
-    switch (rule.op) {
-        case "<": return l < r;
-        case ">": return l > r;
-        case "<=": return l <= r;
-        case ">=": return l >= r;
-    }
-    return false;
-}
-
-/* ---------- dynamic enums (spec 4.9.1) ---------- */
-/* `arg` is the current value of the sibling a 'values_for' declaration named,
-   or undefined where none was declared. It is remembered beside the options,
-   because that is what says whether they are still the answer to the question
-   being asked -- and without it every render would ask again, and every
-   answer would render again. */
-async function fetchEnumOptions(path, rerender, arg, refresh) {
-    S.enums[path] = {pending: true, arg};
-    let url = `/api/config/enum-options?path=${encodeURIComponent(path)}`;
-    if (arg !== undefined)
-        url += `&arg=${encodeURIComponent(JSON.stringify(arg))}`;
-    // Only the button says this. Drawing the field asks what the device
-    // knows; the button asks it to look again, and looking may cost
-    // something nobody ordered by opening a group.
-    if (refresh) url += "&refresh=1";
-    const r = await api(url);
-    S.enums[path] = (r.data && r.data.values) ? {values: r.data.values, arg}
-                  : {error: (r.data && r.data.error) || xl("No answer from the device."),
-                     arg};
-    // xl() on a string the device sent: the library's own failure messages are
-    // registered keys, and a text the hosting application invented falls
-    // through to itself. Rendering it raw left the library's own German --
-    // and later English -- standing in a Turkish editor.
-    if (S.enums[path].error) msg(xl(S.enums[path].error), "error");
-    rerender();
-}
-
-/* ---------- hints (spec 4.9.5) ----------
-   A tooltip explains and is timeless. A hint asserts something about the
-   present, so it is fetched rather than declared, and shown with the moment it
-   was established -- an assertion nobody dated goes on claiming it long after
-   it stopped being so. */
-async function fetchHint(path, rerender) {
-    S.hints[path] = {pending: true};
-    const r = await api(`/api/config/hint?path=${encodeURIComponent(path)}` +
-                        `&lang=${encodeURIComponent(S.lang || S.sourceLang)}`);
-    S.hints[path] = (r.data && typeof r.data.text === "string")
-                  ? {text: r.data.text, at: r.data.at}
-                  : {error: (r.data && r.data.error) ||
-                            xl("No answer from the device.")};
-    rerender();
-}
-
+/* ---------- hints (spec 4.9.5) ---------- */
 function hintFor(node, ctx) {
     const hint = node.ui && node.ui.hint;
     if (!hint) return null;
@@ -350,15 +168,6 @@ function hintFor(node, ctx) {
 }
 
 /* ---------- uploading into a 'file' parameter ---------- */
-/* Choosing a file does not transfer it. It joins the options and gets
-   selected, and nothing leaves the browser until the module is saved -- so a
-   file parameter behaves like every other field, where nothing is committed
-   until Save and Undo really does undo. Sending it at once also wrote
-   to the device on the strength of a click that the user might never confirm. */
-function pendingFilesFor(path) {
-    return S.pendingFiles[path] || (S.pendingFiles[path] = []);
-}
-
 function uploadButton(node, ctx, commit) {
     const pattern = (node.constraints || {}).patterned_string;
     const picker = el("input", {type: "file", multiple: "",
@@ -395,45 +204,7 @@ function uploadButton(node, ctx, commit) {
            xl("Choose file")));
 }
 
-/* Sends what the file fields of a module are holding, just before its values
-   go. Returns false when something was refused, and then the save is abandoned
-   rather than saving a value naming a file that never arrived. */
-async function flushPendingFiles(mid) {
-    const paths = Object.keys(S.pendingFiles)
-        .filter(p => p === mid || p.startsWith(mid + "."));
-    for (const path of paths) {
-        for (const {name, file} of S.pendingFiles[path]) {
-            const fd = new FormData();
-            fd.append("path", path);
-            fd.append("file", file);
-            if (S.token) fd.append("token", S.token);
-            const resp = await fetch("/api/config/file",
-                {method: "POST", headers: authHeaders(), body: fd});
-            if (!resp.ok) {
-                let err = resp.status;
-                try { err = (await resp.json()).error || err; } catch (e) {/**/}
-                // xl() for the reason fetchEnumOptions gives: every refusal
-                // of a file is a key, and shown raw it read in English -- or
-                // "Abgelehnt", in German -- whatever language was chosen
-                msg(`${xl("Invalid file")}: ${name}: ${xl(err)}`, "error");
-                return false;
-            }
-        }
-        delete S.pendingFiles[path];
-        delete S.enums[path];      // the options must be asked for again
-    }
-    return true;
-}
-
 /* ---------- single input fields ---------- */
-function hexOfColor(v) {
-    if (!Array.isArray(v)) return "#000000";
-    return "#" + v.map(x => (x || 0).toString(16).padStart(2, "0")).join("");
-}
-function colorOfHex(h) {
-    return [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
-}
-
 function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
     // returns an element whose 'change' leads to commit(newModelValue)
     const cons = node.constraints || {}, ui = node.ui || {};
@@ -713,63 +484,6 @@ function testButton(node, currentValue) {
     return btn;
 }
 
-/* A 'pingable' host and a 'path' are the two values the editor can verify by
-   itself, so that a wrong entry shows up while it is being made and not only
-   when the device later fails to use it. Both checks belong to the backend: the
-   file system is the device's, and what matters about a host is whether the
-   *device* reaches it -- the browser may well sit on the other interface. The
-   verdicts stay three-way rather than yes/no, because "not there" has very
-   different meanings (a typo, or a box that is merely switched off). */
-const PROBE_TYPES = new Set(["path", "pingable"]);
-const PROBE_VERDICT = {
-    reachable:  (d) => [`${xl("Reachable")}: ${d.address}`, "ok"],
-    silent:     (d) => [`${d.address}: ${xl("no response to ping")}`, "info"],
-    unresolvable: () => [xl("Name cannot be resolved"), "error"],
-    file:       () => [xl("File exists"), "ok"],
-    directory:  () => [xl("Folder exists"), "ok"],
-    creatable:  () => [xl("Does not exist yet, can be created"), "info"],
-    missing:    () => [xl("Path does not exist"), "error"],
-};
-
-/* Two of the seven verdicts can be nothing but a typo: a name that resolves to
-   nothing, and a path whose parent folder does not exist either. Those mark the
-   field, exactly as a value the browser itself rejects is marked, and Speichern
-   refuses the module until it is dealt with -- a value the device has already
-   said it cannot use has no business being stored.
-
-   Marked, not withdrawn: what somebody typed stays on screen to be corrected,
-   which is what fail() does for the checks that run in the browser. The
-   difference is only in the timing -- those refuse before the value is
-   committed, this answer arrives afterwards.
-
-   The other two failures leave no mark at all. A host that resolves but stays
-   silent is a speakerphone switched off while somebody configures it, and an
-   absent path whose parent exists is a log file written on first use; refusing
-   either would make the editor unusable exactly when it is needed. */
-async function probeValue(node, value, rerender) {
-    if (typeof value !== "string" || value.trim() === "") {
-        delete S.probeBad[node.path];
-        return;
-    }
-    const r = await api("/api/config/probe",
-                        {json: {path: node.path, value: value}});
-    const d = r.data || {};
-    const verdict = PROBE_VERDICT[d.outcome];
-    if (r.status !== 200 || !verdict)
-        return msg(`${xl("Check failed")}: ` +
-                   `${d.error || xl("No answer from the device.")}`,
-                   "error");
-    const [text, level] = verdict(d);
-    const refused = level === "error";
-    const changed = refused !== !!S.probeBad[node.path];
-    if (refused) S.probeBad[node.path] = text;
-    else delete S.probeBad[node.path];
-    msg(text, level);
-    // without the re-render the marking would never appear; the message
-    // survives it (see msg)
-    if (changed && rerender) rerender();
-}
-
 function probeButton(node, currentValue, rerender) {
     const btn = el("button", {class: "small"}, xl("Check"));
     btn.addEventListener("click", async () => {
@@ -911,30 +625,6 @@ function collapsible(pathKey, labelText, tooltip, renderBody, extraClass,
     return group;
 }
 
-/* Which children of a dict actually make it onto the screen: the hidden ones
-   and those an unmet relevance rule switches off never do. A protected subtree
-   is not even in the dump outside admin mode, so the same walk answers "is
-   there anything here at all" -- see hasVisibleContent -- and "which lists
-   must Save hold to their minimum" -- see checkModuleLists. */
-function visibleChildren(node, container, relKeys) {
-    const dictValue = getIn(container, relKeys);
-    return Object.entries(node.children || {}).filter(([key, child]) => {
-        if (child.ui && child.ui.hidden) return false;
-        const rule = node.relevance && node.relevance[key];
-        return !(rule && !relevanceHolds(rule, dictValue));
-    });
-}
-
-/* An empty group is a heading that promises something and delivers nothing.
-   That happens for real outside admin mode, where a module whose parameters
-   are all protected arrives with no children at all. */
-function hasVisibleContent(node, container, relKeys) {
-    if (!node.children) return true;      // a leaf or a list editor is content
-    return visibleChildren(node, container, relKeys).some(
-        ([key, child]) => hasVisibleContent(child, container,
-                                            relKeys.concat([key])));
-}
-
 function renderDictBody(node, container, relKeys, ctx) {
     const body = el("div", {class: "group-body"});
     for (const [key, child] of visibleChildren(node, container, relKeys)) {
@@ -999,24 +689,6 @@ function renderNode(node, container, relKeys, ctx) {
 }
 
 /* ---------- list editor, Case A: simple members (spec 4.6.2 A) ---------- */
-/* What a member reads as in the table. What is stored is the value; for an
-   enum that is an identifier, and a column of identifiers tells nobody which
-   contact stands in which place. The options may not have arrived yet -- the
-   field beside the table is what asks for them -- and until they do the raw
-   value is still better than a blank. */
-function memberLabel(tpl, v) {
-    const cons = tpl.constraints || {};
-    if (cons.one_of === undefined) return String(v);
-    if (Array.isArray(cons.one_of)) {
-        const hit = cons.one_of.find(o => o.value === v);
-        return hit ? (hit.verbatim ? hit.label : xl(hit.label)) : String(v);
-    }
-    const values = (S.enums[tpl.path] || {}).values;
-    const o = values && values[v];
-    if (!o) return String(v);
-    return o.verbatim ? (o.label || String(v)) : xl(o.label || String(v));
-}
-
 function renderListA(node, container, relKeys, ctx, tone) {
     const list = getIn(container, relKeys) || [];
     const cons = node.constraints, tpl = node.item_template;
@@ -1244,69 +916,7 @@ function renderListA(node, container, relKeys, ctx, tone) {
     return body;
 }
 
-/* ---------- distinct_values across a group of paths (spec 4.9.7) ----------
-   The rule belongs to a container, so no single field can answer it alone.
-   A leaf therefore asks each enclosing scope in turn: resolve the group's
-   patterns against that scope's working value, and see whether anybody else
-   already holds what is about to be entered. Without this the editor sends a
-   value the device is bound to refuse -- or worse, one it silently drops. */
-/* Every place a pattern reaches, with the route taken to get there: knowing
-   the route is what lets a leaf recognise which of the hits is itself. */
-function resolveWithPaths(value, parts, prefix) {
-    prefix = prefix || [];
-    if (!parts.length) return [{path: prefix, value}];
-    const [head, ...rest] = parts;
-    if (head === "*") {
-        return Array.isArray(value)
-            ? value.flatMap((v, i) => resolveWithPaths(v, rest,
-                                                       prefix.concat([i])))
-            : [];
-    }
-    if (!value || typeof value !== "object") return [];
-    return resolveWithPaths(value[head], rest, prefix.concat([head]));
-}
-
-/* What the other participants already hold. `absKeys` is where this leaf sits
-   relative to the module -- for a record being edited that includes its
-   position in the list, which is how it avoids colliding with the copy of
-   itself still sitting there. */
-function takenElsewhere(ctx, absKeys) {
-    const taken = new Set();
-    for (const scope of ctx.distinctScopes || []) {
-        const own = absKeys.slice(scope.relKeys.length).join(".");
-        if (!own) continue;
-        const base = getIn(scope.container, scope.relKeys);
-        for (const group of scope.groups) {
-            if (!group.some(p => pathMatchesPattern(p, own))) continue;
-            for (const pattern of group)
-                for (const hit of resolveWithPaths(base, pattern.split("."))) {
-                    if (hit.path.join(".") === own) continue;      // myself
-                    if (hit.value !== null && hit.value !== undefined &&
-                            hit.value !== "")
-                        taken.add(hit.value);
-                }
-        }
-    }
-    return taken;
-}
-
-function pathMatchesPattern(pattern, path) {
-    const p = pattern.split("."), q = path.split(".");
-    return p.length === q.length &&
-           p.every((e, i) => e === "*" || e === q[i]);
-}
-
 /* ---------- list editor, Case B: record members (spec 4.6.2 B) ---------- */
-function usedEnumValuesIn(list, exceptIdx, prop) {
-    const used = new Set();
-    list.forEach((rec, i) => {
-        if (i !== exceptIdx && rec && rec[prop] !== null &&
-                rec[prop] !== undefined)
-            used.add(rec[prop]);
-    });
-    return used;
-}
-
 function renderListB(node, container, relKeys, ctx, tone) {
     const list = getIn(container, relKeys) || [];
     const tpl = node.item_template, cons = node.constraints;
@@ -1496,67 +1106,6 @@ function renderListB(node, container, relKeys, ctx, tone) {
 }
 
 /* ---------- modules and save (spec 4.5) ---------- */
-/* Structural validation before saving: list minimum sizes, at every depth.
-
-   A list inside a list member -- the contacts of one help chain, say -- used
-   to be passed over: the walk stopped at a list's own length and never looked
-   into its members, so a member whose own list was too short went to the
-   device without a word. The device takes it, because partial values are
-   valid there; the minimum is enforced here or nowhere.
-
-   `trail` says which member is meant: the label of every list on the way
-   down, with the position of the member taken -- the number its position
-   field shows, so it can be typed straight in.
-
-   Only what is on screen is held to its minimum: the walk takes the children
-   visibleChildren() lets through, judged by the value of the dict they sit
-   in -- inside a list member, by that member. A list that is hidden, or that
-   an unmet relevance rule has switched off, can be neither seen nor filled,
-   and a refusal naming it left nothing to do but give up the whole module.
-   The device agrees about the second kind: a subtree whose relevance does
-   not hold counts as ready there. */
-function checkModuleLists(node, value, focusErr, trail = []) {
-    if (node.item_template) {
-        const list = value || [];
-        const label = `"${xl(node.ui.label || node.path)}"`;
-        if (list.length < node.constraints.min_size) {
-            focusErr(`${xl("Too few entries in")} ` +
-                     trail.concat([label]).join(" › "));
-            return false;
-        }
-        return list.every((member, i) => checkModuleLists(
-            node.item_template, member, focusErr,
-            trail.concat([`${label} ${i + 1}`])));
-    }
-    for (const [key, child] of visibleChildren(node, value, [])) {
-        if (!checkModuleLists(child, value ? value[key] : null, focusErr,
-                              trail))
-            return false;
-    }
-    return true;
-}
-
-/* Booleans that were never answered: an unticked box is indistinguishable from
-   an unanswered one, so they are collected and confirmed once before saving
-   rather than quietly leaving the module incomplete. Hidden and currently
-   irrelevant fields are skipped, exactly as the renderer skips them. */
-function collectUnsetBooleans(node, container, relKeys, found) {
-    const value = getIn(container, relKeys);
-    if (!node.children) {
-        const cons = node.constraints || {};
-        if (cons.type === "boolean" && (value === null || value === undefined))
-            found.push({keys: relKeys,
-                        label: xl(node.ui.label || relKeys[relKeys.length - 1])});
-        return;
-    }
-    for (const [key, child] of Object.entries(node.children)) {
-        if (child.ui && child.ui.hidden) continue;
-        const rule = node.relevance && node.relevance[key];
-        if (rule && !relevanceHolds(rule, value)) continue;
-        collectUnsetBooleans(child, container, relKeys.concat([key]), found);
-    }
-}
-
 async function confirmUnsetBooleans(mid) {
     const found = [];
     collectUnsetBooleans(S.cvv[mid], S.edit, [mid], found);
@@ -1570,53 +1119,27 @@ async function confirmUnsetBooleans(mid) {
 }
 
 async function saveModule(mid) {
-    let failure = null;
-    if (!checkModuleLists(S.cvv[mid], S.edit[mid],
-                          (m) => failure = m)) {
-        msg(failure, "error");
-        return;
-    }
-    // What the device rejected does not go to the device. Here rather than
-    // while typing: there it is only marked, so the typo stays visible and
-    // correctable -- it is not taken away.
-    const refused = Object.keys(S.probeBad)
-                          .filter(p => p === mid || p.startsWith(mid + "."));
-    if (refused.length) {
-        msg(`${xl("Apply failed")}: ` +
-            refused.map(p => `${p.split(".").pop()} (${S.probeBad[p]})`)
-                   .join(", "), "error");
+    const obstacle = saveObstacle(mid);
+    if (obstacle) {
+        msg(obstacle, "error");
         return;
     }
     if (!await confirmUnsetBooleans(mid)) return;
-    // the files first: a value naming a file the device does not have is
-    // worse than not saving at all, so a refused upload abandons the save
-    if (!await flushPendingFiles(mid)) return;
-    const r = await api("/api/config/update",
-        {json: {module: mid, value: S.edit[mid]}});
-    if (r.status === 401) {
-        // 401 is the device answering and refusing the token, which is the
-        // opposite of what this used to say. The session has ended -- taken
-        // over, or timed out -- and the reason is in the device's log. There
-        // is no way back but a fresh session, and the password with it: what
-        // makes somebody an administrator is the password, and it is nowhere
-        // kept to be offered again.
+    const done = await submitModule(mid);
+    if (done.outcome === "files") return;       // said already, see notify()
+    if (done.outcome === "ended") {
         await modal(xl("The editing session has ended."), {alert: true});
         location.reload();
         return;
     }
-    if (r.status !== 200) {
-        msg(`${xl("Apply failed")}: ` +
-            ((r.data && r.data.error) || r.status), "error");
+    if (done.outcome === "failed") {
+        msg(`${xl("Apply failed")}: ${done.detail}`, "error");
         return;
     }
-    if (r.data.module_status) S.moduleStatus = r.data.module_status;
-    if (r.data.dormant) S.dormant = r.data.dormant;
-    const rejected = r.data.rejected;
-    await reloadData();
     renderAll();
-    if (rejected.length > 0) {
+    if (done.outcome === "rejected") {
         msg(`${xl("Apply failed")}: ${xl("Rejected")}: ` +
-            rejected.join(", "), "error");
+            done.rejected.join(", "), "error");
     } else {
         msg(xl("Saved"), "ok");
     }
@@ -1741,17 +1264,6 @@ async function changePassword() {
     msg(xl("Saved"), "ok");
 }
 
-const RTL_LANGS = new Set(["fa", "ar", "he", "ur", "ps", "sd"]);
-/* What the editor is called, in the reading language and with the hosting
-   application's name in it -- or without, for an application that gave none.
-   The name is inserted rather than looked up: it is a proper noun, and where
-   it belongs in the sentence is the translation's business, not a prefix. */
-function editorTitle() {
-    return S.appTitle
-        ? xl("{app} Configuration Editor").replace("{app}", S.appTitle)
-        : xl("Configuration Editor");
-}
-
 /* The document's own language and direction, which index.html cannot know:
    it is served before anybody has chosen one, and it used to claim German
    for every reader. `lang` matters beyond looks -- it is what a screen reader
@@ -1783,12 +1295,6 @@ function triggerDownload(blob, name) {
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
-function authHeaders() {
-    const h = {"X-GPSMCPMMS-Api": "1"};
-    if (S.token) h["X-GPSMCPMMS-Token"] = S.token;
-    return h;
-}
-
 async function downloadTemplate(target, refs) {
     if (!/^[a-z]{2,3}$/.test(target))
         return msg(xl("Invalid input"), "error");
@@ -1802,11 +1308,6 @@ async function downloadTemplate(target, refs) {
     }
     triggerDownload(await resp.blob(), `${target}.csv`);
     msg(`${xl("Download CSV")}: ${target}.csv`, "ok");
-}
-
-function targetFromFileName(file) {
-    const stem = file.name.replace(/\.csv$/i, "");
-    return /^[a-z]{2,3}$/.test(stem) ? stem.toLowerCase() : null;
 }
 
 async function uploadTranslation(file, code, name) {
@@ -2160,79 +1661,6 @@ function lockFreeHint() {
     return el("span", {class: "hint-inline"},
               xl("Alternatively, without an admin password: renewed access "
                  + "after {time}.").replace("{time}", hhmm));
-}
-
-/* ---------- data loading ---------- */
-async function loadLang() {
-    const r = await api(`/api/schema/${S.lang}`);
-    S.xl = r.data || {};
-}
-
-async function loadLangList() {
-    const r = await api("/api/lang/info");
-    if (r.data && r.data.languages) S.languages = r.data.languages;
-    if (r.data && r.data.source) S.sourceLang = r.data.source;
-    if (r.data && typeof r.data.bounded === "boolean")
-        S.bounded = r.data.bounded;
-    if (r.data && typeof r.data.app_title === "string")
-        S.appTitle = r.data.app_title;
-    if (r.data && r.data.options) S.langNames = r.data.options;
-    // Both are admin-only at the source and simply absent for anybody else,
-    // which is what keeps the panel's report out of reach without a rule here.
-    S.coverage = (r.data && r.data.coverage) || null;
-    S.orphans = (r.data && r.data.orphans) || null;
-    // The browser may name a language no dictionary here covers. What would
-    // show then are the keys themselves -- readable, but the dropdown would
-    // stand on something that does not appear in it.
-    if (S.languages.length && !S.languages.includes(S.lang))
-        S.lang = S.languages.includes(S.sourceLang) ? S.sourceLang
-                                                    : S.languages[0];
-}
-
-/* What a language is called. A code is a last resort and a sign that somebody
-   added a language without saying what it is: "ps" in a dropdown tells a
-   deployer nothing, and a translator choosing their working language even
-   less. */
-function langName(code) {
-    return (S.langNames && S.langNames[code]) || code;
-}
-
-async function reloadData(passwd) {
-    let url = "/api/cvv_data";
-    const params = [];
-    if (passwd !== undefined) params.push(`passwd=${encodeURIComponent(passwd)}`);
-    if (params.length) url += "?" + params.join("&");
-    const r = await api(url);
-    if (!r.data) throw new Error("no data");
-    S.token = r.data.token || S.token;
-    S.readOnly = r.data.read_only;
-    S.lockFreeIn = r.data.lock_free_in;
-    S.admin = r.data.admin;
-    S.wrongPasswd = r.data.wrong_passwd;
-    S.moduleStatus = r.data.module_status || {};
-    S.dormant = r.data.dormant || {};
-    S.protectedOmitted = r.data.protected_omitted;
-    S.cvv = r.data.cvv;
-    S.edit = {};
-    S.dirty = {};
-    S.listsB = {};
-    S.listsA = {};
-    // The rejections belong to the draft values just discarded: what stands
-    // in the form now came from the device and is valid there.
-    S.probeBad = {};
-    // A dynamic enum's options are computed by the device out of its own
-    // state, and that state has just become another one. The voice list
-    // hangs on the stored announcement language: without this line it went
-    // on showing the previous language's voices after a save, and only a
-    // page reload put it right. Only fields that are actually on screen get
-    // asked about -- a collapsed section costs nothing.
-    S.enums = {};
-    // S.adopted deliberately survives: saving re-loads the tree, and a
-    // proposal the admin has cleared on purpose must not come back -- which
-    // would also leave Speichern lit, inviting them to adopt it by accident.
-    // A real fresh start comes with a page load, which resets S as a whole.
-    for (const [mid, node] of Object.entries(S.cvv))
-        S.edit[mid] = composeValue(node);
 }
 
 async function boot() {

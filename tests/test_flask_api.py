@@ -247,8 +247,45 @@ def test_a_refused_upload_says_why_in_a_key(client, tmp_path):
 
 
 # --------------------------------------------------------------------------
-# Files a design of its own brings along
+# The editor's own files: the library's part, the design's part
 # --------------------------------------------------------------------------
+
+def test_the_page_loads_the_core_before_the_design(client):
+    # app.js builds on what core.js declares; the other order is a page that
+    # stops at its first line.
+    page = client.get("/").get_data(as_text=True)
+    assert 0 < page.index('src="/core.js"') < page.index('src="/app.js"')
+
+
+def test_the_core_comes_from_the_package_whatever_ui_dir_holds(client):
+    # A deployment that brings its own design keeps the library's half up to
+    # date by not having a copy of it: a core.js in ui_dir is never served.
+    import os
+    cfg = config_mgr
+    stray = os.path.join(cfg.ui_dir, "core.js")
+    with open(stray, "w", encoding="utf-8") as handle:
+        handle.write("// a copy somebody left behind")
+    try:
+        body = client.get("/core.js").get_data(as_text=True)
+    finally:
+        os.remove(stray)
+    assert "function validValue(" in body
+    assert "left behind" not in body
+
+
+def test_the_core_draws_nothing():
+    # The whole point of the split: what is in core.js holds under every
+    # design, and it can only do that while it never touches the page.
+    import os
+    import re
+    import gpsmcpmms
+    path = os.path.join(os.path.dirname(gpsmcpmms.__file__), "ui", "core.js")
+    with open(path, encoding="utf-8") as handle:
+        core = handle.read()
+    for drawing in (r"document\.\w", r"createElement", r"location\.",
+                    r"el\(", r"modal\(", r"msg\(", r"renderAll\("):
+        assert not re.search(drawing, core), drawing
+
 
 def test_a_design_can_bring_files_of_its_own(client):
     import os

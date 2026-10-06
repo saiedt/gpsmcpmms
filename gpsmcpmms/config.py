@@ -144,6 +144,11 @@ class ConfigManager:
     PING_TIMEOUT = 2
     # the editor's web assets, and the record of what was staged into ui_dir
     WEB_ASSETS = ("index.html", "style.css", "app.js")
+    # What the editor is made of besides its design, and therefore never
+    # staged: served straight from the package, so that a deployment which
+    # brings its own three files above cannot keep an old copy of the part
+    # that has to agree with this backend.
+    LIBRARY_ASSETS = ("core.js",)
     # Where a deployment's own design keeps what its three files refer to --
     # fonts, images, further scripts and stylesheets. A folder of its own
     # rather than ui_dir as a whole: beside the assets lie the dictionaries,
@@ -2195,6 +2200,14 @@ class ConfigManager:
         @app.route("/app.js")
         def app_js():
             return send_from_directory(self.ui_dir, "app.js")
+
+        packaged_ui = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "ui")
+
+        @app.route("/core.js")
+        def core_js():
+            # from the package, not from ui_dir -- see LIBRARY_ASSETS
+            return send_from_directory(packaged_ui, "core.js")
 
         @app.route(f"/{self.ASSET_SUBDIR}/<path:name>")
         def design_asset(name):
