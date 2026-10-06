@@ -359,15 +359,21 @@ Besides serving as the interface between client modules and the system,
 API summarized further below. The editor is made of two parts. `core.js` is the
 library's: what a value is, whether it is valid, which fields a rule switches
 off, how a module is saved. It draws nothing, is the same under every design,
-and is served from the package itself. `index.html`, `style.css` and `app.js`
-are one design built on it; a deployment may replace them with its own and keep
-what it needs beside them (fonts, images, further scripts) in `ui_dir/assets/`,
-served at `/assets/…`. These three assets are
-served from `ui_dir`, into which `start_editor()` stages the packaged copies from
-`gpsmcpmms/ui/`. It records what it staged in `ui_dir/.staged.json`, so an
-upgraded package refreshes an asset that is still untouched — otherwise a
-frontend fix would never reach a device — while an asset the deployment has
-edited itself is left in place. The UI renders one **collapsible group
+and is served from the package itself. `default.html`, `default.css` and
+`default.js` are one design built on it, served from the package as well, at
+`/`, `/app.css` and `/app.js`.
+
+A deployment replaces any of the three by putting a file of the same extension
+named `app.…` into `ui_dir`: `app.css` alone for other colours, all three for
+an editor of its own. Nothing is copied or recorded, so a deployment with no
+such file always shows the design of the installed version, and one that has
+them keeps `core.js` current regardless. The default stays reachable under its
+own name (`/default.css`, `/default.js`), which lets an `app.css` begin with
+`@import "/default.css"` and change only what it means to change. What such a
+design refers to beside its three files (fonts, images, further scripts) goes
+into `ui_dir/assets/` and is served at `/assets/…`.
+
+The default design renders one **collapsible group
 per module**, each ending with a **Save** button that commits the module. A group
 with nothing to show is left out entirely, which is what happens to a module
 whose parameters are all `protected` when no admin is logged in.
@@ -689,8 +695,9 @@ accident is a device that speaks English to somebody who needs help.
 
 ## REST API (summary)
 
-Static: `GET /`, `GET /style.css`, `GET /app.js` from `ui_dir`; `GET /core.js`
-from the package; `GET /assets/<path>` from `ui_dir/assets/`.
+Static: `GET /`, `GET /app.css`, `GET /app.js` (a deployment's own `app.…` from
+`ui_dir`, else the packaged `default.…`); `GET /default.css`, `GET /default.js`
+and `GET /core.js` from the package; `GET /assets/<path>` from `ui_dir/assets/`.
 Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 `X-GPSMCPMMS-Token`.
 
@@ -703,7 +710,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 | `POST /api/config/probe` | Verify `{path, value}` on the device; only for `path`/`pingable` params. |
 | `POST /api/config/test` | Run the `test_func` for `{path, value}`. |
 | `POST /api/config/update` | Apply `{module, value}`; returns `{rejected: […]}` referring by path to config elements not updated. |
-| `GET /api/cvv_data[?passwd=…]` | Retrieves the whole content to be merged by app.js into index.html while using style.css in order to render the editor in a browser; issues/refreshes the session token; strips protected subtrees unless unlocked by valid password. |
+| `GET /api/cvv_data[?passwd=…]` | Retrieves the whole content to be merged by the script into the page in order to render the editor in a browser; issues/refreshes the session token; strips protected subtrees unless unlocked by valid password. |
 | `POST /api/end_session` | Release the editing token. |
 | `GET /api/lang/info` | Which languages exist here, what they are called, whether an allow-list bounds them, and the application's name. For admins additionally the orphan keys and how far each language is translated. |
 | `GET /api/lang/template?lang=&refs=` | Download a translation template (admin): the source language (`DECL_LANG`, by default `en`), `kind`, chosen reference languages, then the target language. |

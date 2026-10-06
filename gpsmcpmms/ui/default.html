@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- lang, dir and the title are set by app.js once the editor knows which
+<!-- lang, dir and the title are set by the script once the editor knows which
      language it is being read in and what the hosting application is called.
      Nothing here can know either: this file is served before anybody has
      chosen a language, and it used to claim German for every reader and name
@@ -9,15 +9,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Configuration Editor</title>
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/app.css">
 </head>
 <body>
 <div id="app">
   <div class="boot">&#8987;</div>
 </div>
 <div id="modal-root"></div>
-<!-- core.js is the library's and the same under every design; app.js is
-     the design, and builds on what core.js declares. -->
+<!-- core.js is the library's and the same under every design. /app.css and
+     /app.js are the design: this deployment's own where ui_dir holds one,
+     default.css and default.js where it does not. -->
 <script src="/core.js"></script>
 <script src="/app.js"></script>
 </body>

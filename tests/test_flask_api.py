@@ -305,11 +305,158 @@ def test_a_design_can_bring_files_of_its_own(client):
 
 
 def test_nothing_beside_the_asset_folder_can_be_fetched_through_it(client):
-    # ui_dir also holds the dictionaries and the stamp of what was staged;
+    # ui_dir also holds the dictionaries and a deployment's own design;
     # the route serves its own folder and does not climb out of it.
     import os
     os.makedirs(os.path.join(config_mgr.ui_dir, config_mgr.ASSET_SUBDIR),
                 exist_ok=True)
-    assert os.path.exists(os.path.join(config_mgr.ui_dir, "app.js"))
-    for name in ("../app.js", "..%2Fapp.js", "../.staged.json"):
-        assert client.get("/assets/" + name).status_code == 404
+    beside = os.path.join(config_mgr.ui_dir, "beside.txt")
+    with open(beside, "w", encoding="utf-8") as handle:
+        handle.write("not an asset")
+    try:
+        for name in ("../beside.txt", "..%2Fbeside.txt", "../lang/de.json"):
+            assert client.get("/assets/" + name).status_code == 404
+    finally:
+        os.remove(beside)
+
+
+# --------------------------------------------------------------------------
+# The design: the library's by default, the deployment's own in its place
+# --------------------------------------------------------------------------
+
+DESIGN_ROUTES = {"html": "/", "css": "/app.css", "js": "/app.js"}
+
+
+def _own_design(ext, text):
+    import os
+    path = os.path.join(config_mgr.ui_dir, "app." + ext)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(text)
+    return path
+
+
+def _served(client, route):
+    resp = client.get(route)
+    try:
+        return resp.status_code, resp.get_data(as_text=True)
+    finally:
+        resp.close()
+
+
+def test_without_a_design_of_its_own_a_deployment_gets_the_default(client):
+    import os
+    for ext in DESIGN_ROUTES:
+        assert not os.path.exists(
+            os.path.join(config_mgr.ui_dir, "app." + ext)), \
+            "nothing is copied into ui_dir any more"
+    status, page = _served(client, "/")
+    assert status == 200 and 'href="/app.css"' in page
+    assert "--accent" in _served(client, "/app.css")[1]
+    assert "function renderAll(" in _served(client, "/app.js")[1]
+
+
+def test_each_part_of_the_design_is_replaced_by_itself(client):
+    # app.css alone is the common case: other colours, the stock editor.
+    import os
+    for ext, route in DESIGN_ROUTES.items():
+        before = {r: _served(client, r)[1] for r in DESIGN_ROUTES.values()}
+        path = _own_design(ext, "own " + ext)
+        try:
+            assert _served(client, route) == (200, "own " + ext)
+            for other in DESIGN_ROUTES.values():
+                if other != route:
+                    assert _served(client, other)[1] == before[other]
+        finally:
+            os.remove(path)
+        # taken away again, the default is back without a restart
+        assert _served(client, route)[1] == before[route]
+
+
+def test_the_default_stays_reachable_under_its_own_name(client):
+    # What an app.css that begins with '@import "/default.css"' relies on.
+    import os
+    stock = _served(client, "/app.css")[1]
+    path = _own_design("css", '@import "/default.css"; :root { --accent: red }')
+    try:
+        assert _served(client, "/default.css") == (200, stock)
+        assert "function renderAll(" in _served(client, "/default.js")[1]
+    finally:
+        os.remove(path)
+
+
+def _stage_like_before(files, record):
+    """What a version before this one left in ui_dir."""
+    import hashlib
+    import json
+    import os
+    ui = config_mgr.ui_dir
+    for name, text in files.items():
+        with open(os.path.join(ui, name), "w", encoding="utf-8") as handle:
+            handle.write(text)
+    if record is not None:
+        stamp = {name: hashlib.sha256(text.encode()).hexdigest()
+                 for name, text in record.items()}
+        with open(os.path.join(ui, ".staged.json"), "w",
+                  encoding="utf-8") as handle:
+            json.dump(stamp, handle)
+
+
+def _ui_files():
+    import os
+    return sorted(name for name in os.listdir(config_mgr.ui_dir)
+                  if os.path.isfile(os.path.join(config_mgr.ui_dir, name))
+                  and name != "languages.json")
+
+
+def _clear_ui_files():
+    import os
+    for name in _ui_files():
+        os.remove(os.path.join(config_mgr.ui_dir, name))
+
+
+def test_copies_nobody_touched_are_cleared_away_with_their_record(client):
+    # Left lying, they would count as this deployment's own design and keep
+    # serving the frontend of the version that staged them, for good.
+    staged = {"index.html": "old page", "style.css": "old css",
+              "app.js": "old js"}
+    _stage_like_before(staged, staged)
+    try:
+        config_mgr._retire_staged_assets()
+        assert _ui_files() == []
+        assert "function renderAll(" in _served(client, "/app.js")[1]
+    finally:
+        _clear_ui_files()
+
+
+def test_a_copy_the_deployment_changed_becomes_its_own_design(client):
+    staged = {"index.html": "old page", "style.css": "old css",
+              "app.js": "old js"}
+    _stage_like_before(dict(staged, **{"style.css": "our colours"}), staged)
+    try:
+        config_mgr._retire_staged_assets()
+        assert _ui_files() == ["app.css"]
+        assert _served(client, "/app.css") == (200, "our colours")
+    finally:
+        _clear_ui_files()
+
+
+def test_a_copy_without_a_record_is_set_aside_not_trusted(client):
+    _stage_like_before({"index.html": "whose?", "app.js": "whose?"}, None)
+    try:
+        config_mgr._retire_staged_assets()
+        assert _ui_files() == ["app.js.local", "index.html.local"]
+        assert 'href="/app.css"' in _served(client, "/")[1]
+    finally:
+        _clear_ui_files()
+
+
+def test_an_own_script_alone_is_nothing_to_clear_away(client):
+    # app.js is a name on both sides of the change. Without a record and
+    # without the two old names beside it, it is simply a design.
+    import os
+    path = _own_design("js", "own js")
+    try:
+        config_mgr._retire_staged_assets()
+        assert _ui_files() == ["app.js"]
+    finally:
+        os.remove(path)

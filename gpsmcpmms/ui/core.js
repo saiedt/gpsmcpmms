@@ -24,8 +24,8 @@
  * single element: this file never touches the document.
  *
  * It belongs to the library and is served from the package itself, at
- * /core.js, never from ui_dir. A deployment that brings its own index.html,
- * style.css and app.js therefore still gets every correction made in here
+ * /core.js, never from ui_dir. A deployment that brings its own app.html,
+ * app.css and app.js therefore still gets every correction made in here
  * with the next upgrade, and cannot fall behind the device it talks to.
  *
  * A design loads this file first and then builds on what it declares:

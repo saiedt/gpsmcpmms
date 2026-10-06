@@ -136,25 +136,35 @@ class ConfigManager:
     # editor that accepts unbounded uploads can fill an appliance's SD card
     # from the browser.
     MAX_UPLOAD_BYTES = 8 * 1024 * 1024
-    # deliberately beside the staged web assets rather than in ui_dir/lang/:
+    # deliberately in ui_dir itself rather than in ui_dir/lang/:
     # everything ending in .json down there is loaded as a dictionary, and a
     # file named languages.json would become a language called "languages"
     LANGUAGE_FILE = "languages.json"
     # how long one reachability probe of a 'pingable' parameter may take
     PING_TIMEOUT = 2
-    # the editor's web assets, and the record of what was staged into ui_dir
-    WEB_ASSETS = ("index.html", "style.css", "app.js")
+    # The editor's design is three files, and each may be replaced by itself.
+    # The one that comes with the library is 'default.<ext>' and is served
+    # from the package; a file 'app.<ext>' in ui_dir is served in its place.
+    # Nothing is copied anywhere: a deployment that has put no file there is
+    # always looking at the design of the installed version, and one that has
+    # is looking at its own until it takes the file away again.
+    DESIGN_PARTS = ("html", "css", "js")
+    DEFAULT_DESIGN = "default"
+    OWN_DESIGN = "app"
     # What the editor is made of besides its design, and therefore never
-    # staged: served straight from the package, so that a deployment which
-    # brings its own three files above cannot keep an old copy of the part
-    # that has to agree with this backend.
+    # replaceable: a deployment which brings its own three files above cannot
+    # keep an old copy of the part that has to agree with this backend.
     LIBRARY_ASSETS = ("core.js",)
     # Where a deployment's own design keeps what its three files refer to --
     # fonts, images, further scripts and stylesheets. A folder of its own
     # rather than ui_dir as a whole: beside the assets lie the dictionaries,
-    # the stamp of what was staged and whatever an upgrade set aside, and
-    # none of that is anybody's to fetch by guessing a name.
+    # and those are nobody's to fetch by guessing a name.
     ASSET_SUBDIR = "assets"
+    # What versions before this one copied into ui_dir, the name each would
+    # carry as a deployment's own design, and the record they kept of it. All
+    # three are only read once more -- see _retire_staged_assets().
+    STAGED_ASSETS = {"index.html": "app.html", "style.css": "app.css",
+                     "app.js": "app.js"}
     ASSET_STAMP = ".staged.json"
     # column separator of the translation CSVs: a pipe is chosen because it is
     # very unlikely to occur inside a key or a translation, so cells
@@ -1238,66 +1248,74 @@ class ConfigManager:
         parent = os.path.dirname(os.path.abspath(path))
         return {"outcome": "creatable" if os.path.isdir(parent) else "missing"}
 
-    def _stage_web_assets(self):
+    def _retire_staged_assets(self):
         """
-        Copies the editor's web assets into ui_dir from the packaged defaults,
-        so that a freshly provisioned appliance serves the editor out of the
-        box. An asset that the deployment has edited is left alone, but one
-        still identical to what an earlier version of this package staged is
-        refreshed: otherwise upgrading the package would keep serving the old
-        frontend, and a fix in it would silently never reach the device. The
-        first run after that rule was introduced finds no record of what was
-        staged; a differing asset is then set aside as '<name>.local' rather
-        than lost.
+        Clears away what earlier versions copied into ui_dir, once.
+
+        They staged the editor's three files there and kept a record of what
+        they had staged, so that an upgrade could tell a copy nobody had
+        touched from one the deployment had edited. A file in ui_dir now
+        means one thing only -- this deployment's own design -- so a copy left
+        lying there would be taken for one, and would keep serving the
+        frontend of the version that put it there for good.
+
+        The record is what makes the clearing exact. A copy still identical
+        to what was staged was never anybody's own and goes. One that differs
+        was edited here, and becomes the design it already was, under the
+        name such a file now carries. Where there is no record at all the
+        question cannot be answered, and the file is set aside as
+        '<name>.local' rather than lost or trusted.
         """
-        packaged_dir = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "ui")
         stamp_file = os.path.join(self.ui_dir, self.ASSET_STAMP)
-        try:
-            with open(stamp_file, encoding="utf-8") as handle:
-                staged = json.load(handle)
-        except (OSError, ValueError):
-            staged = {}
-        if not isinstance(staged, dict):
-            staged = {}
+        recorded = os.path.exists(stamp_file)
+        # 'app.js' is a name on both sides of the change; alone and without a
+        # record it is a deployment's own script and none of this applies.
+        if not recorded and not any(
+                os.path.exists(os.path.join(self.ui_dir, name))
+                for name, own in self.STAGED_ASSETS.items() if name != own):
+            return
+        staged = {}
+        if recorded:
+            try:
+                with open(stamp_file, encoding="utf-8") as handle:
+                    staged = json.load(handle)
+            except (OSError, ValueError):
+                staged = {}
+            if not isinstance(staged, dict):
+                staged = {}
 
-        def digest(path):
-            with open(path, "rb") as handle:
-                return hashlib.sha256(handle.read()).hexdigest()
-
-        for asset in self.WEB_ASSETS:
-            source = os.path.join(packaged_dir, asset)
-            target = os.path.join(self.ui_dir, asset)
-            if not os.path.exists(source):
+        for name, own in self.STAGED_ASSETS.items():
+            path = os.path.join(self.ui_dir, name)
+            if not os.path.exists(path):
                 continue
             try:
-                packaged = digest(source)
-                if os.path.exists(target):
-                    local = digest(target)
-                    if local == packaged:
-                        staged[asset] = packaged        # already up to date
-                        continue
-                    if asset in staged:
-                        if local != staged[asset]:
-                            self._logger.info(
-                                    f"Keeping the locally modified '{asset}'; "
-                                    "the packaged version has changed.")
-                            continue
-                    else:
-                        shutil.copyfile(target, target + ".local")
-                        self._logger.warning(
-                                f"Replacing the unrecorded '{asset}' with the "
-                                f"packaged one; the previous file is kept as "
-                                f"'{asset}.local'.")
-                shutil.copyfile(source, target)
-                staged[asset] = packaged
+                with open(path, "rb") as handle:
+                    local = hashlib.sha256(handle.read()).hexdigest()
+                if staged.get(name) == local:
+                    os.remove(path)
+                elif name in staged:
+                    if own != name:
+                        os.replace(path, os.path.join(self.ui_dir, own))
+                    self._logger.warning(
+                            f"'{name}' in the UI folder was changed by this "
+                            f"deployment and is kept as its own '{own}'. It "
+                            "was written for an earlier editor and may need "
+                            "bringing up to date.")
+                else:
+                    os.replace(path, path + ".local")
+                    self._logger.warning(
+                            f"Setting the unrecorded '{name}' aside as "
+                            f"'{name}.local'; the editor's own design is "
+                            "served in its place.")
             except OSError as exc:
-                self._logger.error(f"Staging '{asset}' failed: {exc}")
-        try:
-            with open(stamp_file, "w", encoding="utf-8") as handle:
-                json.dump(staged, handle)
-        except OSError as exc:
-            self._logger.error(f"Recording the staged assets failed: {exc}")
+                self._logger.error(f"Clearing the staged '{name}' failed: "
+                                   f"{exc}")
+        if recorded:
+            try:
+                os.remove(stamp_file)
+            except OSError as exc:
+                self._logger.error(
+                        f"Removing the record of staged assets failed: {exc}")
 
     def _resolve_backend_func(self, module_id, func_name):
         """
@@ -2156,7 +2174,7 @@ class ConfigManager:
             # _note_xlation_key().
             self._keys_at_start = set(self._active_xlation_keys)
 
-        self._stage_web_assets()
+        self._retire_staged_assets()
 
         app = Flask("gpsmcpmms_editor", static_folder=None)
         # Flask sorts the keys of every JSON response by default, which
@@ -2189,24 +2207,45 @@ class ConfigManager:
             if origin and urlsplit(origin).netloc != request.host:
                 abort(403)
 
-        @app.route("/")
-        def index():
-            return send_from_directory(self.ui_dir, "index.html")
-
-        @app.route("/style.css")
-        def style_css():
-            return send_from_directory(self.ui_dir, "style.css")
-
-        @app.route("/app.js")
-        def app_js():
-            return send_from_directory(self.ui_dir, "app.js")
-
         packaged_ui = os.path.join(
                 os.path.dirname(os.path.abspath(__file__)), "ui")
 
+        def design_part(ext):
+            # Looked for on every request, not once at start: a design is put
+            # in place and taken away again while the device runs, and what
+            # is served has to follow without anybody restarting it.
+            own = f"{self.OWN_DESIGN}.{ext}"
+            if os.path.isfile(os.path.join(self.ui_dir, own)):
+                return send_from_directory(self.ui_dir, own)
+            return send_from_directory(packaged_ui,
+                                       f"{self.DEFAULT_DESIGN}.{ext}")
+
+        @app.route("/")
+        def index():
+            return design_part("html")
+
+        @app.route("/app.css")
+        def app_css():
+            return design_part("css")
+
+        @app.route("/app.js")
+        def app_js():
+            return design_part("js")
+
+        # The library's own design under its own name as well, whatever
+        # stands in its place: a stylesheet that only wants other colours
+        # begins with '@import "/default.css"' and is spared the rest.
+        @app.route("/default.css")
+        def default_css():
+            return send_from_directory(packaged_ui, "default.css")
+
+        @app.route("/default.js")
+        def default_js():
+            return send_from_directory(packaged_ui, "default.js")
+
         @app.route("/core.js")
         def core_js():
-            # from the package, not from ui_dir -- see LIBRARY_ASSETS
+            # from the package, never from ui_dir -- see LIBRARY_ASSETS
             return send_from_directory(packaged_ui, "core.js")
 
         @app.route(f"/{self.ASSET_SUBDIR}/<path:name>")

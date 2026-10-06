@@ -18,16 +18,17 @@
  * 4.4 - 4.9).
  *
  * This file is one way of drawing the editor, and only that. What a value is
- * and how a module is saved is core.js's business, which index.html loads
+ * and how a module is saved is core.js's business, which the page loads
  * first; a deployment that wants the editor to look and behave differently
- * replaces this file, style.css and index.html in ui_dir and keeps core.js. */
+ * puts an app.js of its own into ui_dir, which is then served in place of
+ * this file -- and likewise app.css and app.html -- and keeps core.js. */
 "use strict";
 
 if (typeof reloadData !== "function") {
-    // An index.html from before the split, kept because a deployment had
-    // changed it: it loads this file and nothing else.
+    // A page from before the split, kept because a deployment had changed
+    // it: it loads this file and nothing else.
     document.getElementById("app").textContent =
-        "index.html is out of date: it must load /core.js before /app.js.";
+        "This page is out of date: it must load /core.js before /app.js.";
     throw new Error("core.js is not loaded");
 }
 
@@ -875,7 +876,7 @@ function renderListA(node, container, relKeys, ctx, tone) {
         select(Number.isInteger(n) && n >= 1 && n <= last + 1 ? n - 1 : last);
     });
 
-    // Three rows are shown and the rest are scrolled to (style.css) -- and
+    // Three rows are shown and the rest are scrolled to (default.css) -- and
     // the selected one is brought into view, because the one selected by
     // default is the last: on a list of ten it would otherwise sit below the
     // fold, and the field beside the table would be editing something
@@ -1264,7 +1265,7 @@ async function changePassword() {
     msg(xl("Saved"), "ok");
 }
 
-/* The document's own language and direction, which index.html cannot know:
+/* The document's own language and direction, which default.html cannot know:
    it is served before anybody has chosen one, and it used to claim German
    for every reader. `lang` matters beyond looks -- it is what a screen reader
    picks a voice by, and what a browser hyphenates by. */
