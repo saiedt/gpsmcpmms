@@ -233,9 +233,30 @@ A Declaration is a dict with any of these keys (`type` is mandatory):
 | `s2g_scale` | `int`/`float` | `"*N"` or `"/N"` — the editor shows the value scaled and stores it unscaled (UI only). |
 | `acquire_button` | `backend_provided` | label of the capture button. |
 | `test_func`, `test_func_msg` | any | a callable + a modal message → the editor shows a **Test** button (see 4.9.4). |
+| `display` | any | A dict saying how the thing is best shown, handed to the editor as it is (`ui.display` in the dump). The library has no opinion on its contents; see *Display hints* below. |
 
 **`relevance` operators:** `==`, `!=`, `<`, `>`, `<=`, `>=`, `~=` (regex match).
 The right-hand `<value>` is JSON.
+
+**Display hints.** What a declaration says is what a parameter *is*; how it is
+best shown is often knowledge the application has and the editor can only
+guess at — which leaf names a record of a list, which list inside the records
+a long list is filtered by, that the order of a list means something, what
+colour and sign a service type is printed with. `display` carries that: a dict
+the library stores and hands to the editor untouched, and the same goes for
+any extra attribute in an enum option beside `label`, `tooltip` and `verbatim`.
+A design reads what it understands and ignores the rest, so the vocabulary is
+the designs' and grows with them. The vocabulary the default design and
+Lieschen's design read today:
+
+| In `display` of … | Key | Meaning |
+|---|---|---|
+| a list of records | `summary` | `{"title": leaf, "sub": [leaves], "chips": list, "times": list, "flow": list}` — what a record is summed up as in its row: the leaf that names it, the leaves under the name, a list drawn as chips, a list of time spans said in a few words, a list drawn as a numbered sequence. |
+| a list of records | `filter` | the name of a list inside the record by whose values a long list can be narrowed |
+| a list of records | `fold` | `true`: read down rather than looked up in — the first rows shown, the rest folded away |
+| a list of time spans | `span` | `true`: a record of this list is itself a time span (weekday booleans and two times) |
+| a list of plain values | `ordered` | `true`: the order means something; members can be rearranged |
+| an enum option | `color`, `icon` | a CSS colour and a short sign (an emoji will do) a design may draw the option with |
 
 ---
 

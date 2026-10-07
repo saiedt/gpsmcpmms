@@ -465,14 +465,19 @@ variables is an afternoon, and it is enough to make the editor recognisably
 yours. Everything the default design does keeps working, and every upgrade of
 the library still reaches you. Go further only for what a stylesheet cannot do.
 
-#### Put what the application knows into the design, not into the library
+#### Put what the application knows where the application speaks
 
-Which module is shown as what, which parameters share a page, what a list
-entry is summed up as: that is knowledge about your application, and your
-`app.js` is where it belongs. Asking the library to carry it — a new
-Declaration key for every such wish — makes the library know your application
-after all, which is the thing the split exists to avoid. Ask for a key when a
-second application would want it too.
+Two kinds of knowledge look alike and belong in different places. Which
+module is shown as what, which parameters share a page, that a list of states
+is a ring: that is knowledge about your *editor*, and your `app.js` is where
+it belongs. Which leaf names a record, which list a long list is filtered by,
+that an order means something, what colour a service type is printed with:
+that is knowledge about your *data*, and it belongs in the declaration, under
+`display`, where the next design finds it too. The library carries that key
+without reading it; the vocabulary is the designs' (the README lists it).
+Asking the library for a key of its own for every such wish — one it has to
+understand — makes the library know your application after all, which is the
+thing the split exists to avoid.
 
 #### Never speak to the device from the design
 

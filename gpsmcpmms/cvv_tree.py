@@ -1676,6 +1676,8 @@ class CvvPathElem(CvvNode):
         "values_for",
         # test support (see section 4.9.4 of the spec)
         "test_func", "test_func_msg", "test_button",
+        # how the thing is best shown: a dict handed to the editor as it is
+        "display",
         # annotations added internally during type resolution
         "is_list", "resolved_type",
     ))
@@ -2192,6 +2194,19 @@ class CvvPathElem(CvvNode):
             elif v is not None:
                 critical(f"As value for {k}, {v} had to be a string object.")
         self._ui_props["hidden"] = decl.get("hidden", False)
+        # How the thing is best shown, as far as the application knows --
+        # which leaf names a record, which list a long list is filtered by,
+        # that an order means something. The library has no opinion on any
+        # of it and hands the dict to the editor as it is; a design reads
+        # what it understands and ignores the rest. A dict and not a set of
+        # keys of its own, because what a design can make of a hint is the
+        # design's business, and the vocabulary grows with the designs.
+        display = decl.get("display")
+        if display is not None:
+            if not isinstance(display, dict):
+                critical(f"As value for display, {display!r} had to be a "
+                         f"dict ({self.get_path()}).")
+            self._ui_props["display"] = copy.deepcopy(display)
         lv = decl.get("likely_val")
         if lv is not None:
             if self._cur_val.check_simple_val(lv):
