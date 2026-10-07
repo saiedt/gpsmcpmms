@@ -926,7 +926,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /api/config/enum-options?path=[&arg=][&refresh=1]` | Resolve a dynamic enum's options; `arg` is the JSON-encoded value of the `values_for` sibling, `refresh=1` is what the ↻ of a `refreshable` enum sends. |
+| `GET /api/config/enum-options?path=[&arg=][&refresh=1]` | Resolve a dynamic enum's options; `arg` is the JSON-encoded value of the `values_for` sibling, `refresh=1` is what the ↻ of a `refreshable` enum sends. Answers a reader without the editing session too, for whatever is not protected; `refresh` is honoured for the session's holder only. |
 | `POST /api/config/file` | Upload a file for a parameter of type `file` (multipart: `path`, `file`); stores it in the host's `file_dir` and sets the parameter to its name. |
 | `POST /api/config/revive` | Puts a dormant module's parameters back by calling the `revive` callable it left. Administrators only, and by POST: it changes what the device offers. Registering ends the editing session, so a fresh token comes back with the answer — the person who pressed the button must not be sent to the password prompt for it. |
 | `GET /api/config/hint?path=[&lang=]` | The current text of a provider-backed `hint`, with the moment it was established. The stamp is the point: a hint asserts something about the present, and an undated assertion goes on claiming it. |

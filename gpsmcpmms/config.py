@@ -1249,13 +1249,18 @@ class ConfigManager:
     # Internal API for the config-editor layer (REST, see section 4 of
     # the spec); not intended for client modules
     # ------------------------------------------------------------------
-    def _may_access(self, path):
+    def _may_access(self, path, holder=True):
         """
         True if the current session may touch the param at `path`: admin
         sessions always may, others only if no protected subtree covers it.
+
+        `holder` says whether the request came with the session's token. One
+        that did not is never an administrator, whoever holds the session at
+        the moment: being shown a page read-only beside an administrator's
+        session is no way of reading what is protected.
         """
         with self._lock:
-            if self._session_admin:
+            if holder and self._session_admin:
                 return True
         try:
             protected = CvvNode.get_protected_paths(
@@ -2562,13 +2567,21 @@ class ConfigManager:
 
         @app.route("/api/config/enum-options")
         def enum_options():
-            if self._session_status(request_token()) != "valid":
-                return jsonify({"error": "invalid_token"}), 401
-            self._touch_session()
+            # Whoever is shown a value may be told what it is called. A page
+            # that came up read-only holds no token, and used to be refused
+            # here: it could show that a card stands for
+            # 'bbde703b-5da1-4fac-b50c-84d4558bc92a' and not that this is
+            # accompaniment outside the home. The lock decides who may change
+            # a value, not who may read it -- so the options are given to a
+            # reader too, as far as nothing protected is in the way, and
+            # without the session being touched on their behalf.
+            holder = self._session_status(request_token()) == "valid"
+            if holder:
+                self._touch_session()
             path = (request.args.get("path") or "").strip()
             if not path:
                 abort(400)
-            if not self._may_access(path):
+            if not self._may_access(path, holder):
                 return jsonify({"error": "admin_required"}), 403
             constraints = CvvNode.get_node_constraints(self, path)
             if constraints is None:
@@ -2592,9 +2605,12 @@ class ConfigManager:
                     return jsonify({"error": "malformed argument"}), 400
             # 'refreshable': the provider is told whether somebody asked it
             # to look again or the editor is only drawing the field.
+            # Looking again may set the device to work, and that is asked of
+            # it by whoever holds the session and by nobody else.
             kwargs = {}
             if constraints.get("refreshable"):
-                kwargs["refresh"] = request.args.get("refresh") == "1"
+                kwargs["refresh"] = (holder and
+                                     request.args.get("refresh") == "1")
             try:
                 result = func(*args, **kwargs)
             except Exception as exc:
@@ -2664,16 +2680,19 @@ class ConfigManager:
             something about the present -- "all seven languages are settled" --
             and an assertion nobody dated goes on claiming it long after it
             stopped being so. Stamped, it stays true.
+
+            Given to a reader without the session as well, for the reason
+            the options are: see enum_options().
             """
-            if self._session_status(request_token()) != "valid":
-                return jsonify({"error": "invalid_token"}), 401
-            self._touch_session()
+            holder = self._session_status(request_token()) == "valid"
+            if holder:
+                self._touch_session()
             path = (request.args.get("path") or "").strip()
             lang = ((request.args.get("lang") or "").strip()
                     or self.DECL_LANG)
             if not path:
                 abort(400)
-            if not self._may_access(path):
+            if not self._may_access(path, holder):
                 return jsonify({"error": "admin_required"}), 403
             provider = CvvNode.get_hint(self, path)
             if not isinstance(provider, str):

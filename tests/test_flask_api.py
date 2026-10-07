@@ -662,3 +662,60 @@ def test_the_core_keeps_options_per_question():
     assert "S.enums[node.path]" not in core
     assert "S.enums[tpl.path]" not in core
     assert "function enumKey(path, arg)" in core
+
+
+# --------------------------------------------------------------------------
+# What a page without the editing session may read
+# --------------------------------------------------------------------------
+
+def _register_named(seen):
+    config_mgr.register_params(
+        module_id="named", module_label="Named",
+        func_dict={"get_kinds": lambda refresh=False: (
+                       seen.append(refresh) or {"a": {"label": "Kind A"}}),
+                   "get_standing": lambda lang: "All is well."},
+        param_dict={
+            "kind": {"type": "enum", "label": "Kind", "values": "get_kinds",
+                     "refreshable": True, "hint": "get_standing"},
+            "secret": {"type": "enum", "label": "Secret", "protected": True,
+                       "values": "get_kinds", "hint": "get_standing"}},
+        callback=lambda value: None)
+
+
+def test_a_reader_without_the_session_is_told_what_a_value_is_called(client):
+    # A page that came up read-only holds no token. It was refused the
+    # options and the hints, and showed identifiers where the holder of the
+    # session saw names.
+    import time
+    seen = []
+    _register_named(seen)
+    token = _admin_token(client)          # somebody else holds the session,
+    runs_out = time.time() + 60           # and is an administrator
+    config_mgr._session_expires = runs_out
+
+    resp = client.get("/api/config/enum-options?path=named.kind")
+    assert resp.status_code == 200
+    assert resp.get_json()["values"] == {"a": {"label": "Kind A"}}
+    resp = client.get("/api/config/hint?path=named.kind")
+    assert resp.get_json()["text"] == "All is well."
+    # reading on somebody's behalf keeps nobody's session alive
+    assert config_mgr._session_expires == runs_out
+
+    # what is protected stays with the administrator, though one is in
+    for route in ("enum-options", "hint"):
+        assert client.get(f"/api/config/{route}?path=named.secret"
+                          ).status_code == 403
+        assert client.get(f"/api/config/{route}?path=named.secret",
+                          headers={"X-GPSMCPMMS-Token": token}
+                          ).status_code == 200
+
+
+def test_only_the_holder_of_the_session_sets_the_device_to_work(client):
+    seen = []
+    config_mgr._func_registry["named"]["get_kinds"] = lambda refresh=False: (
+        seen.append(refresh) or {"a": {"label": "Kind A"}})
+    token = _fresh_token(client)
+    client.get("/api/config/enum-options?path=named.kind&refresh=1")
+    client.get("/api/config/enum-options?path=named.kind&refresh=1",
+               headers={"X-GPSMCPMMS-Token": token})
+    assert seen == [False, True]
