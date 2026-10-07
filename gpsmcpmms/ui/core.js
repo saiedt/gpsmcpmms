@@ -516,19 +516,21 @@ function optionLabel(node, value, arg, rerender) {
         const hit = cons.one_of.find(o => o.value === value);
         return hit ? {text: optionWording(hit).text, known: true} : raw;
     }
-    let state = enumState(node.path, arg);
-    if (!state && arg === undefined) {
-        // asked without saying for what: any answer that knows the value
+    const state = enumState(node.path, arg);
+    if (!state && rerender) fetchEnumOptions(node.path, rerender, arg);
+    let o = state && state.values && state.values[value];
+    if (!o) {
+        // Not among the options asked for -- or asked without saying for
+        // what. Any other answer under this path that knows the value will
+        // do for naming it: a contact who no longer carries a chain's
+        // category is not offered to that chain any more, and is still
+        // called what the contacts call them.
         const prefix = node.path + "\u0000";
-        const key = Object.keys(S.enums).find(k => k.startsWith(prefix) &&
+        const key = Object.keys(S.enums).find(k =>
+            (k === node.path || k.startsWith(prefix)) &&
             S.enums[k].values && S.enums[k].values[value]);
-        if (key) state = S.enums[key];
+        o = key && S.enums[key].values[value];
     }
-    if (!state) {
-        if (rerender) fetchEnumOptions(node.path, rerender, arg);
-        return raw;
-    }
-    const o = state.values && state.values[value];
     if (!o) return raw;
     return {text: optionWording({label: o.label || String(value),
                                  verbatim: !!o.verbatim}).text, known: true};
