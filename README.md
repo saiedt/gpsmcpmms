@@ -537,8 +537,8 @@ the context a design carries down the tree (`rerender`, `adopted`,
 | `pendingFilesFor(path)` | The files chosen for a `file` parameter and not yet sent. |
 | `flushPendingFiles(module)` | Sends them, just before a save; `false` if one was refused. |
 | `PROBE_TYPES` / `probeValue(node, value, rerender)` | Which types the device can verify, and the verdict into `S.probeBad`. |
-| `captureValue(path)` | One capture of a backend-provided value: `{value}`, `{timeout}` or `{error}`. |
-| `runTest(path, value)` | The declared test: `{started, clean, error}`. |
+| `captureValue(path)` | One capture of a backend-provided value: `{value}`, `{timeout}` or `{error}`, the reason in words. |
+| `runTest(path, value)` | The declared test: `{started, clean, error}`, where `error` says in words why it never started. |
 | `wakeModule(module)` | Calls a retired module back; `true` if it registered. |
 | `loadLangList()` / `loadLang()` | The languages the device has, and the dictionary of the chosen one. |
 | `reloadData(passwd)` | The whole tree afresh, as the session may see it; with the password, as an administrator. Resets the drafts and tells `onReload` listeners. |
@@ -579,6 +579,7 @@ the context a design carries down the tree (`rerender`, `adopted`,
 |------|--------------|
 | `onNotify(fn)` | `fn(text, cls)` is called for whatever the core has to say; `cls` is `info`, `ok` or `error`. |
 | `onReload(fn)` | `fn()` is called when `reloadData()` has replaced the tree. |
+| `refusalText(reason)` | A reason the device gave for refusing a request, in the reading language. A sentence is translated; a code such as `invalid_token` becomes the sentence a person can act on ("No permission to make changes"), and any other code a plain failure with the code beside it. Every `error` and `detail` the core hands back, and everything it notifies, has been through this already, so a design never has a code to show. |
 
 This section is also written to be handed over. An AI assistant given it,
 the list of names at the top of `core.js` and a description of the application

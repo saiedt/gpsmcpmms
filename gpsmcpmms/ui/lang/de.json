@@ -1,6 +1,7 @@
 {
     "Add new translation": "Neue Übersetzung hinzufügen",
     "Administrator password for unlocking protected parameters.": "Administrator-Passwort zum Freischalten geschützter Parameter.",
+    "Administrator password required": "Administrator-Passwort erforderlich",
     "All {n} translations are complete.": "Alle {n} Übersetzungen sind vollständig.",
     "Alternatively, without an admin password: renewed access after {time}.": "Alternativ, ohne Admin-Passwort: Erneuter Zugriff nach {time} Uhr.",
     "Apply": "Anwenden",
@@ -41,6 +42,7 @@
     "New language": "Neue Sprache",
     "New password": "Neues Passwort",
     "No answer from the device.": "Keine Antwort vom Gerät.",
+    "No permission to make changes": "Kein Änderungsrecht",
     "No translation exists yet": "Noch keine Übersetzung vorhanden",
     "OK": "OK",
     "Password": "Passwort",
@@ -63,6 +65,7 @@
     "Test": "Test",
     "The device is still using the factory default password": "Das Gerät verwendet noch das werksseitige Standardpasswort",
     "The editing session has ended.": "Die Bearbeitungssitzung ist beendet.",
+    "The request failed ({code}).": "Die Anfrage ist fehlgeschlagen ({code}).",
     "The test could not be started.": "Der Test konnte nicht gestartet werden.",
     "The test routine could not carry out the test.": "Die Testroutine konnte den Test nicht durchführen.",
     "The test routine ran without errors.": "Die Testroutine wurde ohne Fehler ausgeführt.",

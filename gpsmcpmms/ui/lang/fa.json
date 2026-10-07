@@ -1,6 +1,7 @@
 {
     "Add new translation": "افزودن ترجمه‌ی جدید",
     "Administrator password for unlocking protected parameters.": "رمز دسترسی به پارامترهای تحت‌حفاظت.",
+    "Administrator password required": "رمز ویرایشگر لازم است",
     "All {n} translations are complete.": "همه‌ی {n} ترجمه کامل است.",
     "Alternatively, without an admin password: renewed access after {time}.": "راه‌حل، بدون رمز ویرایشگر: دسترسی مجدد بعد از ساعت {time}.",
     "Apply": "به‌کارگیری",
@@ -41,6 +42,7 @@
     "New language": "زبان جدید",
     "New password": "رمز جدید",
     "No answer from the device.": "پاسخی از دستگاه دریافت نشد.",
+    "No permission to make changes": "حق تغییر در دست شما نیست",
     "No translation exists yet": "ترجمه‌ی لازم هنوز وجود ندارد",
     "OK": "تأیید",
     "Password": "رمز",
@@ -63,6 +65,7 @@
     "Test": "تست",
     "The device is still using the factory default password": "تغییر رمز پیش‌فرض دستگاه به رمزی خصوصی برای حفاظت از پارامترهای حساس ضروری‌ست.",
     "The editing session has ended.": "نشست ویرایش پایان یافت.",
+    "The request failed ({code}).": "درخواست ناموفق بود ({code}).",
     "The test could not be started.": "دستور تست اجرا نشد.",
     "The test routine could not carry out the test.": "اجرای دستور تست خطا داد.",
     "The test routine ran without errors.": "اجرای دستور تست خطا نداد.",

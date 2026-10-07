@@ -54,7 +54,7 @@
  *   languages  useLanguage, langName, isLangCode, fetchTemplate,
  *              sendTranslation, targetFromFileName, RTL_LANGS
  *   wording    editorTitle
- *   told       onNotify, onReload
+ *   told       onNotify, onReload, refusalText
  *
  * The editing token lives ONLY in this runtime memory (spec 4.8). */
 "use strict";
@@ -163,6 +163,35 @@ const reloadListeners = [];
 function onNotify(fn) { notifier = fn; }
 function notify(text, cls = "info") { if (notifier) notifier(text, cls); }
 function onReload(fn) { reloadListeners.push(fn); }
+
+/* A request the device will not serve comes back with its reason. Some
+   reasons are sentences, registered like every other display string: "Value
+   already taken". Others are codes, meant for the program that asked:
+   invalid_token, admin_required. A code used to be shown as it came, and
+   "invalid_token" tells a reader nothing -- least of all that nothing is
+   broken, and that this page is simply not the one that may change things.
+
+   This is where a reason becomes words. The two codes a reader meets without
+   having done anything wrong have a sentence each. Any other code is a fault
+   in whatever sent the request; it is said as a failure, with the code beside
+   it for whoever is asked to look into it. A sentence goes through xl(): the
+   library has its own registered, and one the hosting application invented
+   falls through to itself. Everything further down that hands a reason on --
+   in a notification or in what it returns -- hands on what this made of it,
+   so a design never has a code to show. */
+const REFUSALS = {
+    invalid_token: "No permission to make changes",
+    admin_required: "Administrator password required",
+};
+function refusalText(reason) {
+    if (reason === undefined || reason === null || reason === "")
+        return xl("No answer from the device.");
+    reason = String(reason);
+    if (REFUSALS[reason]) return xl(REFUSALS[reason]);
+    if (/^[a-z0-9]+(_[a-z0-9]+)*$/.test(reason))
+        return xl("The request failed ({code}).").replace("{code}", reason);
+    return xl(reason);
+}
 
 /* ---------- values, scaling, validation ---------- */
 function composeValue(node) {
@@ -548,13 +577,11 @@ async function fetchEnumOptions(path, rerender, arg, refresh) {
     if (refresh) url += "&refresh=1";
     const r = await api(url);
     S.enums[key] = (r.data && r.data.values) ? {values: r.data.values, arg}
-                 : {error: (r.data && r.data.error) || xl("No answer from the device."),
-                    arg};
-    // xl() on a string the device sent: the library's own failure messages are
-    // registered keys, and a text the hosting application invented falls
-    // through to itself. Rendering it raw left the library's own German --
-    // and later English -- standing in a Turkish editor.
-    if (S.enums[key].error) notify(xl(S.enums[key].error), "error");
+                 : {error: refusalText(r.data && r.data.error), arg};
+    // In the reader's language by now -- see refusalText(). Rendered raw, a
+    // reason left the library's own German -- and later English -- standing
+    // in a Turkish editor.
+    if (S.enums[key].error) notify(S.enums[key].error, "error");
     rerender();
 }
 
@@ -569,8 +596,7 @@ async function fetchHint(path, rerender) {
                         `&lang=${encodeURIComponent(S.lang || S.sourceLang)}`);
     S.hints[path] = (r.data && typeof r.data.text === "string")
                   ? {text: r.data.text, at: r.data.at}
-                  : {error: (r.data && r.data.error) ||
-                            xl("No answer from the device.")};
+                  : {error: refusalText(r.data && r.data.error)};
     rerender();
 }
 
@@ -601,10 +627,11 @@ async function flushPendingFiles(mid) {
             if (!resp.ok) {
                 let err = resp.status;
                 try { err = (await resp.json()).error || err; } catch (e) {/**/}
-                // xl() for the reason fetchEnumOptions gives: every refusal
-                // of a file is a key, and shown raw it read in English -- or
-                // "Abgelehnt", in German -- whatever language was chosen
-                notify(`${xl("Invalid file")}: ${name}: ${xl(err)}`, "error");
+                // every refusal of a file is a key, and shown raw it read
+                // in English -- or "Abgelehnt", in German -- whatever
+                // language was chosen
+                notify(`${xl("Invalid file")}: ${name}: ${refusalText(err)}`,
+                       "error");
                 return false;
             }
         }
@@ -658,9 +685,8 @@ async function probeValue(node, value, rerender) {
     const d = r.data || {};
     const verdict = PROBE_VERDICT[d.outcome];
     if (r.status !== 200 || !verdict)
-        return notify(`${xl("Check failed")}: ` +
-                   `${d.error || xl("No answer from the device.")}`,
-                   "error");
+        return notify(`${xl("Check failed")}: ${refusalText(d.error)}`,
+                      "error");
     const [text, level] = verdict(d);
     const refused = level === "error";
     const changed = refused !== !!S.probeBad[node.path];
@@ -951,7 +977,7 @@ async function submitModule(mid) {
     if (r.status === 401) return {outcome: "ended"};
     if (r.status !== 200)
         return {outcome: "failed",
-                detail: (r.data && r.data.error) || r.status};
+                detail: refusalText((r.data && r.data.error) || r.status)};
     if (r.data.module_status) S.moduleStatus = r.data.module_status;
     if (r.data.dormant) S.dormant = r.data.dormant;
     const rejected = r.data.rejected;
@@ -1035,11 +1061,14 @@ async function refreshStatus() {
    may ever be outstanding -- a single backend event would otherwise land in
    whichever field happened to ask first -- so a design keeps everything else
    still until this returns. What comes back is the device's own answer:
-   {value}, {timeout: true} or {error}; null where there was none. */
+   {value}, {timeout: true} or {error} -- the reason in words, see
+   refusalText(); null where there was none. */
 async function captureValue(path) {
     try {
         const r = await api(
             `/api/value/capture?path=${encodeURIComponent(path)}`);
+        if (r.data && r.data.error)
+            return Object.assign({}, r.data, {error: refusalText(r.data.error)});
         return r.data;
     } catch (e) {
         return null;        // device unreachable
@@ -1049,14 +1078,14 @@ async function captureValue(path) {
 /* Three outcomes, not two: a test routine that returns "false" comes back
    with status 200, and "Successful: false" contradicted itself. `clean` says
    no more than that the routine ran without error -- whether the right ring
-   tone sounded is decided by whoever listened. `error` is what the device
-   handed back where the test never started, and is written in no language of
-   this house. */
+   tone sounded is decided by whoever listened. `error` is why the test
+   never started, in words: see refusalText(). */
 async function runTest(path, value) {
     const r = await api("/api/config/test", {json: {path, value}});
     const started = r.status === 200;
     return {started, clean: started && !!r.data.result,
-            error: started ? null : ((r.data && r.data.error) || r.status)};
+            error: started ? null
+                           : refusalText((r.data && r.data.error) || r.status)};
 }
 
 /* A module that has given its parameters up is asked to register them again.
@@ -1121,7 +1150,7 @@ async function fetchTemplate(target, refs) {
     if (!resp.ok) {
         let err = resp.status;
         try { err = (await resp.json()).error || err; } catch (e) { /**/ }
-        return {error: err};
+        return {error: refusalText(err)};
     }
     return {blob: await resp.blob()};
 }
@@ -1139,7 +1168,7 @@ async function sendTranslation(file, target, name) {
     if (!resp.ok) {
         let err = resp.status;
         try { err = (await resp.json()).error || err; } catch (e) { /**/ }
-        return {error: err};
+        return {error: refusalText(err)};
     }
     const sent = {report: await resp.blob(),
                   translated: resp.headers.get("X-GPSMCPMMS-Translated"),

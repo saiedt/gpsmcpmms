@@ -226,6 +226,15 @@ class ConfigManager:
         # only what is known, and it stays true where the connection really
         # has gone.
         "No answer from the device.",
+        # What a request is refused with, where the reason is a code and not
+        # a sentence: the editor puts the two a reader can run into without
+        # any fault of theirs into words -- no token for the editing session,
+        # no administrator behind it -- and says of every other only that the
+        # request failed, with the code beside it. See refusalText() in
+        # core.js.
+        "No permission to make changes",
+        "Administrator password required",
+        "The request failed ({code}).",
         "OK", "Cancel", "Saved", "Rejected", "Test", "New",
         "Password", "New password",
         "Reading value...", "Value applied", "Timeout",
