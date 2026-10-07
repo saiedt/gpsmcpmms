@@ -1736,6 +1736,16 @@ class CvvPathElem(CvvNode):
         }
         if self._protected:
             d["protected"] = True
+        if self._cur_val._source > CvvValue.SRC_BACKEND:
+            # 'init_only', still to be given. Folded out of the
+            # configurability above, which says who may write and not how
+            # often -- and for a leaf of its own that is enough, because once
+            # it is set it arrives here with configurability 0. The item
+            # template of a list never is set, though, and every member is
+            # drawn from it: without this an editor offers the field in a
+            # member that has long had its value, and learns of the refusal
+            # at the save.
+            d["once"] = True
         if self._cur_val._relevance_rules:
             # the editor needs the conditions to show/hide children live
             d["relevance"] = self._cur_val._relevance_rules

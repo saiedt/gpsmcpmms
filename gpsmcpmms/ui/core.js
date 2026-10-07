@@ -36,15 +36,15 @@
  *   small      xl, deepCopy, getIn, setIn, api, authHeaders
  *   values     composeValue, scaleOut, scaleIn, inRange, validValue,
  *              hexOfColor, colorOfHex
- *   fields     fieldSpec, readField, optionWording, likelyValue,
- *              proposedOption
+ *   fields     fieldSpec, readField, optionWording, optionLabel,
+ *              likelyValue, proposedOption, settledOnce
  *   structure  enumArgOf, relevanceHolds, visibleChildren, hasVisibleContent,
  *              memberLabel, resolveWithPaths, takenElsewhere,
  *              pathMatchesPattern, usedEnumValuesIn, checkModuleLists,
  *              collectUnsetBooleans
  *   members    standaloneKeysOf, memberIsLocked, memberRepeatsKey,
  *              memberLacksKey
- *   device     fetchEnumOptions, fetchHint, pendingFilesFor,
+ *   device     fetchEnumOptions, enumState, fetchHint, pendingFilesFor,
  *              flushPendingFiles, PROBE_TYPES, probeValue, captureValue,
  *              runTest, wakeModule, loadLangList, loadLang, reloadData,
  *              refreshStatus
@@ -99,7 +99,9 @@ const S = {
     edit: {},                // moduleId -> working value (deep copy)
     dirty: {},               // moduleId -> bool
     adopted: {},             // moduleId -> Set of likely_val fields filled in
-    enums: {},               // dump path -> {values}|{error}|{pending}
+    // the options of dynamic enums, one entry per question asked: see
+    // enumState() -> {values}|{error}|{pending}
+    enums: {},
     hints: {},               // dump path -> {text, at}|{error}|{pending}
     pendingFiles: {},        // dump path -> [{name, file}] chosen, not yet sent
     probeBad: {},            // dump path -> the device refused this value
@@ -304,11 +306,12 @@ function fieldSpec(node, cur, ctx, enumArg) {
         spec.kind = "enum";
         let options = Array.isArray(cons.one_of) ? cons.one_of : null;
         if (options === null) {           // dynamic enum
-            const state = S.enums[node.path];
-            // Ask again as soon as the field the options are computed from
-            // has become another one -- in the draft, long before saving:
-            // the voices of a language nobody has applied yet.
-            if (!state || state.arg !== enumArg) {
+            const state = enumState(node.path, enumArg);
+            // Ask as soon as the field the options are computed from has
+            // become another one -- in the draft, long before saving: the
+            // voices of a language nobody has applied yet. That is another
+            // question, and it has no answer in the cache yet.
+            if (!state) {
                 fetchEnumOptions(node.path, ctx.rerender, enumArg);
                 spec.pending = true;
                 return spec;
@@ -479,12 +482,61 @@ function proposedOption(node, cur, options, ctx) {
 
 /* ---------- dynamic enums (spec 4.9.1) ---------- */
 /* `arg` is the current value of the sibling a 'values_for' declaration named,
-   or undefined where none was declared. It is remembered beside the options,
-   because that is what says whether they are still the answer to the question
-   being asked -- and without it every render would ask again, and every
-   answer would render again. */
+   or undefined where none was declared. The options are kept under the path
+   and the argument together, because that is what they are the answer to:
+   the voices of German are not the voices of Turkish, though one field asks
+   for both.
+
+   They were kept under the path alone, with the argument beside them, and
+   that held for as long as an editor drew one record of a list at a time.
+   One that draws them all -- eight languages under one another, each with
+   its voice -- has eight questions out at once under one path: each answer
+   overwrote the one before, every field found the wrong argument beside the
+   options and asked again, and every answer drew the page again. */
+function enumKey(path, arg) {
+    return arg === undefined ? path : path + "\u0000" + JSON.stringify(arg);
+}
+
+function enumState(path, arg) { return S.enums[enumKey(path, arg)]; }
+
+/* A stored value of an enum, as words, wherever it is shown: in the field's
+   own list of options that is optionWording()'s business, but a row that
+   sums a record up, or a chip standing for a member, has no field to ask.
+
+   Returns {text, known}. Until the options have arrived -- and for a value
+   that is none of them -- the text is the value itself and `known` is false:
+   an identifier is still better than a blank. With a `rerender` the options
+   are asked for where nobody has asked yet; without one, nothing is. */
+function optionLabel(node, value, arg, rerender) {
+    const cons = node.constraints || {};
+    const raw = {text: String(value), known: false};
+    if (value === null || value === undefined || cons.one_of === undefined)
+        return raw;
+    if (Array.isArray(cons.one_of)) {
+        const hit = cons.one_of.find(o => o.value === value);
+        return hit ? {text: optionWording(hit).text, known: true} : raw;
+    }
+    let state = enumState(node.path, arg);
+    if (!state && arg === undefined) {
+        // asked without saying for what: any answer that knows the value
+        const prefix = node.path + "\u0000";
+        const key = Object.keys(S.enums).find(k => k.startsWith(prefix) &&
+            S.enums[k].values && S.enums[k].values[value]);
+        if (key) state = S.enums[key];
+    }
+    if (!state) {
+        if (rerender) fetchEnumOptions(node.path, rerender, arg);
+        return raw;
+    }
+    const o = state.values && state.values[value];
+    if (!o) return raw;
+    return {text: optionWording({label: o.label || String(value),
+                                 verbatim: !!o.verbatim}).text, known: true};
+}
+
 async function fetchEnumOptions(path, rerender, arg, refresh) {
-    S.enums[path] = {pending: true, arg};
+    const key = enumKey(path, arg);
+    S.enums[key] = {pending: true, arg};
     let url = `/api/config/enum-options?path=${encodeURIComponent(path)}`;
     if (arg !== undefined)
         url += `&arg=${encodeURIComponent(JSON.stringify(arg))}`;
@@ -493,14 +545,14 @@ async function fetchEnumOptions(path, rerender, arg, refresh) {
     // something nobody ordered by opening a group.
     if (refresh) url += "&refresh=1";
     const r = await api(url);
-    S.enums[path] = (r.data && r.data.values) ? {values: r.data.values, arg}
-                  : {error: (r.data && r.data.error) || xl("No answer from the device."),
-                     arg};
+    S.enums[key] = (r.data && r.data.values) ? {values: r.data.values, arg}
+                 : {error: (r.data && r.data.error) || xl("No answer from the device."),
+                    arg};
     // xl() on a string the device sent: the library's own failure messages are
     // registered keys, and a text the hosting application invented falls
     // through to itself. Rendering it raw left the library's own German --
     // and later English -- standing in a Turkish editor.
-    if (S.enums[path].error) notify(xl(S.enums[path].error), "error");
+    if (S.enums[key].error) notify(xl(S.enums[key].error), "error");
     rerender();
 }
 
@@ -555,7 +607,8 @@ async function flushPendingFiles(mid) {
             }
         }
         delete S.pendingFiles[path];
-        delete S.enums[path];      // the options must be asked for again
+        // the options must be asked for again; a file has no argument
+        delete S.enums[enumKey(path)];
     }
     return true;
 }
@@ -646,17 +699,26 @@ function hasVisibleContent(node, container, relKeys) {
    contact stands in which place. The options may not have arrived yet -- the
    field beside the table is what asks for them -- and until they do the raw
    value is still better than a blank. */
-function memberLabel(tpl, v) {
-    const cons = tpl.constraints || {};
-    if (cons.one_of === undefined) return String(v);
-    if (Array.isArray(cons.one_of)) {
-        const hit = cons.one_of.find(o => o.value === v);
-        return hit ? (hit.verbatim ? hit.label : xl(hit.label)) : String(v);
-    }
-    const values = (S.enums[tpl.path] || {}).values;
-    const o = values && values[v];
-    if (!o) return String(v);
-    return o.verbatim ? (o.label || String(v)) : xl(o.label || String(v));
+function memberLabel(tpl, v, arg) {
+    return optionLabel(tpl, v, arg).text;
+}
+
+/* ---------- a leaf that is set once ----------
+   'init_only' lets a value be given when its record is made and never
+   again: the language a row of voices is for, the name a state goes by. The
+   device refuses a change to it, and an editor that offers the field all the
+   same has invited an entry that can only be rejected.
+
+   A node says so with `once`. For a leaf of its own the device has settled
+   the matter already -- once set, it arrives with configurability 0. For a
+   leaf inside a list member it cannot: every member is drawn from the one
+   template, and the template has no value. So whoever draws a member asks
+   here, with the value the leaf held when editing began: set means settled.
+   A member that is only just being made has none, and may still be given
+   one. */
+function settledOnce(node, heldAtStart) {
+    return !!node.once && heldAtStart !== null && heldAtStart !== undefined
+           && heldAtStart !== "";
 }
 
 /* ---------- distinct_values across a group of paths (spec 4.9.7) ----------

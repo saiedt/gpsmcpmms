@@ -607,3 +607,58 @@ def test_a_level_nobody_knows_is_refused_where_it_is_reported():
         config_mgr.update_status("shouting",
                                  {"text": "Everything is on fire.",
                                   "level": "fatal"})
+
+
+# --------------------------------------------------------------------------
+# A leaf that is set once ('init_only'), as the editor is told of it
+# --------------------------------------------------------------------------
+
+def test_a_leaf_set_once_says_so_where_the_editor_cannot_tell(client):
+    # Inside a list every member is drawn from the one item template, and the
+    # template never has a value: its configurability stays 1 however many
+    # members have long been given theirs. 'once' is what lets an editor
+    # stop offering the field there.
+    config_mgr.register_params(
+        module_id="rows", module_label="Rows",
+        type_dict={
+            "row": {"key": {"type": "string", "label": "Key",
+                            "init_only": True},
+                    "note": {"type": "string", "label": "Note"}},
+            "row_list": {"list_member": {"type": "row"},
+                         "list_size": "0.."}},
+        param_dict={
+            "rows": {"type": "row_list", "label": "Rows"},
+            "serial": {"type": "string", "label": "Serial",
+                       "init_only": True}},
+        callback=lambda value: None)
+    token = _fresh_token(client)
+    headers = {**API, "X-GPSMCPMMS-Token": token}
+    dump = client.get("/api/cvv_data", headers=headers).get_json()["cvv"]["rows"]
+    template = dump["children"]["rows"]["item_template"]["children"]
+    assert template["key"].get("once") is True
+    assert "once" not in template["note"]
+    # a leaf of its own says it only while it is still to be given ...
+    assert dump["children"]["serial"].get("once") is True
+    assert dump["children"]["serial"]["configurability"] == 1
+    resp = client.post("/api/config/update", headers=headers,
+                       json={"module": "rows", "value": {"serial": "A-1"}})
+    assert resp.get_json()["rejected"] == []
+    # ... and afterwards the configurability says all there is to say
+    dump = client.get("/api/cvv_data", headers=headers).get_json()["cvv"]["rows"]
+    assert dump["children"]["serial"]["configurability"] == 0
+    assert "once" not in dump["children"]["serial"]
+
+
+def test_the_core_keeps_options_per_question():
+    # Kept under the path alone, the options of a field whose answer depends
+    # on a sibling overwrote one another as soon as two records of a list
+    # stood on the page together -- and every field asked again for ever.
+    import os
+    import gpsmcpmms
+    path = os.path.join(os.path.dirname(gpsmcpmms.__file__), "ui", "core.js")
+    with open(path, encoding="utf-8") as handle:
+        core = handle.read()
+    assert "S.enums[path]" not in core
+    assert "S.enums[node.path]" not in core
+    assert "S.enums[tpl.path]" not in core
+    assert "function enumKey(path, arg)" in core

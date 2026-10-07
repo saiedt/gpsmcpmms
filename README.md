@@ -499,6 +499,8 @@ the context a design carries down the tree (`rerender`, `adopted`,
 | `fieldSpec(node, cur, ctx, enumArg)` | Everything about drawing one leaf: `kind` (`boolean`, `enum`, `color`, `number`, `text`), `fixed`, `backend`, `placeholder`, and by kind the options (fetched if need be, with `pending`/`error` meanwhile), the proposal taken, whether the held value is orphaned, the display value, the step. |
 | `readField(spec, raw)` | What was typed, as a model value: `{value}` or `{invalid: true}`. |
 | `optionWording(option)` | `{text, hint}` of one option, translated unless verbatim. |
+| `optionLabel(node, value, arg, rerender)` | A stored enum value as words, for a place that is not its field — a row summing a record up, a chip. `{text, known}`; asks for the options if given a `rerender`. |
+| `settledOnce(node, heldAtStart)` | Whether an `init_only` leaf inside a list member has had its one value and must not be offered again. A node says `once` where it was declared so. |
 | `likelyValue(node, cur, relKeys, ctx)` | The `likely_val` to fill into an empty field, once per draft; `undefined` otherwise. The caller writes it. |
 | `proposedOption(node, cur, options, ctx)` | The option marked `proposed` that stands in for an empty or outdated value of a `one_of_for` field, once per draft; `undefined` otherwise. |
 
@@ -510,7 +512,7 @@ the context a design carries down the tree (`rerender`, `adopted`,
 | `relevanceHolds(rule, dictValue)` | Whether a relevance rule is met by the dict it belongs to. |
 | `visibleChildren(node, container, relKeys)` | The children of a dict that are on screen: not hidden, relevance met. |
 | `hasVisibleContent(node, container, relKeys)` | Whether a group would show anything at all. |
-| `memberLabel(template, v)` | What a member of a simple list reads as. |
+| `memberLabel(template, v, arg)` | What a member of a simple list reads as; `arg` as for `optionLabel`. |
 | `resolveWithPaths(value, parts, prefix)` / `pathMatchesPattern(pattern, path)` / `takenElsewhere(ctx, absKeys)` | The `distinct_values` machinery: which values a group of patterns already holds elsewhere. |
 | `usedEnumValuesIn(list, exceptIdx, prop)` | The values of `prop` the other members of a list hold. |
 | `checkModuleLists(node, value, focusErr)` | Whether every visible list meets its minimum size; `focusErr` is told which does not. |
@@ -529,7 +531,8 @@ the context a design carries down the tree (`rerender`, `adopted`,
 
 | Name | What it does |
 |------|--------------|
-| `fetchEnumOptions(path, rerender, arg, refresh)` | Asks for a dynamic enum's options into `S.enums[path]`; `refresh` asks the device to look again. |
+| `fetchEnumOptions(path, rerender, arg, refresh)` | Asks for a dynamic enum's options; `refresh` asks the device to look again. They are kept per path *and* argument, so that several records of one list can each have theirs. |
+| `enumState(path, arg)` | What is known of those options: `{values}`, `{error}`, `{pending}`, or nothing yet. |
 | `fetchHint(path, rerender)` | Asks for a dynamic hint into `S.hints[path]`, with the moment it was established. |
 | `pendingFilesFor(path)` | The files chosen for a `file` parameter and not yet sent. |
 | `flushPendingFiles(module)` | Sends them, just before a save; `false` if one was refused. |

@@ -575,8 +575,11 @@ function renderListA(node, container, relKeys, ctx, tone) {
     const select = (i) => { st.sel = i; rerenderList(); };
     const stored = (i) => (i < list.length ? list[i] : null);
     const shown = (i) => (i in st.drafts ? st.drafts[i] : stored(i));
+    // what the member's options were asked for -- see the field below
+    const memberArg = enumArgOf(tpl.constraints, container,
+                                relKeys.concat([0]));
     const cellText = (v) => (v === null || v === undefined || v === "")
-        ? "\u00a0" : memberLabel(tpl, v);
+        ? "\u00a0" : memberLabel(tpl, v, memberArg);
 
     // ---- the table, so that the row being edited can be corrected in place
     const rows = [];
