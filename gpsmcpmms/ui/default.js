@@ -1051,7 +1051,8 @@ async function unlockProtected() {
     const passwd = await modal(xl("Password"),
                                {input: {type: "password"}});
     if (passwd === null) return;
-    await reloadData(passwd);
+    // no answer: the core has said so, and the page stays as it is
+    if (!await reloadData(passwd)) return;
     if (S.wrongPasswd) msg(xl("Incorrect password"), "error");
     renderAll();
 }
@@ -1542,7 +1543,7 @@ async function boot() {
     try {
         await loadLangList();
         await loadLang();
-        await reloadData();
+        if (!await reloadData()) throw new Error("no answer");
         applyTextDirection();
         renderAll();
         watchStanding();

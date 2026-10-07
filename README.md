@@ -442,7 +442,8 @@ onNotify((text, cls) => showSomewhere(text, cls));
 async function start() {
     await loadLangList();          // which languages, and what the app is called
     await loadLang();              // the dictionary xl() reads from
-    await reloadData();            // S.cvv: the tree; S.edit: the draft of its values
+    if (!await reloadData())       // S.cvv: the tree; S.edit: the draft of its values
+        return sayNoAnswer();      // yours: the device did not answer
     draw();                        // yours
     setInterval(async () => {      // findings and state age; ask again
         if (await refreshStatus()) drawStanding();
@@ -541,7 +542,7 @@ the context a design carries down the tree (`rerender`, `adopted`,
 | `runTest(path, value)` | The declared test: `{started, clean, error}`, where `error` says in words why it never started. |
 | `wakeModule(module)` | Calls a retired module back; `true` if it registered. |
 | `loadLangList()` / `loadLang()` | The languages the device has, and the dictionary of the chosen one. |
-| `reloadData(passwd)` | The whole tree afresh, as the session may see it; with the password, as an administrator. Resets the drafts and tells `onReload` listeners. |
+| `reloadData(passwd)` | The whole tree afresh, as the session may see it; with the password, as an administrator. Resets the drafts and tells `onReload` listeners. `false` where the device did not answer: the tree on screen is then left as it was, and the core has said so through `notify()` -- except before the first tree, when a design that is starting up reads the result. |
 | `refreshStatus()` | Findings, state and the standing of the session, without touching the session; `true` if anything changed, `null` if the device did not answer. |
 
 **Findings**
@@ -572,6 +573,8 @@ the context a design carries down the tree (`rerender`, `adopted`,
 | `langName(code)` / `isLangCode(code)` / `RTL_LANGS` | The name of a language, whether a code looks like one, and which are written right to left. |
 | `fetchTemplate(target, refs)` / `sendTranslation(file, target, name)` / `targetFromFileName(file)` | The CSV round-trip: `{blob}` or `{error}`, `{report, translated, total}` or `{error}`. |
 | `editorTitle()` | What the editor is called, with the application's name in it. |
+
+Nothing in the core throws because the device was silent. A request that got no answer comes back as one that failed -- `false`, `"silent"`, `{error}`, `{outcome: "failed"}`, each in the words of its own row above -- and where the core notifies, it says "No answer from the device."
 
 **What the core tells a design**
 

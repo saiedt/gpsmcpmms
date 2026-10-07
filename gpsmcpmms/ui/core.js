@@ -123,7 +123,23 @@ function setIn(obj, keys, val) {
     cur[keys[keys.length - 1]] = val;
 }
 
-/* ---------- API ---------- */
+/* ---------- API ----------
+   A device that cannot be reached is an answer like any other: fetch()
+   rejects, and whoever was waiting has to hear "nothing came back" in the
+   same way they hear a refusal. Left to reject, it ended whatever had
+   asked -- somebody typed the password to see the protected parameters,
+   the device was gone, and the page said nothing at all, as if the password
+   had been wrong in some way it could not name.
+
+   So nothing in this file throws because the device was silent. reach() is
+   the one place a request leaves from, and hands back null where there was
+   no answer; api() makes {status: 0, data: null} of that, which every caller
+   already reads as "no answer". */
+async function reach(url, opts) {
+    try { return await fetch(url, opts); }
+    catch (e) { return null; }
+}
+
 async function api(path, opts = {}) {
     const headers = Object.assign(
         {"X-GPSMCPMMS-Api": "1"}, opts.headers || {});
@@ -133,7 +149,8 @@ async function api(path, opts = {}) {
         opts.body = JSON.stringify(opts.json);
         opts.method = opts.method || "POST";
     }
-    const resp = await fetch(path, Object.assign({}, opts, {headers}));
+    const resp = await reach(path, Object.assign({}, opts, {headers}));
+    if (!resp) return {status: 0, data: null};
     let data = null;
     try { data = await resp.json(); } catch (e) { /* non-json */ }
     return {status: resp.status, data};
@@ -184,7 +201,7 @@ const REFUSALS = {
     admin_required: "Administrator password required",
 };
 function refusalText(reason) {
-    if (reason === undefined || reason === null || reason === "")
+    if (reason === undefined || reason === null || reason === "" || reason === 0)
         return xl("No answer from the device.");
     reason = String(reason);
     if (REFUSALS[reason]) return xl(REFUSALS[reason]);
@@ -622,10 +639,10 @@ async function flushPendingFiles(mid) {
             fd.append("path", path);
             fd.append("file", file);
             if (S.token) fd.append("token", S.token);
-            const resp = await fetch("/api/config/file",
+            const resp = await reach("/api/config/file",
                 {method: "POST", headers: authHeaders(), body: fd});
-            if (!resp.ok) {
-                let err = resp.status;
+            if (!resp || !resp.ok) {
+                let err = resp ? resp.status : 0;
                 try { err = (await resp.json()).error || err; } catch (e) {/**/}
                 // every refusal of a file is a key, and shown raw it read
                 // in English -- or "Abgelehnt", in German -- whatever
@@ -1146,9 +1163,9 @@ function isLangCode(code) { return /^[a-z]{2,3}$/.test(code); }
 async function fetchTemplate(target, refs) {
     const url = `/api/lang/template?lang=${target}` +
                 `&refs=${encodeURIComponent(refs.join(","))}`;
-    const resp = await fetch(url, {headers: authHeaders()});
-    if (!resp.ok) {
-        let err = resp.status;
+    const resp = await reach(url, {headers: authHeaders()});
+    if (!resp || !resp.ok) {
+        let err = resp ? resp.status : 0;
         try { err = (await resp.json()).error || err; } catch (e) { /**/ }
         return {error: refusalText(err)};
     }
@@ -1163,10 +1180,10 @@ async function sendTranslation(file, target, name) {
     // a language nobody can name would show up in every dropdown as a code
     if (name) fd.append("name", name);
 
-    const resp = await fetch("/api/lang/upload",
+    const resp = await reach("/api/lang/upload",
         {method: "POST", headers: authHeaders(), body: fd});
-    if (!resp.ok) {
-        let err = resp.status;
+    if (!resp || !resp.ok) {
+        let err = resp ? resp.status : 0;
         try { err = (await resp.json()).error || err; } catch (e) { /**/ }
         return {error: refusalText(err)};
     }
@@ -1235,7 +1252,15 @@ async function reloadData(passwd) {
     if (passwd !== undefined) params.push(`passwd=${encodeURIComponent(passwd)}`);
     if (params.length) url += "?" + params.join("&");
     const r = await api(url);
-    if (!r.data) throw new Error("no data");
+    if (r.status !== 200 || !r.data || !r.data.cvv) {
+        // Said here, where there is a page to say it on -- the tree that is
+        // on screen stays, and whoever asked for another is told why they
+        // are still looking at this one. Before the first tree there is no
+        // page: a design that is starting up reads what comes back.
+        if (Object.keys(S.cvv).length)
+            notify(refusalText((r.data && r.data.error) || r.status), "error");
+        return false;
+    }
     S.token = r.data.token || S.token;
     S.readOnly = r.data.read_only;
     S.lockFreeIn = r.data.lock_free_in;
@@ -1266,4 +1291,5 @@ async function reloadData(passwd) {
     // A real fresh start comes with a page load, which resets S as a whole.
     for (const [mid, node] of Object.entries(S.cvv))
         S.edit[mid] = composeValue(node);
+    return true;
 }
