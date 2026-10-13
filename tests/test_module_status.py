@@ -310,6 +310,6 @@ def test_a_malformed_finding_is_refused(mgr, n, finding):
 def test_the_librarys_own_findings_stay_with_admins(mgr):
     # The factory password is an installer's business, and so is an
     # unfinished translation; neither names a path anybody else is shown.
-    assert mgr._current_ui_passwd() == mgr.FACTORY_DEFAULT_PASSWD
+    assert mgr._is_factory_passwd()
     assert _messages(mgr, mgr.OWN_MODULE_ID)
     assert _messages(mgr, mgr.OWN_MODULE_ID, admin=False) is None

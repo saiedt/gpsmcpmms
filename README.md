@@ -352,6 +352,8 @@ and (by kind) `value`, `children` or `item_template`.
 
 - **Perimeter only.** Anyone on the LAN can view/edit unprotected parameters; no
   login. Protected parameters require the admin password (`config.ui_passwd`).
+  It is stored as a salted one-way hash, never in the clear (see [Own
+  configuration parameters](#own-configuration-parameters)).
 - **Exclusive session.** At most one editing token exists at a time. A second
   client is served read-only. The token lives only in the browser's memory,
   expires after an inactivity timeout (`config.session_timeout`, default 30 min),
@@ -1420,7 +1422,32 @@ start finds something missing and keeps the parameters.
 
 | Path | Meaning |
 |------|---------|
-| `config.ui_passwd` | admin password (factory default until changed) |
+| `config.ui_passwd` | admin password, kept as a salted one-way hash (factory default until changed) |
+
+**The password is never stored in the clear** (since 0.45). What the store
+holds is `pbkdf2_sha256$<iterations>$<salt>$<digest>`: PBKDF2-HMAC-SHA256 from
+the standard library, a random salt per password, and the iteration count
+inside the value, so that the count can be raised in a later release without
+locking anybody out. Nobody who reads the store — off a card in a card reader,
+out of a backup, through `query("config.ui_passwd")` — learns the password.
+
+- **Setting it** is unchanged: the editor sends the new password with an
+  ordinary update of the `config` module, and the hash is taken before the value
+  reaches the store or its journal.
+- **Nothing hands it out.** The `config` module is left out of what the editor
+  is given, hash included.
+- **The factory default is the one exception**, and no secret: a device that has
+  never been given a password of its own has nothing stored, and the default is
+  in this document. Set again on purpose, it is hashed like any other and the
+  factory-password notice returns.
+- **A device updated from an earlier release is sealed at its first start.** A
+  password found in the clear is replaced by its hash, in the checkpoint and in
+  the one kept before it, and the log says so once. The password itself does not
+  change and nobody has to do anything.
+- **A forgotten password cannot be read back any more.** The way out is the one
+  a hash leaves: remove the `config` module's directory from the cvv directory
+  while the application is stopped, and the device stands on the factory default
+  again.
 
 Everything else is a **deploy-time** setting, read from the environment rather
 than the cvv tree: `GPSMCPMMS_CVV_DIR` and `GPSMCPMMS_UI_DIR` (working dirs,

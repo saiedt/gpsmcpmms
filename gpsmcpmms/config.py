@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
+import binascii
 import csv
 import hashlib
 import hmac
@@ -44,6 +46,16 @@ class ConfigManager:
     # param); it is handled by config_mgr itself and is therefore never
     # rendered as an editable module in the config-editor
     OWN_MODULE_ID = "config"
+    # The administrator password is kept as a one-way hash, never in the
+    # clear: "<scheme>$<iterations>$<salt>$<digest>", the last two in base64.
+    # The count stands in the stored value, so it can be raised here without
+    # locking anybody out -- an older hash is verified with its own.
+    #
+    # PBKDF2 because it is in every Python there is; the device this was
+    # written for has no room for a dependency that exists only for this.
+    PASSWD_SCHEME = "pbkdf2_sha256"
+    PASSWD_ITERATIONS = 200_000
+    PASSWD_SALT_BYTES = 16
     # how many existing languages may be included as reference columns in a
     # downloaded translation template (context for the translator/AI)
     MAX_TEMPLATE_REFS = 3
@@ -424,8 +436,12 @@ class ConfigManager:
                                         own_decl, own_types)
         if not isinstance(my_config, dict):
             my_config = {}
-        self._ui_passwd = (my_config.get("ui_passwd") or
-                           self.FACTORY_DEFAULT_PASSWD)
+        # (stored value, whether it is the factory password): the question
+        # is asked with every answer the editor gets, and answering it means
+        # hashing -- so once per stored value, not once per request
+        self._factory_passwd_cache = None
+        # a password an older release left in the clear is sealed now
+        self._seal_stored_ui_passwd(my_config.get("ui_passwd"))
         # ui_port and session_timeout are deploy-time settings, read from the
         # environment like GPSMCPMMS_CVV_DIR / _UI_DIR (not editable params).
         self._ui_port = self._env_int("GPSMCPMMS_UI_PORT", self.DEFAULT_UI_PORT,
@@ -642,7 +658,7 @@ class ConfigManager:
         # it belongs here rather than in a banner of its own. Changing it is
         # an administrator's business; the person the device stands with can
         # do nothing about it and does not need to be told.
-        if self._current_ui_passwd() == self.FACTORY_DEFAULT_PASSWD:
+        if self._is_factory_passwd():
             found.setdefault(self.OWN_MODULE_ID, []).append({
                     "text": "The device is still using the factory default "
                             "password",
@@ -1284,6 +1300,8 @@ class ConfigManager:
         and notifies the module through its registered callback. Returns the
         list of rejected paths.
         """
+        if module_id == self.OWN_MODULE_ID:
+            config_value = self._sealed_own_update(config_value)
         rejected, value = CvvNode.update_module(self, module_id, config_value)
         callback = self._callback_registry.get(module_id)
         if callable(callback):
@@ -2017,10 +2035,116 @@ class ConfigManager:
     # ------------------------------------------------------------------
     # Exclusive editing session of the config-editor (spec 4.8)
     # ------------------------------------------------------------------
-    def _current_ui_passwd(self):
+    # The administrator password. What is stored is a hash of it, so that
+    # nobody who reads the store -- off a card in a card reader, out of a
+    # backup, through query() -- learns the password, which its owner may
+    # well be using elsewhere. The one exception is no secret: a device that
+    # has never been given a password of its own stands on the factory
+    # default, and that one is in the documentation.
+    @classmethod
+    def _hash_passwd(cls, passwd, salt=None, iterations=None):
+        """The stored form of a password; a fresh salt unless one is given."""
+        if salt is None:
+            salt = secrets.token_bytes(cls.PASSWD_SALT_BYTES)
+        iterations = iterations or cls.PASSWD_ITERATIONS
+        digest = hashlib.pbkdf2_hmac("sha256", passwd.encode("utf-8"), salt,
+                                     iterations)
+        return "$".join((cls.PASSWD_SCHEME, str(iterations),
+                         base64.b64encode(salt).decode("ascii"),
+                         base64.b64encode(digest).decode("ascii")))
+
+    @classmethod
+    def _parse_passwd_hash(cls, stored):
+        """(iterations, salt, digest) of a stored hash -- or None for
+        anything else, a password in the clear above all."""
+        if not isinstance(stored, str):
+            return None
+        parts = stored.split("$")
+        if len(parts) != 4 or parts[0] != cls.PASSWD_SCHEME:
+            return None
+        try:
+            iterations = int(parts[1])
+            salt = base64.b64decode(parts[2], validate=True)
+            digest = base64.b64decode(parts[3], validate=True)
+        except (ValueError, binascii.Error):
+            return None
+        if iterations < 1 or not salt or not digest:
+            return None
+        return iterations, salt, digest
+
+    def _stored_ui_passwd(self):
+        """What the store holds: a hash, or the declaration's default where
+        no password has been set, or None."""
         key = f"{self.OWN_MODULE_ID}.ui_passwd"
         v = self.query(key).get(key)
-        return v if isinstance(v, str) and v else self.FACTORY_DEFAULT_PASSWD
+        return v if isinstance(v, str) and v else None
+
+    def _passwd_matches(self, candidate):
+        """Whether `candidate` is the administrator password."""
+        if not isinstance(candidate, str):
+            return False
+        stored = self._stored_ui_passwd()
+        parsed = self._parse_passwd_hash(stored)
+        if parsed is None:
+            # No password of the device's own: the factory default holds.
+            # (Or one in the clear that has not been sealed yet -- it is at
+            # the next start, and until then it is still the password.)
+            # As bytes: compare_digest refuses text that is not ASCII, and
+            # a password may be anything.
+            expected = stored or self.FACTORY_DEFAULT_PASSWD
+            return hmac.compare_digest(candidate.encode("utf-8"),
+                                       expected.encode("utf-8"))
+        iterations, salt, digest = parsed
+        tried = hashlib.pbkdf2_hmac("sha256", candidate.encode("utf-8"),
+                                    salt, iterations)
+        return hmac.compare_digest(tried, digest)
+
+    def _is_factory_passwd(self):
+        """Whether the device still stands on the factory password."""
+        stored = self._stored_ui_passwd()
+        cached = self._factory_passwd_cache
+        if cached is not None and cached[0] == stored:
+            return cached[1]
+        answer = self._passwd_matches(self.FACTORY_DEFAULT_PASSWD)
+        self._factory_passwd_cache = (stored, answer)
+        return answer
+
+    def _sealed_own_update(self, value):
+        """An update of this library's own module, with a new password
+        replaced by its hash before it reaches the store or its journal."""
+        new = value.get("ui_passwd") if isinstance(value, dict) else None
+        if isinstance(new, str) and new:
+            value = dict(value)
+            value["ui_passwd"] = self._hash_passwd(new)
+        return value
+
+    def _seal_stored_ui_passwd(self, stored=None):
+        """Replaces a password kept in the clear by its hash. True where
+        there was one.
+
+        Releases before 0.45 stored the password as it was typed. A device
+        updated from one of them is sealed at its first start afterwards,
+        with nothing for anybody to do and the password unchanged.
+
+        Written twice, and the second time is the point: the store keeps the
+        checkpoint before the last as *.old, and after one write that file
+        is the one with the password in the clear.
+        """
+        if stored is None:
+            stored = self._stored_ui_passwd()
+        if (not isinstance(stored, str) or not stored
+                or stored == self.FACTORY_DEFAULT_PASSWD
+                or self._parse_passwd_hash(stored) is not None):
+            return False
+        sealed = {"ui_passwd": self._hash_passwd(stored)}
+        CvvNode.update_module(self, self.OWN_MODULE_ID, dict(sealed))
+        CvvNode.update_module(self, self.OWN_MODULE_ID, dict(sealed))
+        self._factory_passwd_cache = None
+        self._logger.info("The administrator password was stored in the "
+                          "clear by an earlier release; it is kept as a "
+                          "one-way hash from now on. The password itself is "
+                          "unchanged.")
+        return True
 
     def _session_timeout_seconds(self):
         return (self._session_timeout or self.DEFAULT_SESSION_TIMEOUT) * 60
@@ -2370,7 +2494,7 @@ class ConfigManager:
             wrong_passwd = False
             passwd = request.args.get("passwd")
             if passwd is not None and editable:
-                if hmac.compare_digest(passwd, self._current_ui_passwd()):
+                if self._passwd_matches(passwd):
                     with self._lock:
                         self._session_admin = True
                 else:
@@ -2404,8 +2528,7 @@ class ConfigManager:
                 "admin": admin,
                 "wrong_passwd": wrong_passwd,
                 "protected_omitted": omitted,
-                "factory_default_passwd":
-                    self._current_ui_passwd() == self.FACTORY_DEFAULT_PASSWD,
+                "factory_default_passwd": self._is_factory_passwd(),
                 # What the modules have to say, keyed by module. Mostly to an
                 # administrator: these are notes about work still to be done,
                 # and the person the device stands with can act on few of them
@@ -3007,8 +3130,7 @@ class ConfigManager:
             if not isinstance(payload, dict):
                 abort(400)
             applicant = request.remote_addr
-            if not hmac.compare_digest(str(payload.get("passwd") or ""),
-                                       self._current_ui_passwd()):
+            if not self._passwd_matches(str(payload.get("passwd") or "")):
                 self._logger.warning(
                         f"Refused a session takeover from {applicant}: wrong "
                         "password.")
