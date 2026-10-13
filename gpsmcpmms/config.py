@@ -730,6 +730,59 @@ class ConfigManager:
                 f"register_params(): 'state_func' must be callable "
                 f"(got {type(state_func).__name__})."
             )
+        # From here on the registration writes itself into this object, and
+        # a declaration can still be refused further down -- by the checks
+        # below, or by the tree while it builds the module. Then all of it is
+        # taken back (_restore_registration): a refused module has not been
+        # registered, and its id, its callback, the keys of its labels and a
+        # resting module's way back must be what they were.
+        before = self._registration_state(module_id)
+        try:
+            config_value = self._register_params(
+                    module_id, module_label, param_dict, callback, type_dict,
+                    module_tooltip, func_dict, state_func)
+        except BaseException:
+            self._restore_registration(module_id, before, type_dict)
+            raise
+        # any runtime schema change invalidates the exclusive editing
+        # token, forcing the config-editor to re-align (spec 4.8)
+        self._invalidate_session(f"module '{module_id}' registered its "
+                                 "parameters")
+        self._note_module_status(module_id, callback(config_value))
+
+    def _registration_state(self, module_id):
+        """What a registration of `module_id` is about to overwrite."""
+        with self._lock:
+            keys = set(self._active_xlation_keys)
+            kinds = {key: set(kind) for key, kind in
+                     self._xlation_kinds.items()}
+        return {
+            "registries": [
+                (registry, module_id in registry, registry.get(module_id))
+                for registry in (self._callback_registry,
+                                 self._func_registry, self._state_funcs,
+                                 self._module_labels, self._dormant)],
+            "keys": keys, "kinds": kinds,
+        }
+
+    def _restore_registration(self, module_id, before, type_dict):
+        for registry, was_there, value in before["registries"]:
+            if was_there:
+                registry[module_id] = value
+            else:
+                registry.pop(module_id, None)
+        with self._lock:
+            self._active_xlation_keys = before["keys"]
+            self._xlation_kinds = before["kinds"]
+        if isinstance(type_dict, dict):
+            # the entry this method adds to the caller's own dict
+            type_dict.pop(module_id, None)
+
+    def _register_params(self, module_id, module_label, param_dict,
+                         callback, type_dict, module_tooltip, func_dict,
+                         state_func):
+        """The part of register_params() that is taken back as a whole if
+        any of it is refused. Returns the module's value."""
         self._callback_registry[module_id] = callback
         self._func_registry[module_id] = func_dict or {}
         if state_func is None:
@@ -751,16 +804,11 @@ class ConfigManager:
         self._check_refreshable(type_dict, self._func_registry[module_id])
         type_registry = type_dict if isinstance(type_dict, dict) else {}
         type_registry[module_id] = param_dict
-        config_value = CvvNode.init_module(self, module_id, {
+        return CvvNode.init_module(self, module_id, {
                 "label": module_label,
                 "tooltip": module_tooltip,
                 "type": module_id
             }, type_registry)
-        # any runtime schema change invalidates the exclusive editing
-        # token, forcing the config-editor to re-align (spec 4.8)
-        self._invalidate_session(f"module '{module_id}' registered its "
-                                 "parameters")
-        self._note_module_status(module_id, callback(config_value))
 
     def discard_module(self, module_id, revive=None):
         """

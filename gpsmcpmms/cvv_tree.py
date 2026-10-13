@@ -1474,13 +1474,32 @@ class CvvNode:
             with cls._global_lock:
                 cls._type_context[module] = type_context
 
-            # PIPELINE EXECUTION CHAIN: init -> load&merge -> sync
-            with _phase(module, CVV_MODULE_INIT_PHASE):
-                m_node = CvvPathElem(cls._root_instance, module, decl)
-            with _phase(module, CVV_MODULE_LOAD_PHASE):
-                cls._load_and_merge_module_data(module, m_node)
-            with _phase(module, CVV_MODULE_SYNC_PHASE):
-                cls._backup_module_data(module, m_node.get_value())
+            try:
+                # PIPELINE EXECUTION CHAIN: init -> load&merge -> sync
+                with _phase(module, CVV_MODULE_INIT_PHASE):
+                    m_node = CvvPathElem(cls._root_instance, module, decl)
+                with _phase(module, CVV_MODULE_LOAD_PHASE):
+                    cls._load_and_merge_module_data(module, m_node)
+                with _phase(module, CVV_MODULE_SYNC_PHASE):
+                    cls._backup_module_data(module, m_node.get_value())
+            except BaseException:
+                # A declaration that is refused is refused halfway through
+                # being built: the module's node hangs in the tree by then,
+                # with children that never got as far as their own
+                # attributes. Left there, it broke the next thing that walked
+                # the tree -- every answer to the editor -- for a mistake in
+                # one module's declaration.
+                #
+                # Taken out again, together with what was noted for it. What
+                # is on the disk stays: nothing has been written for this
+                # attempt, and what an earlier run stored there belongs to
+                # the declaration that will be accepted, not to this one.
+                with cls._global_lock:
+                    if cls._root_instance is not None:
+                        cls._root_instance._children.pop(module, None)
+                    cls._type_context.pop(module, None)
+                    cls._module_locks.pop(module, None)
+                raise
 
             return copy.deepcopy(m_node.get_value())
 
