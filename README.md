@@ -1424,7 +1424,44 @@ start finds something missing and keeps the parameters.
 |------|---------|
 | `config.ui_passwd` | admin password, kept as a salted one-way hash (factory default until changed) |
 
-**The password is never stored in the clear** (since 0.45). What the store
+### Secrets: a parameter of type `password` is write-only
+
+Since 0.46 the value of a parameter declared with `"type": "password"` is taken
+and **never handed out again** — not to a session without the admin password,
+and not to an administrator either. Whoever reads the editor's traffic, opens
+the page's source or asks the API directly learns that there is a secret, and
+nothing else. The application that owns it reads it as before, through
+`query()` and its callback: it has to present it to whoever it is for.
+
+No attribute of its own is needed to tell the three cases apart; the type
+already does:
+
+| What is wanted | How it is declared |
+|---|---|
+| write-only: set it, never read it back | `"type": "password"` |
+| readable and writable: a password that somebody has to read off the screen | `"type": "string"` |
+| readable only: a value the device gives itself | `"type": "string"` with `fixed_val`, or `backend_provided` |
+
+What the editor is given in the place of a secret that is set is a fixed
+stand-in (`secret_set` in the answer of `/api/cvv_data`; a password field shows
+it as a row of dots, as it always has). What it sends back is read accordingly:
+
+- **the stand-in, unchanged** — leave the secret as it is;
+- **anything else** — the new secret;
+- **the empty string** — clear it.
+
+This holds for a parameter of its own, inside a group, and in the records of a
+list. A list is sent whole, so a record's secret is found again by what the
+record is known by — its `list_keys` — and not by its position: a record that
+moved up because the one before it was removed keeps its own. A list without
+keys has only the position to go by.
+
+A **test function** is handed the form as it stands, with every stand-in
+replaced by the stored secret, so "test these settings" tests the real ones.
+And the stand-in can never be stored as the secret it stands for: that is
+refused at the last door before the store.
+
+**The admin password is never stored in the clear** (since 0.45). What the store
 holds is `pbkdf2_sha256$<iterations>$<salt>$<digest>`: PBKDF2-HMAC-SHA256 from
 the standard library, a random salt per password, and the iteration count
 inside the value, so that the count can be raised in a later release without

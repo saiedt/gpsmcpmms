@@ -281,6 +281,11 @@ function buildInput(node, cur, commit, commitQuiet, ctx, enumArg) {
         input.addEventListener("keydown",
             (e) => { if (e.key === "Enter" || e.keyCode === 13) input.blur(); });
         input.addEventListener("change", () => read(input));
+        // A secret is never handed out: what stands in the field is a
+        // stand-in for "there is one", shown as dots. So the field is
+        // written over, not added to -- whoever comes into it has the whole
+        // of it selected, and the first key replaces it.
+        if (spec.secret) input.addEventListener("focus", () => input.select());
         return input;
     }
     }

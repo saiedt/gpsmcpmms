@@ -30,7 +30,7 @@ import socket
 import subprocess
 import threading
 import time
-from .cvv_tree import CvvError, CvvNode
+from .cvv_tree import CvvError, CvvNode, SECRET_MARK, SECRET_SET
 
 
 class ConfigManager:
@@ -2113,7 +2113,11 @@ class ConfigManager:
         """An update of this library's own module, with a new password
         replaced by its hash before it reaches the store or its journal."""
         new = value.get("ui_passwd") if isinstance(value, dict) else None
-        if isinstance(new, str) and new:
+        if isinstance(new, str) and SECRET_MARK in new:
+            # the stand-in for "there is one", not a password: nothing here
+            # is ever given it, and it is not going to be hashed into one
+            value = {k: v for k, v in value.items() if k != "ui_passwd"}
+        elif isinstance(new, str) and new:
             value = dict(value)
             value["ui_passwd"] = self._hash_passwd(new)
         return value
@@ -2528,6 +2532,11 @@ class ConfigManager:
                 "admin": admin,
                 "wrong_passwd": wrong_passwd,
                 "protected_omitted": omitted,
+                # What stands in the place of every secret that is set: a
+                # parameter of type "password" is never handed out. An
+                # editor needs it only if it wants to say "set" in words;
+                # sent back as it came, it means "unchanged".
+                "secret_set": SECRET_SET,
                 "factory_default_passwd": self._is_factory_passwd(),
                 # What the modules have to say, keyed by module. Mostly to an
                 # administrator: these are notes about work still to be done,
@@ -2943,7 +2952,10 @@ class ConfigManager:
             if test_func is None:
                 return jsonify({"error": "no_test_func"}), 404
             try:
-                result = test_func(payload.get("value"))
+                # the form as it stands, with the secrets it was never told
+                # put back in: a test of the stand-in would test nothing
+                result = test_func(CvvNode.with_secrets(
+                        self, path, payload.get("value")))
             except Exception as exc:
                 self._logger.error(f"test_func for '{path}' raised: {exc}")
                 return jsonify({"error": "test_failed"}), 500

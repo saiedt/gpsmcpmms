@@ -156,7 +156,38 @@ def setup_demo_environment():
         callback=lambda value: None,
     )
 
+    # Secrets in every place one can stand: a parameter of its own, one
+    # behind the admin password, one inside a group that has a test of its
+    # own, and one in the records of a list that are known by a key.
+    config_mgr.register_params(
+        module_id="vault",
+        module_label="Secrets",
+        type_dict={
+            "login": {"user": {"label": "User", "type": "string"},
+                      "passwd": {"label": "Password", "type": "password"}},
+            "account": {"name": {"label": "Name", "type": "string"},
+                        "secret": {"label": "Secret", "type": "password"}},
+            "account_list": {"list_member": {"type": "account"},
+                             "list_keys": [["name"]], "list_size": "0.."},
+        },
+        param_dict={
+            "key": {"label": "Key", "type": "password"},
+            "locked": {"label": "Locked key", "type": "password",
+                       "protected": True},
+            "login": {"label": "Login", "type": "login",
+                      "test_func": _what_the_test_was_given},
+            "accounts": {"label": "Accounts", "type": "account_list"},
+        },
+        callback=lambda value: None,
+    )
+
     return config_mgr
+
+
+def _what_the_test_was_given(value):
+    """The test of "vault.login": answers with the password it was handed,
+    so that a test can see what a test function sees."""
+    return (value or {}).get("passwd")
 
 
 # The two providers behind "mplist": who belongs to which group, and the

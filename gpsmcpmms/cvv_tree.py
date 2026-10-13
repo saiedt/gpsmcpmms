@@ -100,6 +100,17 @@ import time
 from contextlib import contextmanager, nullcontext
 from contextvars import ContextVar
 
+# A parameter of type "password" is write-only: its value is taken and never
+# handed out again. What an editor is given in its place is SECRET_SET, which
+# says only that there is one. Sent back unchanged it means "leave it as it
+# is"; anything else is a new value, and the empty string clears it.
+#
+# Made of a character nobody types -- it is from the private use area -- so
+# that it cannot be anybody's real secret, and eight of them, so that a
+# password field shows what it has always shown: a row of dots.
+SECRET_MARK = "\ue000"
+SECRET_SET = SECRET_MARK * 8
+
 CVV_UNKNOWN_PHASE = 0
 CVV_MODULE_INIT_PHASE = 1
 CVV_MODULE_LOAD_PHASE = 2
@@ -1360,6 +1371,18 @@ class CvvNode:
         return node._ui_props.get("test_func") if node is not None else None
 
     @classmethod
+    def with_secrets(cls, holder, path, value):
+        """`value` for the node at `path`, with every SECRET_SET replaced
+        by the stored secret. For what is handed to a test function: it is
+        given the form as it stands, and a secret the form was never told
+        stands in it as its stand-in."""
+        cls._check_holder(holder)
+        node = cls._get_single_node(holder, path)
+        if node is None:
+            return value
+        return node._with_secrets(value, node.get_value())
+
+    @classmethod
     def get_file_dir(cls, holder, path):
         """
         Returns the directory a 'file' parameter declared as the destination
@@ -1758,14 +1781,91 @@ class CvvPathElem(CvvNode):
         # where uploads land is the host's business, not the browser's
         d["ui"].pop("file_dir", None)
         if self._children is None:
-            d["value"] = self._cur_val.get_value()
+            d["value"] = self._withheld(self._cur_val.get_value())
         elif self.is_list_root():
-            d["value"] = self._cur_val.get_value()
+            d["value"] = self._withheld(self._cur_val.get_value())
             d["item_template"] = d["ui"].pop("item_template").dump_node()
         else:
             d["children"] = {k: c.dump_node()
                              for k, c in self._children.items()}
         return d
+
+    # ------------------------------------------------------------------
+    # Secrets: parameters of type "password" (see SECRET_SET above)
+    # ------------------------------------------------------------------
+    def _is_secret(self):
+        return (self._children is None and
+                self._cur_val._constraints.get("type") == "password")
+
+    def _withheld(self, value):
+        """`value` as an editor may be given it: every secret that is set
+        replaced by SECRET_SET, in records of lists as well."""
+        if self._children is None:
+            if self._is_secret() and isinstance(value, str) and value:
+                return SECRET_SET
+            return value
+        if self.is_list_root():
+            template = self._ui_props.get("item_template")
+            if template is None or not isinstance(value, list):
+                return value
+            return [template._withheld(member) for member in value]
+        if isinstance(value, dict):
+            return {k: (self._children[k]._withheld(v)
+                        if k in self._children else v)
+                    for k, v in value.items()}
+        return value
+
+    def _with_secrets(self, incoming, stored):
+        """`incoming` as it is meant: every SECRET_SET replaced by the
+        secret that is stored in its place.
+
+        In a list the place is found by what a member is known by, its
+        'list_keys' -- a list is sent whole, and a member that moved up
+        because the one before it was removed must not inherit that one's
+        secret. Without keys there is only the position to go by. A member
+        that matches nothing stored is new, and a new member has no secret
+        to keep.
+        """
+        if self._children is None:
+            if (self._is_secret() and isinstance(incoming, str)
+                    and SECRET_MARK in incoming):
+                if incoming == SECRET_SET:
+                    return stored
+                # typed behind the dots instead of over them: what was
+                # typed is what was meant
+                return incoming.replace(SECRET_MARK, "")
+            return incoming
+        if self.is_list_root():
+            template = self._ui_props.get("item_template")
+            if template is None or not isinstance(incoming, list):
+                return incoming
+            stored = stored if isinstance(stored, list) else []
+            keys = self._cur_val._constraints.get("keys") or ()
+            return [template._with_secrets(
+                            member, self._stored_member(member, i, stored,
+                                                        keys))
+                    for i, member in enumerate(incoming)]
+        if isinstance(incoming, dict):
+            stored = stored if isinstance(stored, dict) else {}
+            return {k: (self._children[k]._with_secrets(v, stored.get(k))
+                        if k in self._children else v)
+                    for k, v in incoming.items()}
+        return incoming
+
+    @staticmethod
+    def _stored_member(member, position, stored, keys):
+        """The stored member an incoming one stands for, or None."""
+        if keys and isinstance(member, dict):
+            for group in keys:
+                wanted = [member.get(k) for k in group]
+                if any(w is None or w == "" for w in wanted):
+                    continue
+                for old in stored:
+                    if (isinstance(old, dict)
+                            and [old.get(k) for k in group] == wanted):
+                        return old
+            return None
+        return stored[position] if position < len(stored) else None
 
     def get_child_value(self, child_id):
         c = self.get_child(child_id)
@@ -1894,6 +1994,15 @@ class CvvPathElem(CvvNode):
                 # merging persisted state: a persisted "no value" must not
                 # override a declared default or fixed value
                 return True
+            if (self._is_secret() and isinstance(val, str)
+                    and SECRET_MARK in val):
+                if val == SECRET_SET:
+                    # the editor sent back what it was given: no change.
+                    # Here, at the last door before the store, so that the
+                    # stand-in can never be stored as the secret it stands
+                    # for, whichever way a value came in.
+                    return True
+                val = val.replace(SECRET_MARK, "")
             if self.breaks_distinct_values(val):
                 # refused rather than dropped: unlike a repeating list member
                 # there is nothing here to drop, and keeping the previous value
@@ -1906,6 +2015,9 @@ class CvvPathElem(CvvNode):
             return False
 
         if self.is_list_root():
+            # before the list is taken as a whole: afterwards its members
+            # are rebuilt from it, and who had which secret is gone
+            val = self._with_secrets(val, self._cur_val.get_value())
             list_level_check = self._cur_val.check_and_set_value(val)
             if not list_level_check:
                 self._note_rejection(rejected)
