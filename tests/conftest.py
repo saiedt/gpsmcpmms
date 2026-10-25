@@ -63,6 +63,29 @@ def setup_demo_environment():
         callback=lambda value: None,
     )
 
+    # A field shown by a protected sibling, for the session without the
+    # password: the provider's country decides which place field the
+    # household sees, and the household is not told the country. Beside it
+    # a rule on an open sibling, which the editor judges itself.
+    config_mgr.register_params(
+        module_id="where",
+        module_label="Where help is given",
+        param_dict={
+            "country": {"protected": True, "label": "Country", "type": "enum",
+                        "values": {"DE": {"label": "DE"}, "AT": {"label": "AT"}},
+                        "default_val": "DE"},
+            "place_de": {"label": "Postal code (DE)", "type": "string",
+                         "relevance": 'country=="DE"'},
+            "place_at": {"label": "Postal code (AT)", "type": "string",
+                         "relevance": 'country=="AT"'},
+            "detailed": {"label": "Detailed", "type": "boolean",
+                         "default_val": False},
+            "detail": {"label": "Detail", "type": "string",
+                       "relevance": "detailed==true"},
+        },
+        callback=lambda value: None,
+    )
+
     # A list whose members are known by their keys, for the rule that a key
     # may not be left empty. Registered here and not in the test file: modules
     # have to exist before any other ConfigManager does, or they are built

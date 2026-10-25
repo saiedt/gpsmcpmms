@@ -30,7 +30,7 @@ import socket
 import subprocess
 import threading
 import time
-from .cvv_tree import CvvError, CvvNode, SECRET_MARK, SECRET_SET
+from .cvv_tree import CvvError, CvvNode, CvvValue, SECRET_MARK, SECRET_SET
 
 
 class ConfigManager:
@@ -2287,32 +2287,79 @@ class ConfigManager:
     # Handling of protected params (spec 4.4)
     # ------------------------------------------------------------------
     @staticmethod
-    def _strip_protected_nodes(node):
+    def _strip_protected_nodes(node, in_template=False):
         """
         Removes protected subtrees from one parsed dump node;
         returns (node or None, True if anything was stripped).
+
+        A relevance rule that names a stripped sibling is settled here
+        (since 0.46.2). The session is not told the sibling's value, but
+        that value is what decides -- and an editor that cannot read the
+        rule hides the child for good: a household saw no postal code,
+        because the country that shows it is the provider's and protected.
+        A rule that holds is dropped and its child stays, for everyone; a
+        rule that does not takes its child with it. Inside a list's item
+        template there is no value to settle a rule by, so its rules stay.
         """
         if node.get("protected"):
             return None, True
         stripped = False
         children = node.get("children")
         if isinstance(children, dict):
+            rules = node.get("relevance") if not in_template else None
+            if isinstance(rules, dict):
+                for child_key, cond in list(rules.items()):
+                    sibling = (children.get(cond.get("child_key"))
+                               if isinstance(cond, dict) else None)
+                    if not (isinstance(sibling, dict) and sibling.get("protected")
+                            and "value" in sibling):
+                        continue
+                    if not ConfigManager._cond_holds(sibling["value"], cond.get("op"),
+                                                     cond.get("value")):
+                        children.pop(child_key, None)
+                    del rules[child_key]
+                if not rules:
+                    node.pop("relevance", None)
             kept = {}
             for k, c in children.items():
-                kc, ks = ConfigManager._strip_protected_nodes(c)
+                kc, ks = ConfigManager._strip_protected_nodes(c, in_template)
                 stripped = stripped or ks
                 if kc is not None:
                     kept[k] = kc
             node["children"] = kept
         template = node.get("item_template")
         if isinstance(template, dict):
-            kt, ks = ConfigManager._strip_protected_nodes(template)
+            kt, ks = ConfigManager._strip_protected_nodes(template, True)
             stripped = stripped or ks
             if kt is None:
                 node.pop("item_template", None)
             else:
                 node["item_template"] = kt
         return node, stripped
+
+    @staticmethod
+    def _cond_holds(l_val, op, r_val):
+        """A relevance rule, judged on a dumped value: what
+        CvvValue.value_cond_holds() does on a stored one, and what the
+        editor's relevanceHolds() does on a delivered one."""
+        if isinstance(l_val, (dict, list)):
+            return False
+        if op == "~=":
+            return (isinstance(l_val, str) and isinstance(r_val, str)
+                    and bool(re.search(r_val, l_val)))
+        if l_val is None:
+            if op == "==":
+                return r_val is None
+            if op == "!=":
+                return r_val is not None
+            return False
+        compare = CvvValue.COMPARISON_MAP.get(op)
+        if compare is None:
+            return False
+        try:
+            return compare(l_val, r_val)
+        except TypeError:
+            return op == "!="
 
     def _strip_protected_updates(self, module_id, value, rejected):
         """

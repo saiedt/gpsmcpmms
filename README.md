@@ -192,7 +192,7 @@ A Declaration is a dict with any of these keys (`type` is mandatory):
 | `fixed_val` | Constant, protected from change. On a dict/list it locks only the structure/length — inner leaves stay editable unless they lock themselves. |
 | `init_only` | Once set (by a user or an inherited `fixed_val`), never changes. Only allowed if neither `fixed_val` nor `default_val` is present. |
 | `likely_val` | A proposal. Like `default_val`, but the backend does not adopt it: the parameter stays unset, so `config_ready()` stays false until someone confirms it. The editor fills the field in, and saving the module is that confirmation. |
-| `relevance` | `"<sibling><op><value>"`. When false, this parameter is hidden and need not have a value. |
+| `relevance` | `"<sibling><op><value>"`. When false, this parameter is hidden and need not have a value. Where the sibling is `protected`, a session without the password is not told its value; the backend then settles the rule for that session (since 0.46.2): the parameter arrives without the rule where it holds, and not at all where it does not. |
 | `hidden` | Hide from the editor. |
 | `protected` | Hidden until the admin unlocks with the password. |
 | `backend_provided` | Value is captured by backend logic (e.g. an NFC reader), read-only in the editor. Requires `acquire_button`; may combine with `init_only`. |
