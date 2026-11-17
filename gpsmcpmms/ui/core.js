@@ -93,6 +93,7 @@ const S = {
     // is bounded invites a code the device will refuse.
     bounded: true,
     appTitle: "",            // what the hosting application calls itself
+    appRelease: "",          // and which release of it runs
     langNames: {},           // code -> name; the app's list, or endonyms
     coverage: null,          // {total, done:{lang:n}}; admins only
     orphans: null,           // lang -> keys nothing registers; admins only
@@ -1225,6 +1226,8 @@ async function loadLangList() {
         S.bounded = r.data.bounded;
     if (r.data && typeof r.data.app_title === "string")
         S.appTitle = r.data.app_title;
+    if (r.data && typeof r.data.app_release === "string")
+        S.appRelease = r.data.app_release;
     if (r.data && r.data.options) S.langNames = r.data.options;
     // Both are admin-only at the source and simply absent for anybody else,
     // which is what keeps the panel's report out of reach without a rule here.

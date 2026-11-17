@@ -174,7 +174,7 @@ Core API methods of `config_mgr` available to client modules:
 | `protected_params_ready()` | Like `config_ready`, restricted to `protected` parameters. |
 | `register_params(...)` | See [Registering parameters](#registering-parameters) above. |
 | `update_status(module_id, message)` | What the module has to report, when it finds out between callbacks. Same contract as the callback's return value, and it replaces rather than adds. See [Status messages](#status-messages). |
-| `set_app_context(logger, title="")` | Tell the library which application it serves: its logger (once per run), and what it is called. The title prefaces the editor's heading and browser tab — `MyApp Configuration Editor` — and where it is left out, the editor is simply the `Configuration Editor`. |
+| `set_app_context(logger, title="", release="")` | Tell the library which application it serves: its logger (once per run), what it is called, and which release of it runs. The title prefaces the editor's heading and browser tab — `MyApp Configuration Editor` — and where it is left out, the editor is simply the `Configuration Editor`. The release is shown as given (`MyApp 1.4.2` under the default design's heading); the library neither checks nor orders it. |
 
 ---
 
@@ -494,7 +494,7 @@ the context a design carries down the tree (`rerender`, `adopted`,
 
 | Name | What it is |
 |------|------------|
-| `S` | The editor's state: `token`, `readOnly`, `admin`, `session`, `cvv` (the tree), `edit` (the draft of every module's value), `dirty`, `moduleStatus` (findings), `state` (what each module is doing), `dormant`, `enums`, `hints`, `pendingFiles`, `probeBad`, `lang`, `languages`, `langNames`, `appTitle`, `coverage`, `orphans`, and whatever a design adds. |
+| `S` | The editor's state: `token`, `readOnly`, `admin`, `session`, `cvv` (the tree), `edit` (the draft of every module's value), `dirty`, `moduleStatus` (findings), `state` (what each module is doing), `dormant`, `enums`, `hints`, `pendingFiles`, `probeBad`, `lang`, `languages`, `langNames`, `appTitle`, `appRelease`, `coverage`, `orphans`, and whatever a design adds. |
 
 **Small things**
 
@@ -963,7 +963,7 @@ Mutating requests carry `X-GPSMCPMMS-Api: 1`; the session token travels in
 | `GET /api/cvv_data[?passwd=…]` | Retrieves the whole content to be merged by the script into the page in order to render the editor in a browser; issues/refreshes the session token; strips protected subtrees unless unlocked by valid password. |
 | `POST /api/end_session` | Release the editing token. |
 | `GET /api/status` | How things stand right now: `{session, lock_free_in, module_status, state}`. `session` is `valid` for the token sent, `other` or `none`; `module_status` holds the findings that session may see; `state` what each module's `state_func` answers. Opens no session and keeps none alive, so a page may ask as often as it likes. |
-| `GET /api/lang/info` | Which languages exist here, what they are called, whether an allow-list bounds them, and the application's name. For admins additionally the orphan keys and how far each language is translated. |
+| `GET /api/lang/info` | Which languages exist here, what they are called, whether an allow-list bounds them, and the application's name and release. For admins additionally the orphan keys and how far each language is translated. |
 | `GET /api/lang/template?lang=&refs=` | Download a translation template (admin): the source language (`DECL_LANG`, by default `en`), `kind`, chosen reference languages, then the target language. |
 | `POST /api/lang/upload` | Upload a filled translation CSV (admin); returns the report. |
 | `GET /api/schema[/<lang>]` | Translation dictionary for a language (defaults to `DECL_LANG`). |

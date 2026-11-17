@@ -1446,8 +1446,13 @@ function watchStanding() {
 function renderAll() {
     const app = document.getElementById("app");
     app.innerHTML = "";
+    // The release beside the application's name, as two proper nouns: there
+    // is nothing in the line to translate.
     app.append(
         el("h1", {class: "title"}, editorTitle()),
+        S.appRelease ? el("div", {class: "release"},
+                          [S.appTitle, S.appRelease].filter(Boolean).join(" "))
+                     : "",
         el("hr", {class: "title-rule"}));
 
     const general = el("div", {class: "general-row"});

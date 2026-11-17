@@ -345,9 +345,10 @@ class ConfigManager:
         # Initialize the internal logger reference with a clean bootstrap default
         self._logger = logging.getLogger("GPSMCPMMS_Bootstrap")
         self._logger_explicitly_set = False
-        # what the hosting application is called, if it said; see
-        # set_app_context()
+        # what the hosting application is called, and which release of it
+        # runs, if it said; see set_app_context()
         self._app_title = ""
+        self._app_release = ""
         
         if not self._logger.handlers:
             _bootstrap_handler = logging.StreamHandler()
@@ -455,7 +456,7 @@ class ConfigManager:
     # ------------------------------------------------------------------
     # API
     #
-    # - for the main app: set_app_context(logger, title)
+    # - for the main app: set_app_context(logger, title, release)
     #                     to inject application specific logger
     # - for importers of config_mgr: config_ready, protected_params_ready,
     #                                query, register_params, and
@@ -464,7 +465,8 @@ class ConfigManager:
     #                                _resolve_backend_func, and _may_access
     # - for frontend: the REST-API set up by start_editor()
     # ------------------------------------------------------------------
-    def set_app_context(self, logger: logging.Logger, title: str = "") -> None:
+    def set_app_context(self, logger: logging.Logger, title: str = "",
+                        release: str = "") -> None:
         """Tells this library which application it is serving.
 
         Call it once, as early as possible -- before the other modules
@@ -482,6 +484,13 @@ class ConfigManager:
         name or a language's endonym. Where it goes in the heading is a
         translator's decision and not a prefix, because in Arabic it belongs
         at the other end.
+
+        `release` is which release of the application is running, in whatever
+        the application counts releases in -- "1.4.2", "2026.11.0". The editor
+        shows it where somebody asks which software a device has: the default
+        design under its heading, a design of its own wherever it likes. The
+        library does not compare or order it; it is a name, like the title,
+        and is not translated either.
         """
         if self._logger_explicitly_set:
             raise RuntimeError("Application logger has already been registered "
@@ -495,6 +504,8 @@ class ConfigManager:
         CvvNode.set_logger(self, logger)
         self._logger_explicitly_set = True
         self._app_title = title.strip() if isinstance(title, str) else ""
+        self._app_release = (release.strip() if isinstance(release, str)
+                             else "")
         self._logger.debug("GPSMCPMMS engine successfully attached to "
                            "production application logger.")
 
@@ -3122,6 +3133,7 @@ class ConfigManager:
                         "source": self.DECL_LANG,
                         "bounded": options is not None,
                         "app_title": self._app_title,
+                        "app_release": self._app_release,
                         "options": names}
                 if editable and self._session_admin:
                     info["orphans"] = {

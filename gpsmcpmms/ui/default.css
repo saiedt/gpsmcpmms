@@ -45,6 +45,7 @@ body {
 
 /* ---- level 0 rows (spec 4.5) ---- */
 h1.title { font-size: 22px; margin: 4px 0 8px; }
+.release { color: var(--muted); font-size: 13px; margin: -4px 0 8px; }
 hr.title-rule { border: 0; border-top: 2px solid var(--line); margin: 0 0 12px; }
 
 .general-row {
