@@ -719,3 +719,23 @@ def test_only_the_holder_of_the_session_sets_the_device_to_work(client):
     client.get("/api/config/enum-options?path=named.kind&refresh=1",
                headers={"X-GPSMCPMMS-Token": token})
     assert seen == [False, True]
+
+
+def test_lang_info_names_the_application_and_its_release(client, monkeypatch):
+    """Every reader is told what the application is called and which release
+    of it runs; a release nobody gave is empty, not missing."""
+    info = client.get("/api/lang/info").get_json()
+    assert (info["app_title"], info["app_release"]) == ("GPSMCPMMS demo", "")
+    monkeypatch.setattr(config_mgr, "_app_release", "2026.11.0")
+    assert client.get("/api/lang/info").get_json()["app_release"] == "2026.11.0"
+
+
+def test_set_app_context_takes_the_release(monkeypatch):
+    # set_app_context() is once per run; what it sets is put back afterwards
+    for name in ("_logger", "_logger_explicitly_set", "_app_title",
+                 "_app_release"):
+        monkeypatch.setattr(config_mgr, name, getattr(config_mgr, name))
+    config_mgr._logger_explicitly_set = False
+    config_mgr.set_app_context(config_mgr._logger, " Demo ", " 2026.11.0 ")
+    assert (config_mgr._app_title, config_mgr._app_release) == (
+        "Demo", "2026.11.0")
