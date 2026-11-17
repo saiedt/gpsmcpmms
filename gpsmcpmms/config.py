@@ -1635,9 +1635,18 @@ class ConfigManager:
         """
         if not isinstance(decl_data, dict):
             return
+        # An option marked verbatim names something -- a country code, a file
+        # -- and its label is shown as it stands. Declared in `values` it was
+        # collected all the same, so that every language lacked a translation
+        # nobody could give: Lieschen's country "DE", one short of complete
+        # in all seven languages from 15.10.2026 on. A tooltip beside it is
+        # still prose, as with an option a provider delivers.
+        verbatim = decl_data.get("verbatim") is True
         for k, v in decl_data.items():
             if k in ("default_val", "fixed_val", "likely_val"):
                 continue    # declared values are data, not display strings
+            if verbatim and k == "label":
+                continue
             if (k in self.XLATION_DECL_KEYS and
                     isinstance(v, str) and v.strip()):
                 if k == "hint" and funcs and v.strip() in funcs:
