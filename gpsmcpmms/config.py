@@ -518,6 +518,34 @@ class ConfigManager:
     def query(self, path):
         return CvvNode.query(self, path)
 
+    def findings(self):
+        """Everything the modules have reported, as an administrator is shown
+        it: {module_id: [{"text", "level", "path"}, ...]}. For an application
+        that reports it elsewhere -- to a portal that looks after a fleet --
+        and so would otherwise have to ask its own editor over HTTP.
+        """
+        return self._module_status_report(True)
+
+    def protected_digest(self, key):
+        """A keyed checksum of everything only an administrator may change:
+        the protected parameters of every module, and the records of a list
+        that carry their own protection. It changes when one of them does,
+        and with nothing else -- not with the values that belong to whoever
+        uses the device.
+
+        `key` (bytes) is the application's and stays on the device: whoever
+        is told the checksum learns that something changed, never what, not
+        even a short password by trying. This library's own parameters are
+        left out; the admin password is not configuration.
+        """
+        if not isinstance(key, (bytes, bytearray)) or not key:
+            raise ValueError("protected_digest() needs a key: non-empty bytes.")
+        values = CvvNode.protected_values(self, skip=(self.OWN_MODULE_ID,))
+        canonical = json.dumps(values, sort_keys=True, separators=(",", ":"),
+                               ensure_ascii=False, default=str)
+        return hmac.new(bytes(key), canonical.encode("utf-8"),
+                        hashlib.sha256).hexdigest()
+
     def update_status(self, module_id, message):
         """Says what a module has to report, from wherever it found out.
 

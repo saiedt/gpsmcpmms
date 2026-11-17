@@ -1406,6 +1406,34 @@ class CvvNode:
             return [n.get_path() for n in collected]
 
     @classmethod
+    def protected_values(cls, holder, skip=()):
+        """What only an administrator may change, across all modules but those
+        in `skip`: {path: value} for every protected subtree, and for every
+        list whose members carry their own protection, the protected members
+        under "<path>[protected]".
+
+        Read under each module's lock, as query() reads; a deep copy, so that
+        nothing the caller does reaches the tree.
+        """
+        cls._check_holder(holder)
+        found = {}
+        for m_id, m_node, lock in cls._locked_modules():
+            if lock is None or m_id in skip:
+                continue
+            with lock:
+                nodes = []
+                m_node.collect_protected_nodes(nodes)
+                for node in nodes:
+                    found[node.get_path()] = copy.deepcopy(node.get_value())
+                lists = []
+                m_node.collect_member_protected_lists(lists)
+            for path, field in lists:
+                records = cls.query(holder, path).get(path) or []
+                found[f"{path}[protected]"] = [
+                    r for r in records if isinstance(r, dict) and r.get(field)]
+        return found
+
+    @classmethod
     def get_member_protected_lists(cls, holder, module):
         """Every list in this module whose members carry their own
         protection: [(path, field name), ...].

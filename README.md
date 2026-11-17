@@ -174,6 +174,8 @@ Core API methods of `config_mgr` available to client modules:
 | `protected_params_ready()` | Like `config_ready`, restricted to `protected` parameters. |
 | `register_params(...)` | See [Registering parameters](#registering-parameters) above. |
 | `update_status(module_id, message)` | What the module has to report, when it finds out between callbacks. Same contract as the callback's return value, and it replaces rather than adds. See [Status messages](#status-messages). |
+| `findings()` | Every finding the modules have reported, as an administrator sees them: `{module_id: [{text, level, path}]}`. For an application that reports to a portal and would otherwise ask its own editor over HTTP. |
+| `protected_digest(key)` | A keyed checksum (HMAC-SHA256, hex) of everything only an administrator may change: protected parameters, and records that carry their own protection (`protected_by`). Changes with them and with nothing else; this library's own module is left out. `key` is bytes the application keeps. |
 | `set_app_context(logger, title="", release="")` | Tell the library which application it serves: its logger (once per run), what it is called, and which release of it runs. The title prefaces the editor's heading and browser tab — `MyApp Configuration Editor` — and where it is left out, the editor is simply the `Configuration Editor`. The release is shown as given (`MyApp 1.4.2` under the default design's heading); the library neither checks nor orders it. |
 
 ---
